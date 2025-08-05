@@ -1,0 +1,13 @@
+{
+  "db_config": {
+    "host": "",
+    "port": 3306,
+    "user": "",
+    "password": "",
+    "database": ""
+  },
+  "sql_templates": {
+    "device_id_query": "SELECT id FROM oil.t_device WHERE device_no = %s ORDER BY create_time DESC LIMIT 1",
+    "inventory_query": "..."
+  }
+}
