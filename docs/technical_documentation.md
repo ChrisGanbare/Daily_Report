@@ -14,18 +14,41 @@ ZR Daily Report 是一个专门用于生成切削液设备日常库存报告的P
 
 ```
 Daily_Report/ 
-├── ZR_Daily_Report.py # 主程序 
-├── date_utils.py # 日期处理工具 
-├── devices_template.csv # 设备信息模板 
-├── query_config.json # 数据库配置 
-├── technical_documentation.md # 技术文档 
-├── test_zr_daily_report.py # 测试用例 
-└── test_output/ # 测试输出目录 
+├── ZR_Daily_Report.py              # 主程序 
+├── config/                         # 配置文件目录
+│   ├── .env                        # 加密密钥
+│   ├── query_config.json           # 数据库配置
+│   ├── query_config_encrypted.json # 加密的数据库配置
+│   └── query_config_template.json  # 数据库配置模板
+├── data/                           # 数据文件目录
+│   ├── devices.csv                 # 设备信息文件
+│   └── devices_template.csv        # 设备信息模板
+├── docs/                           # 文档目录
+│   └── technical_documentation.md  # 技术文档 
+├── src/                            # 源代码目录
+│   ├── core/                       # 核心模块目录
+│   │   ├── db_handler.py           # 数据库处理模块
+│   │   ├── excel_handler.py        # Excel处理模块
+│   │   ├── file_handler.py         # 文件处理模块
+│   │   └── statement_handler.py    # 对账单处理模块
+│   ├── utils/                      # 工具模块目录
+│   │   ├── config_encrypt.py       # 配置加密工具
+│   │   ├── config_handler.py       # 配置处理模块
+│   │   ├── data_validator.py       # 数据验证模块
+│   │   └── date_utils.py           # 日期处理工具 
+│   └── handlers/                   # 处理器模块目录（预留）
+├── template/                       # 模板目录
+│   └── statement_template.xlsx     # 对账单模板
+├── tests/                          # 测试目录
+│   ├── test_zr_daily_report.py     # 主测试用例 
+│   └── test_statement_handler.py   # 对账单处理模块测试用例 
+└── test_output/                    # 测试输出目录 
   ├── test_无效数据测试.xlsx 
   ├── test_空数据测试.xlsx 
   ├── test_缺失数据测试.xlsx 
   └── test_连续数据测试.xlsx
 ```
+
 ## 4. 功能特性
 1. 支持多设备批量处理
 2. 自动生成库存趋势图表
@@ -98,6 +121,23 @@ Daily_Report/
 2. 日期处理测试
 3. 图表生成测试
 4. 异常处理测试
+5. 数据库操作测试
+6. 文件处理测试
+7. 配置处理测试
+8. 对账单处理测试
+
+### 11.1 对账单处理测试用例
+针对对账单处理模块设计了以下测试用例：
+
+1. **类名和方法名测试** - 验证类名和方法名是否符合对账单相关要求
+2. **模板不存在错误测试** - 测试模板不存在时的错误提示
+3. **对账单文件名格式测试** - 测试对账单文件名格式是否正确
+4. **必需工作表识别测试** - 测试必需工作表的识别功能
+5. **每日用量明细工作表更新测试** - 测试每日用量明细工作表的数据更新
+6. **每日用量明细工作表日期字段测试** - 测试每日用量明细工作表的日期字段格式和位置
+7. **每日用量明细工作表数据结构测试** - 测试每日用量明细工作表的数据结构是否符合要求
+8. **多油品处理测试** - 测试多油品处理功能
+9. **动态油品数量处理测试** - 测试根据实际油品数量动态处理列，清除模板中多余的油品列
 
 ## 12. 版本历史
 | 版本 | 日期 | 更新内容 | 作者 |
@@ -107,6 +147,11 @@ Daily_Report/
 | 1.2 | 2025-08-02 | 测试用例 | Lingma |
 | 1.3 | 2025-08-03 | 日期处理优化 | Lingma |
 | 1.4 | 2025-08-04 | 图表优化 | Lingma |
+| 1.5 | 2025-08-07 | 项目重构，模块化设计 | Lingma |
+| 1.6 | 2025-08-07 | 更新测试用例以适配重构后的项目结构 | Lingma |
+| 1.7 | 2025-08-07 | 优化对账单生成功能，创建专用处理模块 | Lingma |
+| 1.8 | 2025-08-08 | 添加对账单处理模块测试用例 | Lingma |
+| 1.9 | 2025-08-08 | 优化动态油品数量处理功能 | Lingma |
 
 ## 13. 常见问题
 1. 日期格式错误
@@ -132,6 +177,8 @@ Daily_Report/
 ```bash
 git clone https://github.com/ChrisGanbare/Daily_Report.git
 cd Daily_Report
+```
+
 2. 创建虚拟环境
 python -m venv .venv
 .venv\Scripts\activate
@@ -142,6 +189,7 @@ pip install -r requirements.txt
 1. 复制配置模板
 ```bash
 cp query_config_template.json query_config.json
+```
 2. 修改配置文件 query_config.json 填入实际配置
 3. 运行配置加密工具
 python encrypt_config.py
@@ -157,7 +205,7 @@ Daily_Report/
 ├── query_config_encrypted.json # 加密后的配置
 └── query_config_template.json  # 配置模板
 
-## 16使用说明
+## 16 使用说明
 ### 16.1 准备工作
 1.准备设备信息文件
 使用 devices_template.csv 作为模板
@@ -191,3 +239,20 @@ python ZR_Daily_Report.py
 定期更新加密密钥
 不要提交敏感信息到版本控制
 定期备份配置文件
+
+## 17 动态油品处理说明
+
+### 17.1 功能描述
+对账单处理模块能够根据实际客户设备的油品数量动态调整Excel表格中的列数。如果模板中预设了较多的油品列，而实际客户只有较少的油品，系统会自动清除模板中多余的油品列，只显示实际需要的油品数据。
+
+### 17.2 实现原理
+1. 收集所有设备的油品名称
+2. 清除模板中可能存在的旧数据（包括表头和数据）
+3. 根据实际油品数量重新写入表头和数据
+4. 确保只显示与实际油品数量相符的列数
+
+### 17.3 优势
+1. 提高模板的通用性 - 一个模板可以适用于不同数量油品的客户
+2. 避免显示无用的空列
+3. 保证数据展示的整洁性
+4. 减少手动调整模板的工作量
