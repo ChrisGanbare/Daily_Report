@@ -119,6 +119,7 @@ class StatementHandler:
             end_date: 结束日期
         """
         try:
+            
             # 在G3单元格写入开始日期，使用Excel日期格式
             ws['G3'] = start_date
             # 设置日期格式为"2025年7月1日"样式
@@ -135,13 +136,14 @@ class StatementHandler:
             # 收集每日用量数据
             daily_usage = defaultdict(lambda: defaultdict(float))
             oil_names = set()
-
+            
             for device_data in all_devices_data:
                 oil_name = device_data['oil_name']
                 oil_names.add(oil_name)
                 for date, value in device_data['data']:
                     # 确保value是float类型，避免decimal.Decimal和float相加的问题
                     daily_usage[date][oil_name] += float(value)
+            
 
             # 按油品名称排序
             sorted_oils = sorted(oil_names)
@@ -157,6 +159,8 @@ class StatementHandler:
                 ws.cell(row=row_index, column=2, value=f"{current_date.month}.{current_date.day}")
                 current_date += timedelta(days=1)
                 row_index += 1
+            
+            print(f"日期列表长度: {len(date_list)}")
             
             # 清除模板中可能存在的旧数据（C列及之后的列）
             # 从第5行开始清除表头
@@ -175,7 +179,9 @@ class StatementHandler:
                             cell.value = None
             
             # 为每个油品写入数据
+            print(f"排序后的油品: {sorted_oils}")
             for col_index, oil_name in enumerate(sorted_oils, start=3):  # 从第3列开始(C列)
+                print(f"  写入油品 {oil_name} 到第{col_index}列")
                 # 写入油品名称到第5行
                 ws.cell(row=5, column=col_index, value=oil_name)
                 
@@ -185,7 +191,6 @@ class StatementHandler:
                     cell_value = round(usage, 2)
                     ws.cell(row=row_index, column=col_index, value=cell_value)
             
-            print(f"每日用量明细工作表更新完成，共处理 {len(date_list)} 天数据，{len(sorted_oils)} 种油品")
             
         except Exception as e:
             print(f"更新每日用量明细工作表时出错: {e}")
@@ -236,7 +241,6 @@ class StatementHandler:
                     ws.cell(row=current_row, column=col, value=round(float(value), 2))
                 current_row += 1
                 
-            print(f"每月用量对比工作表更新完成，共处理 {len(sorted_months)} 个月数据，{len(sorted_oils)} 种油品")
 
         except Exception as e:
             print(f"更新每月用量对比工作表时出错: {e}")
@@ -257,7 +261,6 @@ class StatementHandler:
             ws['B2'] = customer_name
             ws['D2'] = f"{start_date.strftime('%Y-%m-%d')}至{end_date.strftime('%Y-%m-%d')}"
             
-            print("中润对账单工作表更新完成")
 
         except Exception as e:
             print(f"更新中润对账单工作表时出错: {e}")

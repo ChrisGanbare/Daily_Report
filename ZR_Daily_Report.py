@@ -344,6 +344,18 @@ def main():
             enhanced_output_file = os.path.join(save_dir, enhanced_filename)
 
             try:
+                # 添加调试信息，查看传递给对账单处理模块的数据
+                print(f"准备生成对账单，设备数量: {len(all_results)}")
+                unique_oil_names = set()
+                for i, result in enumerate(all_results):
+                    unique_oil_names.add(result['oil_name'])
+                    print(f"  设备 {i+1}: 油品名称={result['oil_name']}, "
+                          f"设备编码={result['device_code']}, "
+                          f"数据点数量={len(result['data'])}")
+                
+                print(f"唯一油品名称数量: {len(unique_oil_names)}")
+                print(f"唯一油品名称: {unique_oil_names}")
+
                 # 使用新的对账单处理模块生成对账单
                 statement_handler = StatementHandler()
                 statement_handler.generate_statement_from_template(
