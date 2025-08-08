@@ -22,6 +22,10 @@ Daily_Report/
 ├── data/                           # 数据文件目录
 │   ├── devices.csv                 # 设备信息文件
 │   └── devices_template.csv        # 设备信息模板
+├── defect_fixes/                   # 缺陷修复记录目录
+│   ├── 20250808_config_file_reading_issue.md  # 配置文件读取问题记录
+│   ├── 20250808_statement_multiple_oil_issue.md  # 多油品处理问题记录
+│   └── README.md                   # 缺陷修复记录索引
 ├── docs/                           # 文档目录
 │   └── technical_documentation.md  # 技术文档 
 ├── src/                            # 源代码目录
