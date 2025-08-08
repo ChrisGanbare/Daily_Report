@@ -18,8 +18,7 @@ Daily_Report/
 ├── config/                         # 配置文件目录
 │   ├── .env                        # 加密密钥
 │   ├── query_config.json           # 数据库配置
-│   ├── query_config_encrypted.json # 加密的数据库配置
-│   └── query_config_template.json  # 数据库配置模板
+│   └── query_config_encrypted.json # 加密的数据库配置
 ├── data/                           # 数据文件目录
 │   ├── devices.csv                 # 设备信息文件
 │   └── devices_template.csv        # 设备信息模板
@@ -37,6 +36,7 @@ Daily_Report/
 │   │   ├── data_validator.py       # 数据验证模块
 │   │   └── date_utils.py           # 日期处理工具 
 │   └── handlers/                   # 处理器模块目录（预留）
+│       └── __init__.py             # 包初始化文件
 ├── template/                       # 模板目录
 │   └── statement_template.xlsx     # 对账单模板
 ├── tests/                          # 测试目录
