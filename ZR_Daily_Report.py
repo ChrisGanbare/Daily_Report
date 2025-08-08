@@ -39,9 +39,16 @@ def main():
     try:
         # 使用项目根目录下的配置文件
         config_path = os.path.join(os.path.dirname(__file__), 'config', 'query_config.json')
-        query_config = config_handler.load_encrypted_config(config_path)
-        log_messages.append("成功读取加密配置文件")
+        print(f"尝试读取配置文件: {config_path}")
+        query_config = config_handler.load_plain_config(config_path)
+        log_messages.append("成功读取配置文件")
         log_messages.append("")
+    except FileNotFoundError as e:
+        error_msg = f"配置文件未找到: {e}"
+        print(error_msg)
+        log_messages.append(error_msg)
+        log_messages.append("")  # 添加空行分隔
+        exit(1)
     except Exception as e:
         error_msg = f"读取查询配置文件失败: {e}"
         print(error_msg)
@@ -206,7 +213,13 @@ def main():
             continue
         
         # 生成查询语句
-        inventory_query = config_handler.generate_query_for_device(inventory_query_template, device_id, start_date, end_date)
+        # 使用字符串格式化生成查询语句
+        end_condition = f"{end_date} 23:59:59"
+        inventory_query = inventory_query_template.format(
+            device_id=device_id,
+            start_date=start_date,
+            end_condition=end_condition
+        )
         
         # 执行查询
         query_msg = f"执行查询..."

@@ -32,24 +32,54 @@ class ConfigHandler:
         if config_path is None:
             config_path = os.path.join(self.config_dir, 'query_config_encrypted.json')
         
+        print(f"尝试读取加密配置文件: {config_path}")
+        
+        # 检查配置文件是否存在
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"加密配置文件不存在: {config_path}")
+        
         # 读取加密密钥
         key_path = os.path.join(self.config_dir, '.env')
-        with open(key_path, 'rb') as key_file:
-            key = key_file.read()
+        print(f"尝试读取密钥文件: {key_path}")
+        
+        if not os.path.exists(key_path):
+            raise FileNotFoundError(f"密钥文件不存在: {key_path}")
+        
+        try:
+            with open(key_path, 'rb') as key_file:
+                key = key_file.read()
+        except Exception as e:
+            raise Exception(f"读取密钥文件失败: {e}")
         
         # 创建加密器
-        fernet = Fernet(key)
+        try:
+            fernet = Fernet(key)
+        except Exception as e:
+            raise Exception(f"创建加密器失败: {e}")
         
         # 读取并解密配置文件
-        with open(config_path, 'rb') as encrypted_file:
-            encrypted_data = encrypted_file.read()
+        try:
+            with open(config_path, 'rb') as encrypted_file:
+                encrypted_data = encrypted_file.read()
+        except Exception as e:
+            raise Exception(f"读取加密配置文件失败: {e}")
         
         # 解密数据
-        decrypted_data = fernet.decrypt(encrypted_data)
+        try:
+            decrypted_data = fernet.decrypt(encrypted_data)
+        except Exception as e:
+            raise Exception(f"解密配置文件失败，请检查密钥是否正确: {e}")
+        
+        # 打印解密后的内容长度（可选，出于安全考虑不打印完整内容）
+        print(f"成功解密配置文件，内容长度: {len(decrypted_data)} 字节")
         
         # 解析JSON
-        config = json.loads(decrypted_data.decode('utf-8'))
+        try:
+            config = json.loads(decrypted_data.decode('utf-8'))
+        except Exception as e:
+            raise Exception(f"解析解密后的配置文件失败: {e}")
         
+        print(f"成功解析配置文件，包含 {len(config)} 个配置项")
         return config
 
     def create_encrypted_config(self, config_data, output_path=None):
