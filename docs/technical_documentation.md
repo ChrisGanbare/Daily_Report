@@ -27,7 +27,8 @@ Daily_Report/
 │   ├── 20250808_statement_multiple_oil_issue.md  # 多油品处理问题记录
 │   └── README.md                   # 缺陷修复记录索引
 ├── docs/                           # 文档目录
-│   └── technical_documentation.md  # 技术文档 
+│   ├── technical_documentation.md  # 技术文档 
+│   └── version_plan.md             # 版本规划文档
 ├── src/                            # 源代码目录
 │   ├── core/                       # 核心模块目录
 │   │   ├── db_handler.py           # 数据库处理模块
@@ -111,7 +112,7 @@ Daily_Report/
 - **master**：主分支，用于发布正式版本
 - **development**：开发分支，用于日常开发和优化
 
-详细版本规划请参考 [release_plan.md](release_plan.md) 文件。
+详细版本规划请参考 [version_plan.md](version_plan.md) 文件。
 
 ## 10. 错误处理
 1. 文件读取错误
