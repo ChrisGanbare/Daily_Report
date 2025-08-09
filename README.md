@@ -94,10 +94,20 @@ python -m venv .venv
 .venv\Scripts\activate
 ```
 
-3. 安装依赖包：
-```bash
-pip install -r requirements.txt
-```
+3. 安装依赖（推荐使用阿里云镜像源）：
+   ```bash
+   # 方法1: 使用批处理脚本（Windows）
+   install_deps.bat
+   
+   # 方法2: 手动安装（单次使用阿里云镜像）
+   pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
+   
+   # 方法3: 永久配置pip源
+   pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+   pip install -r requirements.txt
+   ```
+   
+   > 💡 提示：方法1适用于Windows系统一键安装，方法2适用于临时使用阿里云镜像，方法3适用于长期配置
 
 ## 配置说明
 

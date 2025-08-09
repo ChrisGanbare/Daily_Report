@@ -4,7 +4,22 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fbb472a7-f434-4b16-9a78-f685a9e2ebd8" name="更改" comment="" />
+    <list default="true" id="fbb472a7-f434-4b16-9a78-f685a9e2ebd8" name="更改" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ZR_Daily_Report.py" beforeDir="false" afterPath="$PROJECT_DIR$/ZR_Daily_Report.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/devices.csv" beforeDir="false" afterPath="$PROJECT_DIR$/data/devices.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/defect_fixes/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/technical_documentation.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/technical_documentation.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/db_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/db_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/excel_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/excel_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/file_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/file_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/core/statement_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/core/statement_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/utils/data_validator.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/utils/data_validator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/technical_documentation.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_statement_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_statement_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_zr_daily_report.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_zr_daily_report.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />

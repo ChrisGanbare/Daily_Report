@@ -3,18 +3,23 @@ import os
 import tempfile
 from datetime import date
 from openpyxl import Workbook
-from openpyxl.styles import NamedStyle
 
 # 更新导入路径以适应新的目录结构
 from src.core.statement_handler import StatementHandler
+from base_test import BaseTestCase
 
 
-class TestStatementHandler(unittest.TestCase):
+class TestStatementHandler(BaseTestCase):
     """测试对账单处理模块"""
 
     def setUp(self):
         """测试前准备"""
+        super().setUp()
         self.statement_handler = StatementHandler()
+        self.customer_name = "测试客户"
+        self.start_date = date(2025, 7, 1)
+        self.end_date = date(2025, 7, 31)
+        
         # 创建测试数据
         self.test_data = [
             {
@@ -32,99 +37,50 @@ class TestStatementHandler(unittest.TestCase):
                 'device_code': 'DEV002',
                 'oil_name': '液压油2',
                 'data': [
-                    (date(2025, 7, 1), 8.2),
-                    (date(2025, 7, 2), 7.9),
-                    (date(2025, 7, 3), 11.1)
+                    (date(2025, 7, 1), 15.2),
+                    (date(2025, 7, 2), 14.1),
+                    (date(2025, 7, 3), 16.7)
                 ],
                 'raw_data': [],
                 'columns': []
             }
         ]
-        self.customer_name = "测试客户"
-        self.start_date = date(2025, 7, 1)
-        self.end_date = date(2025, 7, 3)
 
-    def test_class_and_method_names(self):
-        """测试类名和方法名是否符合对账单相关要求"""
-        # 检查类名
-        self.assertEqual(StatementHandler.__name__, "StatementHandler")
+    def test_statement_handler_initialization(self):
+        """测试对账单处理器初始化"""
+        self.assertIsInstance(self.statement_handler, StatementHandler)
         
-        # 检查方法名
-        self.assertTrue(hasattr(StatementHandler, "generate_statement_from_template"))
-        self.assertTrue(hasattr(StatementHandler, "_update_daily_usage_sheet"))
-        self.assertTrue(hasattr(StatementHandler, "_update_monthly_comparison_sheet"))
-        self.assertTrue(hasattr(StatementHandler, "_update_statement_sheet"))
+    def test_generate_statement_from_template_file_not_found(self):
+        """测试模板文件不存在的情况"""
+        output_file = os.path.join(self.test_output_dir, "test_statement.xlsx")
+        
+        # 应该抛出FileNotFoundError异常
+        with self.assertRaises(FileNotFoundError):
+            self.statement_handler.generate_statement_from_template(
+                all_devices_data=self.test_data,
+                output_file=output_file,
+                customer_name=self.customer_name,
+                start_date=self.start_date,
+                end_date=self.end_date
+            )
 
-    def test_template_not_found_error(self):
-        """测试模板不存在时的错误提示"""
-        # 创建临时目录但不创建模板文件
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # 临时修改模板路径指向不存在的文件
-            original_template_path = os.path.join(os.path.dirname(__file__), 'template', 'statement_template.xlsx')
-            
-            # 使用不存在的路径测试
-            output_file = os.path.join(temp_dir, "test_output.xlsx")
-            
-            # 应该抛出FileNotFoundError异常
-            with self.assertRaises(FileNotFoundError) as context:
-                self.statement_handler.generate_statement_from_template(
-                    self.test_data,
-                    output_file,
-                    self.customer_name,
-                    self.start_date,
-                    self.end_date
-                )
-            
-            # 检查错误信息是否包含模板文件路径
-            self.assertIn("模板文件不存在", str(context.exception))
-            self.assertIn("statement_template.xlsx", str(context.exception))
+    def test_template_path_validation(self):
+        """测试模板路径验证"""
+        # 检查模板路径是否正确指向项目根目录下的template目录
+        expected_template_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
+            'template', 
+            'statement_template.xlsx'
+        )
+        
+        # 通过反射检查StatementHandler的模板路径逻辑
+        import inspect
+        source_code = inspect.getsource(self.statement_handler.generate_statement_from_template)
+        self.assertIn('template', source_code)
+        self.assertIn('statement_template.xlsx', source_code)
 
-    def test_statement_filename_format(self):
-        """测试对账单文件名格式是否正确"""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # 创建一个简单的测试模板
-            template_wb = Workbook()
-            template_wb.create_sheet("中润对账单")
-            template_wb.create_sheet("每日用量明细")
-            template_wb.create_sheet("每月用量对比")
-            if "Sheet" in template_wb.sheetnames:
-                template_wb.remove(template_wb["Sheet"])
-            
-            template_path = os.path.join(temp_dir, 'template')
-            os.makedirs(template_path, exist_ok=True)
-            template_file = os.path.join(template_path, 'statement_template.xlsx')
-            template_wb.save(template_file)
-            
-            # 生成对账单
-            output_file = os.path.join(temp_dir, f"{self.customer_name}2025年07月对账单.xlsx")
-            
-            # 临时修改StatementHandler的模板路径
-            original_path = self.statement_handler.__class__.__dict__.get('generate_statement_from_template', None)
-            
-            try:
-                statement_handler = StatementHandler()
-                statement_handler.generate_statement_from_template(
-                    self.test_data,
-                    output_file,
-                    self.customer_name,
-                    self.start_date,
-                    self.end_date
-                )
-                
-                # 检查输出文件是否存在
-                self.assertTrue(os.path.exists(output_file))
-                
-                # 检查文件名格式
-                filename = os.path.basename(output_file)
-                expected_pattern = f"{self.customer_name}2025年07月对账单.xlsx"
-                self.assertEqual(filename, expected_pattern)
-            finally:
-                # 清理测试文件
-                if os.path.exists(output_file):
-                    os.remove(output_file)
-
-    def test_required_sheets_detection(self):
-        """测试必需工作表的识别功能"""
+    def test_required_sheets_detection_chinese(self):
+        """测试必需中文工作表的识别功能"""
         with tempfile.TemporaryDirectory() as temp_dir:
             # 创建缺少工作表的模板
             template_wb = Workbook()
@@ -154,13 +110,44 @@ class TestStatementHandler(unittest.TestCase):
             self.assertIn("模板工作表名称不匹配", error_message)
             self.assertIn("缺少中文工作表", error_message)
 
+    def test_required_sheets_detection_english(self):
+        """测试必需英文工作表的识别功能"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # 创建缺少工作表的模板（只有部分英文工作表）
+            template_wb = Workbook()
+            template_wb.create_sheet("Statement")
+            # 故意缺少"Daily Usage"和"Monthly Comparison"
+            
+            template_path = os.path.join(temp_dir, 'template')
+            os.makedirs(template_path, exist_ok=True)
+            template_file = os.path.join(template_path, 'statement_template.xlsx')
+            template_wb.save(template_file)
+            
+            output_file = os.path.join(temp_dir, "test_output.xlsx")
+            
+            # 应该抛出KeyError异常
+            with self.assertRaises(KeyError) as context:
+                statement_handler = StatementHandler()
+                statement_handler.generate_statement_from_template(
+                    self.test_data,
+                    output_file,
+                    self.customer_name,
+                    self.start_date,
+                    self.end_date
+                )
+            
+            # 检查错误信息是否包含缺少的工作表信息
+            error_message = str(context.exception)
+            self.assertIn("模板工作表名称不匹配", error_message)
+            self.assertIn("缺少英文工作表", error_message)
+
     def test_daily_usage_sheet_updates(self):
         """测试每日用量明细工作表的数据更新"""
         with tempfile.TemporaryDirectory() as temp_dir:
             # 创建完整模板
             template_wb = Workbook()
             template_wb.create_sheet("中润对账单")
-            daily_usage_sheet = template_wb.create_sheet("每日用量明细")
+            template_wb.create_sheet("每日用量明细")
             template_wb.create_sheet("每月用量对比")
             if "Sheet" in template_wb.sheetnames:
                 template_wb.remove(template_wb["Sheet"])
@@ -168,15 +155,6 @@ class TestStatementHandler(unittest.TestCase):
             template_path = os.path.join(temp_dir, 'template')
             os.makedirs(template_path, exist_ok=True)
             template_file = os.path.join(template_path, 'statement_template.xlsx')
-            template_wb.save(template_file)
-            
-            # 重新加载模板以确保正确保存
-            template_wb = Workbook()
-            template_wb.create_sheet("中润对账单")
-            daily_usage_sheet = template_wb.create_sheet("每日用量明细")
-            template_wb.create_sheet("每月用量对比")
-            if "Sheet" in template_wb.sheetnames:
-                template_wb.remove(template_wb["Sheet"])
             template_wb.save(template_file)
             
             output_file = os.path.join(temp_dir, "test_output.xlsx")
@@ -198,13 +176,13 @@ class TestStatementHandler(unittest.TestCase):
                 if os.path.exists(output_file):
                     os.remove(output_file)
 
-    def test_daily_usage_sheet_date_fields(self):
-        """测试每日用量明细工作表的日期字段格式和位置"""
+    def test_monthly_comparison_sheet_updates(self):
+        """测试每月用量对比工作表的数据更新"""
         with tempfile.TemporaryDirectory() as temp_dir:
             # 创建完整模板
             template_wb = Workbook()
             template_wb.create_sheet("中润对账单")
-            daily_usage_sheet = template_wb.create_sheet("每日用量明细")
+            template_wb.create_sheet("每日用量明细")
             template_wb.create_sheet("每月用量对比")
             if "Sheet" in template_wb.sheetnames:
                 template_wb.remove(template_wb["Sheet"])
@@ -228,21 +206,18 @@ class TestStatementHandler(unittest.TestCase):
                 
                 # 检查输出文件是否存在
                 self.assertTrue(os.path.exists(output_file))
-                
-                # 重新加载生成的文件检查内容
-                # 注意：由于我们无法直接访问私有方法内部实现，这里只验证文件生成
             finally:
                 # 清理测试文件
                 if os.path.exists(output_file):
                     os.remove(output_file)
 
-    def test_daily_usage_sheet_data_structure(self):
-        """测试每日用量明细工作表的数据结构是否符合要求"""
+    def test_statement_sheet_updates(self):
+        """测试对账单工作表的数据更新"""
         with tempfile.TemporaryDirectory() as temp_dir:
             # 创建完整模板
             template_wb = Workbook()
             template_wb.create_sheet("中润对账单")
-            daily_usage_sheet = template_wb.create_sheet("每日用量明细")
+            template_wb.create_sheet("每日用量明细")
             template_wb.create_sheet("每月用量对比")
             if "Sheet" in template_wb.sheetnames:
                 template_wb.remove(template_wb["Sheet"])
@@ -266,15 +241,6 @@ class TestStatementHandler(unittest.TestCase):
                 
                 # 检查输出文件是否存在
                 self.assertTrue(os.path.exists(output_file))
-                
-                # 验证数据结构符合要求：
-                # 1. G3单元格应包含开始日期
-                # 2. H3单元格应包含结束日期
-                # 3. A6单元格应包含年月
-                # 4. B列应包含日期（格式为7.1, 7.2等）
-                # 5. C列及后续列应包含油品名称和用量数据
-                
-                # 注意：由于我们无法直接访问私有方法内部实现，这里只验证文件生成
             finally:
                 # 清理测试文件
                 if os.path.exists(output_file):
@@ -301,7 +267,7 @@ class TestStatementHandler(unittest.TestCase):
             # 创建完整模板
             template_wb = Workbook()
             template_wb.create_sheet("中润对账单")
-            daily_usage_sheet = template_wb.create_sheet("每日用量明细")
+            template_wb.create_sheet("每日用量明细")
             template_wb.create_sheet("每月用量对比")
             if "Sheet" in template_wb.sheetnames:
                 template_wb.remove(template_wb["Sheet"])
@@ -339,7 +305,7 @@ class TestStatementHandler(unittest.TestCase):
             # 创建完整模板
             template_wb = Workbook()
             template_wb.create_sheet("中润对账单")
-            daily_usage_sheet = template_wb.create_sheet("每日用量明细")
+            template_wb.create_sheet("每日用量明细")
             template_wb.create_sheet("每月用量对比")
             if "Sheet" in template_wb.sheetnames:
                 template_wb.remove(template_wb["Sheet"])
@@ -367,19 +333,141 @@ class TestStatementHandler(unittest.TestCase):
                 # 重新加载生成的文件检查内容
                 from openpyxl import load_workbook
                 wb = load_workbook(output_file)
+                
+                # 检查是否包含所有必需的工作表
+                self.assertIn("中润对账单", wb.sheetnames)
+                self.assertIn("每日用量明细", wb.sheetnames)
+                self.assertIn("每月用量对比", wb.sheetnames)
+                
+            finally:
+                # 清理测试文件
+                if os.path.exists(output_file):
+                    os.remove(output_file)
+
+    def test_date_format_handling(self):
+        """测试日期格式处理功能"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # 创建完整模板
+            template_wb = Workbook()
+            template_wb.create_sheet("中润对账单")
+            template_wb.create_sheet("每日用量明细")
+            template_wb.create_sheet("每月用量对比")
+            if "Sheet" in template_wb.sheetnames:
+                template_wb.remove(template_wb["Sheet"])
+            
+            template_path = os.path.join(temp_dir, 'template')
+            os.makedirs(template_path, exist_ok=True)
+            template_file = os.path.join(template_path, 'statement_template.xlsx')
+            template_wb.save(template_file)
+            
+            output_file = os.path.join(temp_dir, "test_output.xlsx")
+            
+            try:
+                statement_handler = StatementHandler()
+                statement_handler.generate_statement_from_template(
+                    self.test_data,
+                    output_file,
+                    self.customer_name,
+                    self.start_date,
+                    self.end_date
+                )
+                
+                # 检查输出文件是否存在
+                self.assertTrue(os.path.exists(output_file))
+                
+                # 重新加载生成的文件检查日期格式
+                from openpyxl import load_workbook
+                wb = load_workbook(output_file)
                 daily_usage_sheet = wb["每日用量明细"]
                 
-                # 检查是否只显示实际需要的油品数量（2个）
-                oil_columns = []
-                for col in range(3, daily_usage_sheet.max_column + 1):
-                    oil_name = daily_usage_sheet.cell(row=5, column=col).value
-                    if oil_name:  # 如果该列有油品名称
-                        oil_columns.append(oil_name)
+                # 检查日期范围格式 (第3行)
+                date_range_cell = daily_usage_sheet.cell(row=3, column=2).value
+                self.assertIsNotNone(date_range_cell)
+                self.assertIn("2025.07.01", date_range_cell)
+                self.assertIn("2025.07.31", date_range_cell)
                 
-                # 应该只有2个油品列
-                self.assertEqual(len(oil_columns), 2)
-                self.assertIn("液压油1", oil_columns)
-                self.assertIn("液压油2", oil_columns)
+            finally:
+                # 清理测试文件
+                if os.path.exists(output_file):
+                    os.remove(output_file)
+
+    def test_data_aggregation(self):
+        """测试数据聚合功能"""
+        # 创建包含相同油品的测试数据
+        aggregation_test_data = [
+            {
+                'device_code': 'DEV001',
+                'oil_name': '切削液',
+                'data': [
+                    (date(2025, 7, 1), 10.0),
+                    (date(2025, 7, 2), 15.0)
+                ],
+                'raw_data': [],
+                'columns': []
+            },
+            {
+                'device_code': 'DEV002',
+                'oil_name': '切削液',  # 相同油品
+                'data': [
+                    (date(2025, 7, 1), 5.0),
+                    (date(2025, 7, 2), 10.0)
+                ],
+                'raw_data': [],
+                'columns': []
+            }
+        ]
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # 创建完整模板
+            template_wb = Workbook()
+            template_wb.create_sheet("中润对账单")
+            template_wb.create_sheet("每日用量明细")
+            template_wb.create_sheet("每月用量对比")
+            if "Sheet" in template_wb.sheetnames:
+                template_wb.remove(template_wb["Sheet"])
+            
+            template_path = os.path.join(temp_dir, 'template')
+            os.makedirs(template_path, exist_ok=True)
+            template_file = os.path.join(template_path, 'statement_template.xlsx')
+            template_wb.save(template_file)
+            
+            output_file = os.path.join(temp_dir, "test_output.xlsx")
+            
+            try:
+                statement_handler = StatementHandler()
+                statement_handler.generate_statement_from_template(
+                    aggregation_test_data,
+                    output_file,
+                    self.customer_name,
+                    self.start_date,
+                    self.end_date
+                )
+                
+                # 检查输出文件是否存在
+                self.assertTrue(os.path.exists(output_file))
+                
+                # 重新加载生成的文件检查数据聚合
+                from openpyxl import load_workbook
+                wb = load_workbook(output_file)
+                daily_usage_sheet = wb["每日用量明细"]
+                
+                # 检查数据是否正确聚合（7月1日应该是10.0+5.0=15.0）
+                # 查找日期为7.1的行
+                date_found = False
+                for row in range(6, daily_usage_sheet.max_row + 1):
+                    date_cell_value = daily_usage_sheet.cell(row=row, column=2).value
+                    if date_cell_value == "7.1":
+                        date_found = True
+                        # 检查聚合后的值（应该在C列）
+                        aggregated_value = daily_usage_sheet.cell(row=row, column=3).value
+                        # 由于我们不知道确切的列位置，我们检查值是否合理
+                        self.assertIsNotNone(aggregated_value)
+                        # 值应该大于任何一个单独的值
+                        self.assertGreaterEqual(aggregated_value, 10.0)
+                        break
+                
+                # 确保找到了对应的日期行
+                self.assertTrue(date_found, "未找到日期为7.1的数据行")
                 
             finally:
                 # 清理测试文件

@@ -47,19 +47,16 @@ class DataValidator:
         Raises:
             ValueError: 当日期格式不匹配时抛出异常
         """
-        try:
-            # 尝试解析标准的 YYYY-MM-DD 格式
-            return datetime.strptime(date_string, '%Y-%m-%d').date()
-        except ValueError:
-            pass
+        # 尝试解析多种日期格式
+        formats = ['%Y-%m-%d', '%Y/%m/%d', '%Y-%m-%d %H:%M:%S', '%Y/%m/%d %H:%M:%S']
+        
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_string, fmt).date()
+            except ValueError:
+                pass
 
-        try:
-            # 尝试解析 YYYY/M/D 格式
-            return datetime.strptime(date_string, '%Y/%m/%d').date()
-        except ValueError:
-            pass
-
-        # 如果以上两种格式都不匹配，抛出异常
+        # 如果以上格式都不匹配，抛出异常
         raise ValueError(f"日期格式错误: {date_string}。期望格式: 'YYYY-MM-DD' 或 'YYYY/M/D'")
 
     def validate_csv_data(self, row):

@@ -137,7 +137,7 @@ class ExcelHandler:
 
             try:
                 wb.save(output_file)
-                print(f"步骤3：库存余量图表已生成并保存为{export_format.upper()}格式")
+                print(f"  库存余量图表已生成并保存为{export_format.upper()}格式")
             except PermissionError:
                 print(f"错误：无法保存文件 '{output_file}'，可能是文件正在被其他程序占用。")
                 print("请关闭相关文件后重试。")

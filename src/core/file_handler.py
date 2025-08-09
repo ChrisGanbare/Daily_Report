@@ -14,6 +14,7 @@ class FileHandler:
     def read_devices_from_csv(self, csv_file):
         """
         从CSV文件读取设备信息，支持多种编码格式
+        支持使用device_code或device_no作为设备标识字段
         
         Args:
             csv_file (str): CSV文件路径
@@ -56,22 +57,47 @@ class FileHandler:
                         continue
 
                     # 验证列标题是否包含必要字段
-                    required_fields = {'device_no', 'start_date', 'end_date'}
-                    if not all(field in reader.fieldnames for field in required_fields):
-                        print(f"警告：CSV文件列标题不完整，缺少必要字段: {required_fields - set(reader.fieldnames)}")
+                    # 支持device_code或device_no作为设备标识字段
+                    required_fields = {'start_date', 'end_date'}
+                    fieldnames = set(reader.fieldnames)
+                    
+                    # 检查是否存在设备标识字段
+                    has_device_code = 'device_code' in fieldnames
+                    has_device_no = 'device_no' in fieldnames
+                    
+                    if not (has_device_code or has_device_no):
+                        print(f"警告：CSV文件缺少设备标识字段，应包含'device_code'或'device_no'")
                         continue
 
-                    # 读取数据行
-                    row_count = 0
+                    # 读取设备信息
                     for row in reader:
-                        devices.append(row)
-                        row_count += 1
+                        # 跳过空行
+                        if not any(row.values()):
+                            continue
 
-                    if row_count == 0:
-                        print(f"警告：使用 {encoding} 编码读取的CSV文件没有数据行")
+                        # 获取设备标识（优先使用device_code，其次使用device_no）
+                        device_code = row.get('device_code', '').strip() if has_device_code else ''
+                        device_no = row.get('device_no', '').strip() if has_device_no else ''
+                        
+                        # 确保至少有一个设备标识不为空
+                        if not device_code and not device_no:
+                            print(f"警告：跳过设备标识为空的行: {row}")
+                            continue
+
+                        devices.append({
+                            'device_code': device_code,
+                            'device_no': device_no,
+                            'start_date': row['start_date'].strip(),
+                            'end_date': row['end_date'].strip()
+                        })
+
+                    if not devices:
+                        print(f"警告：使用 {encoding} 编码读取的CSV文件没有设备信息")
                     else:
-                        print(f"成功使用 {encoding} 编码读取设备信息文件，共读取 {row_count} 行设备数据")
+                        device_field = 'device_code' if has_device_code else 'device_no'
+                        print(f"成功使用 {encoding} 编码读取设备信息文件，共读取 {len(devices)} 条设备信息")
                         print(f"CSV列标题: {', '.join(reader.fieldnames)}")
+                        print(f"使用 {device_field} 作为设备标识字段")
                         return devices
 
             except UnicodeDecodeError as e:

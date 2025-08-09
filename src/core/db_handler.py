@@ -90,7 +90,7 @@ class DatabaseHandler:
 
             # 获取列名
             columns = [desc[0] for desc in cursor.description]
-            print(f"查询返回 {len(results)} 条记录")
+            print(f"  查询返回 {len(results)} 条记录")
 
             # 处理数据
             data = {}
@@ -103,10 +103,27 @@ class DatabaseHandler:
                     order_date = order_time.date()
                     if order_date not in data or order_time > data[order_date]["datetime"]:
                         data[order_date] = {"datetime": order_time, "oil_remaining": float(oil_remaining)}
+                elif isinstance(order_time, str):
+                    # 处理字符串格式的日期
+                    parsed_datetime = None
+                    # 尝试多种日期格式
+                    for fmt in ['%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S']:
+                        try:
+                            parsed_datetime = datetime.strptime(order_time, fmt)
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if parsed_datetime:
+                        order_date = parsed_datetime.date()
+                        if order_date not in data or parsed_datetime > data[order_date]["datetime"]:
+                            data[order_date] = {"datetime": parsed_datetime, "oil_remaining": float(oil_remaining)}
+                    else:
+                        print(f"警告：无法解析日期字符串 {order_time}")
 
             # 转换为与原来read_inventory_data函数相同的格式
             result = [(date, float(record["oil_remaining"]) * 100) for date, record in sorted(data.items())]
-            print("\n步骤2：库存数据读取完成。")
+            print("  库存数据读取完成。")
             return result, columns, results
         except mysql.connector.Error as err:
             print(f"数据库查询失败: {err}")

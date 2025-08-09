@@ -1,3 +1,54 @@
+# ZR_Daily_Report 项目技术文档
+
+## 1. 项目结构
+```
+D:\Daily_Report\
+├── config/                     # 配置文件目录
+│   ├── query_config.json       # 数据库查询配置
+│   └── query_config_template.json  # 配置模板
+├── data/                       # 数据文件目录
+│   ├── devices.csv             # 设备信息模板文件
+│   └── devices_example.csv     # 设备信息示例文件
+├── docs/                       # 文档目录
+│   ├── technical_documentation.md
+│   └── version_plan.md
+├── src/                        # 源代码目录
+│   ├── __init__.py
+│   ├── core/                   # 核心模块
+│   │   ├── __init__.py
+│   │   ├── db_handler.py       # 数据库处理模块
+│   │   ├── excel_handler.py    # Excel处理模块
+│   │   ├── file_handler.py     # 文件处理模块
+│   │   └── statement_handler.py # 对账单处理模块
+│   ├── handlers/               # 处理器模块
+│   │   └── __init__.py
+│   └── utils/                  # 工具模块
+│       ├── __init__.py
+│       ├── config_encrypt.py   # 配置加密模块
+│       ├── config_handler.py   # 配置处理模块
+│       ├── data_validator.py   # 数据验证模块
+│       └── date_utils.py       # 日期处理模块
+├── template/                   # 模板目录
+│   └── statement_template.xlsx # 对账单模板
+├── tests/                      # 测试目录
+│   ├── __init__.py
+│   ├── test_statement_handler.py
+│   └── test_zr_daily_report.py
+├── .env                        # 环境变量文件
+├── .gitignore                  # Git忽略文件
+├── defect_fixes/               # 缺陷修复记录
+│   ├── 20250808_config_file_reading_issue.md
+│   ├── 20250808_statement_multiple_oil_issue.md
+│   ├── INDEX.md
+│   └── README.md
+├── query_config.json           # 查询配置文件(加密)
+├── README.md                   # 项目说明文档
+├── requirements.txt            # 依赖包列表
+└── ZR_Daily_Report.py          # 主程序文件
+```
+
+## 2. 依赖关系
+```
 # ZR Daily Report 技术文档
 
 ## 1. 项目概述

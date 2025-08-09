@@ -88,7 +88,7 @@ class StatementHandler:
             self._update_monthly_comparison_sheet(wb[sheet_mapping["monthly_comparison"]], all_devices_data, start_date, end_date)
             
             # 最后更新中润对账单工作表
-            self._update_statement_sheet(wb[sheet_mapping["statement"]], customer_name, start_date, end_date)
+            self._update_statement_sheet(wb[sheet_mapping["statement"]], all_devices_data, customer_name, start_date, end_date)
 
             # 保存结果前处理图表相关警告
             for sheet in wb.worksheets:
@@ -115,37 +115,37 @@ class StatementHandler:
         Args:
             ws: 工作表对象
             all_devices_data: 所有设备的数据
-            start_date: 开始日期
-            end_date: 结束日期
+            start_date: 开始日期 (date对象)
+            end_date: 结束日期 (date对象)
         """
         try:
-            
-            # 在G3单元格写入开始日期，使用Excel日期格式
-            ws['G3'] = start_date
-            # 设置日期格式为"2025年7月1日"样式
-            ws['G3'].number_format = 'yyyy"年"m"月"d"日"'
-            
-            # 在H3单元格写入结束日期，使用Excel日期格式
-            ws['H3'] = end_date
-            # 设置日期格式为"2025年7月31日"样式
-            ws['H3'].number_format = 'yyyy"年"m"月"d"日"'
-            
-            # 在A6单元格写入年月
-            ws['A6'] = start_date.strftime('%Y年%m月')
-            
-            # 收集每日用量数据
+            # 确保start_date和end_date是date对象
+            if isinstance(start_date, str):
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if isinstance(end_date, str):
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                
+            # 更新标题日期范围 (第3行)
+            ws.cell(row=3, column=2, value=f"({start_date.strftime('%Y.%m.%d')}-{end_date.strftime('%Y.%m.%d')})")
+
+            # 收集每日用量数据，统一使用 float
             daily_usage = defaultdict(lambda: defaultdict(float))
             oil_names = set()
-            
+
             for device_data in all_devices_data:
                 oil_name = device_data['oil_name']
                 oil_names.add(oil_name)
                 for date, value in device_data['data']:
-                    # 确保value是float类型，避免decimal.Decimal和float相加的问题
-                    daily_usage[date][oil_name] += float(value)
-            
+                    # 确保日期是date对象
+                    if isinstance(date, str):
+                        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+                    else:
+                        date_obj = date
+                    # 将数值统一转换为 float 类型
+                    value = float(value) if value is not None else 0.0
+                    daily_usage[date_obj][oil_name] += value
 
-            # 按油品名称排序
+            # 获取排序后的油品名称列表
             sorted_oils = sorted(oil_names)
             
             # 写入日期列 (B列)
@@ -203,65 +203,100 @@ class StatementHandler:
         Args:
             ws: 工作表对象
             all_devices_data: 所有设备的数据
-            start_date: 开始日期
-            end_date: 结束日期
+            start_date: 开始日期 (date对象)
+            end_date: 结束日期 (date对象)
         """
         try:
+            # 确保start_date和end_date是date对象
+            if isinstance(start_date, str):
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if isinstance(end_date, str):
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                
+            ws.cell(row=3, column=2, value=f"({start_date.strftime('%Y.%m.%d')}-{end_date.strftime('%Y.%m.%d')})")
+
             # 收集月度数据
             monthly_stats = defaultdict(lambda: defaultdict(float))
             for device_data in all_devices_data:
                 oil_name = device_data['oil_name']
                 for date, value in device_data['data']:
-                    month = date.strftime('%Y-%m')
-                    # 确保value是float类型，避免decimal.Decimal和float相加的问题
-                    monthly_stats[month][oil_name] += float(value)
+                    # 确保日期是date对象
+                    if isinstance(date, str):
+                        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+                    else:
+                        date_obj = date
+                    month = date_obj.strftime('%Y-%m')
+                    monthly_stats[month][oil_name] += float(value) if value is not None else 0.0
 
             # 写入数据
-            current_row = 4
-            sorted_months = sorted(monthly_stats.keys())
-            oil_names = set()
-            
-            # 收集所有油品名称
-            for month_data in monthly_stats.values():
-                oil_names.update(month_data.keys())
-            
-            sorted_oils = sorted(oil_names)
-            
-            
-            # 写入表头
-            for col, oil_name in enumerate(sorted_oils, 2):
-                ws.cell(row=3, column=col, value=oil_name)
-
-            # 写入每月数据
-            for month in sorted_months:
-                ws.cell(row=current_row, column=1, value=month)
-                month_data = monthly_stats[month]
-                for col, oil_name in enumerate(sorted_oils, 2):
-                    value = month_data.get(oil_name, 0)
-                    ws.cell(row=current_row, column=col, value=round(float(value), 2))
+            current_row = 6
+            for month, oil_stats in sorted(monthly_stats.items()):
+                ws.cell(row=current_row, column=2, value=month)
+                for col, (oil_name, value) in enumerate(sorted(oil_stats.items()), 3):
+                    ws.cell(row=current_row, column=col, value=round(value, 2))
                 current_row += 1
-                
 
         except Exception as e:
             print(f"更新每月用量对比工作表时出错: {e}")
             raise
 
-    def _update_statement_sheet(self, ws, customer_name, start_date, end_date):
+    def _update_statement_sheet(self, ws, all_devices_data, customer_name, start_date, end_date):
         """
-        更新中润对账单工作表
+        更新对账单工作表
         
         Args:
             ws: 工作表对象
+            all_devices_data: 所有设备的数据
             customer_name: 客户名称
-            start_date: 开始日期
-            end_date: 结束日期
+            start_date: 开始日期 (date对象)
+            end_date: 结束日期 (date对象)
         """
         try:
+            # 确保start_date和end_date是date对象
+            if isinstance(start_date, str):
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if isinstance(end_date, str):
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                
             # 更新客户信息和日期范围
-            ws['B2'] = customer_name
-            ws['D2'] = f"{start_date.strftime('%Y-%m-%d')}至{end_date.strftime('%Y-%m-%d')}"
+            customer_cell = ws.cell(row=2, column=2)
+            date_range_cell = ws.cell(row=2, column=4)
             
+            # 检查单元格是否为合并单元格，如果是则不进行写操作
+            if not hasattr(customer_cell, 'merged') or not customer_cell.merged:
+                customer_cell.value = customer_name
+            if not hasattr(date_range_cell, 'merged') or not date_range_cell.merged:
+                date_range_cell.value = f"{start_date.strftime('%Y-%m-%d')}至{end_date.strftime('%Y-%m-%d')}"
+
+            # 在此添加更新表格内容的代码
+            current_row = 4
+            for device_data in all_devices_data:
+                device_code = device_data['device_code']
+                oil_name = device_data['oil_name']
+                for date, value in device_data['data']:
+                    # 确保日期是date对象
+                    if isinstance(date, str):
+                        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+                    else:
+                        date_obj = date
+                    
+                    # 写入数据前检查单元格是否为合并单元格
+                    date_cell = ws.cell(row=current_row, column=1)
+                    device_cell = ws.cell(row=current_row, column=2)
+                    oil_cell = ws.cell(row=current_row, column=3)
+                    value_cell = ws.cell(row=current_row, column=4)
+                    
+                    if not hasattr(date_cell, 'merged') or not date_cell.merged:
+                        date_cell.value = date_obj
+                    if not hasattr(device_cell, 'merged') or not device_cell.merged:
+                        device_cell.value = device_code
+                    if not hasattr(oil_cell, 'merged') or not oil_cell.merged:
+                        oil_cell.value = oil_name
+                    if not hasattr(value_cell, 'merged') or not value_cell.merged:
+                        value_cell.value = value
+                    
+                    current_row += 1
 
         except Exception as e:
-            print(f"更新中润对账单工作表时出错: {e}")
+            print(f"更新对账单工作表时出错: {e}")
             raise
