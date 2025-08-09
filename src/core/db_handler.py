@@ -39,24 +39,32 @@ class DatabaseHandler:
             self.connection.close()
             print("数据库连接已关闭")
 
-    def get_device_id_by_no(self, device_no, device_query_template):
+    def get_device_id_by_no(self, device_no, device_query_template, device_query_fallback_template=None):
         """
-        根据设备编号查询设备ID，如果有多个相同设备编号，则返回create_time最新的记录
+        根据设备编号查询设备ID和客户ID，优先使用device_code查询，如果未找到则使用device_no查询
         
         Args:
             device_no (str): 设备编号
-            device_query_template (str): SQL查询模板
+            device_query_template (str): 优先查询SQL模板（device_code）
+            device_query_fallback_template (str): 备用查询SQL模板（device_no）
             
         Returns:
-            int or None: 设备ID或None（未找到时）
+            tuple or None: (设备ID, 客户ID)或None（未找到时）
         """
         cursor = None
         try:
             cursor = self.connection.cursor()
-            # 使用参数化查询防止SQL注入
+            
+            # 优先使用device_code查询
             cursor.execute(device_query_template, (device_no,))
             result = cursor.fetchone()
-            return result[0] if result else None
+            
+            # 如果通过device_code未找到，且提供了备用查询模板，则使用device_no查询
+            if not result and device_query_fallback_template:
+                cursor.execute(device_query_fallback_template, (device_no,))
+                result = cursor.fetchone()
+                
+            return (result[0], result[1]) if result else None
         except mysql.connector.Error as err:
             print(f"查询设备ID失败: {err}")
             return None
@@ -107,12 +115,13 @@ class DatabaseHandler:
             if cursor:
                 cursor.close()
 
-    def get_customer_name_by_device_code(self, device_code):
+    def get_customer_name_by_device_code(self, device_id, customer_query_template):
         """
-        根据设备编号获取客户名称
+        根据设备ID获取客户名称
         
         Args:
-            device_code (str): 设备编号
+            device_id (int): 设备ID
+            customer_query_template (str): 客户查询SQL模板
             
         Returns:
             str: 客户名称
@@ -120,41 +129,22 @@ class DatabaseHandler:
         cursor = None
         try:
             cursor = self.connection.cursor()
-            query = """
-            SELECT c.customer_name
-            FROM oil.t_device d
-            LEFT JOIN oil.t_customer c ON d.customer_id = c.id
-            LEFT JOIN (
-                SELECT ta.*
-                FROM oil.t_oil_type ta
-                INNER JOIN (
-                    SELECT device_id, max(id) AS id
-                    FROM oil.t_oil_type
-                    WHERE status=1
-                    GROUP BY device_id
-                ) tb ON ta.id = tb.id
-            ) ot ON d.id = ot.device_id
-            LEFT JOIN oil.t_device_oil o ON ot.id = o.oil_type_id
-            WHERE d.device_code = %s
-            AND d.del_status = 1
-            AND o.STATUS = 1
-            AND ot.STATUS = 1
-            """
-            cursor.execute(query, (device_code,))
+            # 先通过设备ID获取客户ID
+            cursor.execute("SELECT customer_id FROM oil.t_device WHERE id = %s", (device_id,))
             result = cursor.fetchone()
+            
             if result and result[0]:
-                return result[0]
-            else:
-                print(f"警告：未找到设备编号 {device_code} 对应的客户信息")
-                return "未知客户"
+                customer_id = result[0]
+                # 再通过客户ID获取客户名称
+                cursor.execute(customer_query_template, (customer_id,))
+                customer_result = cursor.fetchone()
+                if customer_result and customer_result[0]:
+                    return customer_result[0]
+            
+            print(f"警告：未找到设备ID {device_id} 对应的客户信息")
+            return "未知客户"
         except mysql.connector.Error as err:
-            print(f"通过设备编号查询客户名称失败: {err}")
-            print(f"可能的原因：")
-            print("1. 数据库连接异常")
-            print("2. t_device、t_customer表不存在或表结构不正确")
-            print("3. 设备编号不存在")
-            print("4. 数据库权限不足")
-            print("5. 设备与客户之间没有建立关联关系")
+            print(f"通过设备ID查询客户名称失败: {err}")
             return "未知客户"
         except Exception as e:
             print(f"查询客户名称时发生未知错误: {e}")

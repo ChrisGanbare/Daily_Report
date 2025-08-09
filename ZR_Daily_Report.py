@@ -7,6 +7,7 @@ from tkinter.filedialog import askopenfilename, askdirectory
 from collections import defaultdict
 from openpyxl import Workbook
 from openpyxl.styles import Font
+import mysql.connector
 
 # 添加项目根目录到sys.path，确保能正确导入模块
 import sys
@@ -35,6 +36,37 @@ def main():
     file_handler = FileHandler()
     data_validator = DataValidator()
     
+def get_customer_name_by_device_code(connection, device_id, customer_query_template):
+    """
+    根据设备ID获取客户名称
+    """
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        # 先通过设备ID获取客户ID
+        cursor.execute("SELECT customer_id FROM oil.t_device WHERE id = %s", (device_id,))
+        result = cursor.fetchone()
+        
+        if result and result[0]:
+            customer_id = result[0]
+            # 再通过客户ID获取客户名称
+            cursor.execute(customer_query_template, (customer_id,))
+            customer_result = cursor.fetchone()
+            if customer_result and customer_result[0]:
+                return customer_result[0]
+        
+        print(f"警告：未找到设备ID {device_id} 对应的客户信息")
+        return "未知客户"
+    except mysql.connector.Error as err:
+        print(f"通过设备ID查询客户名称失败: {err}")
+        return "未知客户"
+    except Exception as e:
+        print(f"查询客户名称时发生未知错误: {e}")
+        return "未知客户"
+    finally:
+        if cursor:
+            cursor.close()
+    
     # 读取查询配置文件
     try:
         # 使用项目根目录下的配置文件
@@ -61,8 +93,10 @@ def main():
     sql_templates = query_config.get('sql_templates', {})
     
     # 获取SQL查询模板
-    device_query_template = sql_templates.get('device_id_query', "SELECT id FROM oil.t_device WHERE device_no = %s ORDER BY create_time DESC LIMIT 1")
+    device_query_template = sql_templates.get('device_id_query', "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s ORDER BY create_time DESC LIMIT 1")
+    device_query_fallback_template = sql_templates.get('device_id_fallback_query', "SELECT id, customer_id FROM oil.t_device WHERE device_no = %s ORDER BY create_time DESC LIMIT 1")
     inventory_query_template = sql_templates.get('inventory_query', "")
+    customer_query_template = sql_templates.get('customer_query', "SELECT customer_name FROM oil.t_customer WHERE id = %s")
     
     # 显示文件选择对话框，让用户选择设备信息CSV文件
     Tk().withdraw()  # 隐藏主窗口
@@ -70,6 +104,10 @@ def main():
         title="选择设备信息文件",
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
     )
+    
+    # 传递 fallback 模板到需要的地方
+    global device_query_fallback_template
+    device_query_fallback_template = device_query_fallback_template
     
     if not devices_csv:
         cancel_msg = "未选择设备信息文件，程序退出。"
@@ -199,9 +237,9 @@ def main():
         log_messages.append(date_msg)
         log_messages.append("")  # 添加空行分隔
         
-        # 根据设备编号查询设备ID
-        device_id = db_handler.get_device_id_by_no(device_no, device_query_template)
-        if not device_id:
+        # 根据设备编号查询设备ID和客户ID
+        device_result = get_device_id_by_no(connection, device_no, device_query_template, device_query_fallback_template)
+        if not device_result:
             warn_msg = f"警告：未找到设备编号 {device_no} 对应的设备ID，跳过该设备"
             print(warn_msg)
             log_messages.append(warn_msg)
@@ -211,6 +249,8 @@ def main():
                 'reason': '未找到对应的设备ID'
             })
             continue
+            
+        device_id, customer_id = device_result
         
         # 生成查询语句
         # 使用字符串格式化生成查询语句
@@ -242,8 +282,11 @@ def main():
             if customer_name_index >= 0 and customer_name_index < len(raw_data[0]) and raw_data[0][customer_name_index]:
                 customer_name = raw_data[0][customer_name_index]
             else:
-                # 如果查询结果中没有客户名称，则通过设备编号查询
-                customer_name = db_handler.get_customer_name_by_device_code(device_no)
+                # 如果查询结果中没有客户名称，则通过设备ID查询
+                customer_name = get_customer_name_by_device_code(connection, device_id, customer_query_template)
+        else:
+            # 如果没有查询到数据，使用默认油品名称
+            oil_name = f"油品_{i+1}"  # 使用设备索引作为油品名称，确保不同设备有不同油品名
         
         all_results.append({
             'oil_name': oil_name,
