@@ -52,7 +52,7 @@ class TestZRDailyReport(unittest.TestCase):
             }
         
         # 初始化处理器
-        self.db_handler = DatabaseHandler()
+        self.db_handler = DatabaseHandler(self.query_config.get('db_config', {}))
         self.excel_handler = ExcelHandler()
         self.config_handler = ConfigHandler()
         self.file_handler = FileHandler()
