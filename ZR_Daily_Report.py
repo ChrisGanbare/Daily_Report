@@ -1,3 +1,4 @@
+import csv
 import re
 import os
 import json
@@ -14,8 +15,9 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 # 使用包导入简化导入路径
-from src.core import DatabaseHandler, ExcelHandler, FileHandler, StatementHandler
+from src.core import DatabaseHandler, StatementHandler
 from src.utils import ConfigHandler, DataValidator
+from src.core import ExcelHandler, FileHandler
 
 def main():
     # 初始化日志列表
@@ -36,20 +38,59 @@ def main():
     file_handler = FileHandler()
     data_validator = DataValidator()
     
-def get_customer_name_by_device_code(connection, device_id, customer_query_template):
+def get_device_and_customer_info(connection, device_no, device_query_template, device_query_fallback_template=None):
     """
-    根据设备ID获取客户名称
+    根据设备编号查询设备ID和客户ID，优先使用device_code查询，如果未找到则使用device_no查询
     """
     cursor = None
     try:
         cursor = connection.cursor()
-        # 先通过设备ID获取客户ID
-        cursor.execute("SELECT customer_id FROM oil.t_device WHERE id = %s", (device_id,))
+        
+        # 优先使用device_code查询
+        cursor.execute(device_query_template, (device_no,))
         result = cursor.fetchone()
         
-        if result and result[0]:
-            customer_id = result[0]
+        # 如果通过device_code未找到，且提供了备用查询模板，则使用device_no查询
+        if not result and device_query_fallback_template:
+            cursor.execute(device_query_fallback_template, (device_no,))
+            result = cursor.fetchone()
+            
+        return (result[0], result[1]) if result else None
+    except mysql.connector.Error as err:
+        print(f"查询设备ID失败: {err}")
+        return None
+    finally:
+        if cursor:
+            cursor.close()
+
+def get_customer_id(connection, device_id):
+    """
+    根据设备ID获取客户ID
+    """
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT customer_id FROM oil.t_device WHERE id = %s", (device_id,))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except mysql.connector.Error as err:
+        print(f"查询客户ID失败: {err}")
+        return None
+    finally:
+        if cursor:
+            cursor.close()
+
+def get_customer_name_by_device_code(connection, device_id, customer_query_template):
+    """
+    根据设备ID获取客户名称
+    """
+    try:
+        # 先通过设备ID获取客户ID
+        customer_id = get_customer_id(connection, device_id)
+        
+        if customer_id:
             # 再通过客户ID获取客户名称
+            cursor = connection.cursor()
             cursor.execute(customer_query_template, (customer_id,))
             customer_result = cursor.fetchone()
             if customer_result and customer_result[0]:
@@ -238,7 +279,7 @@ def get_customer_name_by_device_code(connection, device_id, customer_query_templ
         log_messages.append("")  # 添加空行分隔
         
         # 根据设备编号查询设备ID和客户ID
-        device_result = get_device_id_by_no(connection, device_no, device_query_template, device_query_fallback_template)
+        device_result = get_device_and_customer_info(connection, device_no, device_query_template, device_query_fallback_template)
         if not device_result:
             warn_msg = f"警告：未找到设备编号 {device_no} 对应的设备ID，跳过该设备"
             print(warn_msg)

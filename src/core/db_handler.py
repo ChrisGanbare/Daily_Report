@@ -39,7 +39,7 @@ class DatabaseHandler:
             self.connection.close()
             print("数据库连接已关闭")
 
-    def get_device_id_by_no(self, device_no, device_query_template, device_query_fallback_template=None):
+    def get_device_and_customer_info(self, device_no, device_query_template, device_query_fallback_template=None):
         """
         根据设备编号查询设备ID和客户ID，优先使用device_code查询，如果未找到则使用device_no查询
         
@@ -126,16 +126,13 @@ class DatabaseHandler:
         Returns:
             str: 客户名称
         """
-        cursor = None
         try:
-            cursor = self.connection.cursor()
             # 先通过设备ID获取客户ID
-            cursor.execute("SELECT customer_id FROM oil.t_device WHERE id = %s", (device_id,))
-            result = cursor.fetchone()
+            customer_id = self.get_customer_id(device_id)
             
-            if result and result[0]:
-                customer_id = result[0]
+            if customer_id:
                 # 再通过客户ID获取客户名称
+                cursor = self.connection.cursor()
                 cursor.execute(customer_query_template, (customer_id,))
                 customer_result = cursor.fetchone()
                 if customer_result and customer_result[0]:
@@ -149,9 +146,6 @@ class DatabaseHandler:
         except Exception as e:
             print(f"查询客户名称时发生未知错误: {e}")
             return "未知客户"
-        finally:
-            if cursor:
-                cursor.close()
 
     def get_customer_id(self, device_id):
         """
