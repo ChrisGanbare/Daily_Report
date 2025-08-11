@@ -6,11 +6,11 @@
 from .db_handler import DatabaseHandler
 from .excel_handler import ExcelHandler
 from .file_handler import FileHandler
-from .statement_handler import StatementHandler
+from .statement_handler import CustomerStatementGenerator
 
 __all__ = [
     "DatabaseHandler",
     "ExcelHandler",
     "FileHandler",
-    "StatementHandler"
+    "CustomerStatementGenerator"
 ]

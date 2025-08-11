@@ -5,14 +5,14 @@ from openpyxl import load_workbook
 from openpyxl.chart import LineChart, BarChart, Reference
 
 
-class StatementHandler:
-    """对账单处理类，负责对账单的生成和处理"""
+class CustomerStatementGenerator:
+    """客户对账单生成器类，负责生成客户对账单Excel报表"""
 
     def __init__(self):
-        """初始化对账单处理器"""
+        """初始化客户对账单生成器"""
         pass
 
-    def generate_statement_from_template(self, all_devices_data, output_file, customer_name, start_date, end_date):
+    def generate_customer_statement_from_template(self, all_devices_data, output_file, customer_name, start_date, end_date):
         """
         基于模板生成对账单Excel报表
         
@@ -45,50 +45,25 @@ class StatementHandler:
             # 加载模板工作簿
             wb = load_workbook(template_path)
 
-            # 检查必需的工作表是否存在（支持中英文名称）
-            required_sheets_chinese = ["中润对账单", "每日用量明细", "每月用量对比"]
-            required_sheets_english = ["Statement", "Daily Usage", "Monthly Comparison"]
+            # 检查必需的工作表是否存在
+            required_sheets = ["中润对账单", "每日用量明细", "每月用量对比"]
+            missing_sheets = [name for name in required_sheets if name not in wb.sheetnames]
             
-            # 检查是否存在中文名称的工作表
-            missing_sheets_chinese = [name for name in required_sheets_chinese if name not in wb.sheetnames]
-            # 检查是否存在英文名称的工作表
-            missing_sheets_english = [name for name in required_sheets_english if name not in wb.sheetnames]
-            
-            # 确定使用哪种命名方式
-            if len(missing_sheets_chinese) == 0:  # 中文工作表都存在
-                # 使用中文名称
-                sheet_mapping = {
-                    "statement": "中润对账单",
-                    "daily_usage": "每日用量明细",
-                    "monthly_comparison": "每月用量对比"
-                }
-            elif len(missing_sheets_english) == 0:  # 英文工作表都存在
-                # 使用英文名称
-                sheet_mapping = {
-                    "statement": "Statement",
-                    "daily_usage": "Daily Usage",
-                    "monthly_comparison": "Monthly Comparison"
-                }
-            else:
-                # 混合命名或缺少工作表
+            if missing_sheets:
                 available_sheets = ", ".join(wb.sheetnames)
-                missing_chinese_info = f"缺少中文工作表: {', '.join(missing_sheets_chinese)}" if missing_sheets_chinese else ""
-                missing_english_info = f"缺少英文工作表: {', '.join(missing_sheets_english)}" if missing_sheets_english else ""
                 raise KeyError(
-                    f"模板工作表名称不匹配。当前模板包含的工作表: {available_sheets}\n"
-                    f"{missing_chinese_info}\n"
-                    f"{missing_english_info}\n"
-                    f"需要以下中文工作表: {', '.join(required_sheets_chinese)}\n"
-                    f"或以下英文工作表: {', '.join(required_sheets_english)}"
+                    f"模板工作表不完整。当前模板包含的工作表: {available_sheets}\n"
+                    f"缺少工作表: {', '.join(missing_sheets)}\n"
+                    f"需要以下工作表: {', '.join(required_sheets)}"
                 )
 
             # 更新各工作表
             # 先更新每日用量明细和每月用量对比工作表
-            self._update_daily_usage_sheet(wb[sheet_mapping["daily_usage"]], all_devices_data, start_date, end_date)
-            self._update_monthly_comparison_sheet(wb[sheet_mapping["monthly_comparison"]], all_devices_data, start_date, end_date)
+            self._update_daily_usage_sheet(wb["每日用量明细"], all_devices_data, start_date, end_date)
+            self._update_monthly_comparison_sheet(wb["每月用量对比"], all_devices_data, start_date, end_date)
             
             # 最后更新中润对账单工作表
-            self._update_statement_sheet(wb[sheet_mapping["statement"]], all_devices_data, customer_name, start_date, end_date)
+            self._update_statement_sheet(wb["中润对账单"], all_devices_data, customer_name, start_date, end_date)
 
             # 保存结果前处理图表相关警告
             for sheet in wb.worksheets:
@@ -125,8 +100,14 @@ class StatementHandler:
             if isinstance(end_date, str):
                 end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
                 
-            # 更新标题日期范围 (第3行)
-            ws.cell(row=3, column=2, value=f"({start_date.strftime('%Y.%m.%d')}-{end_date.strftime('%Y.%m.%d')})")
+            # 在G3单元格写入开始日期，格式：2025/7/1
+            ws['G3'] = start_date.strftime('%Y/%m/%d').replace('/0', '/').lstrip('0')
+            
+            # 在G4单元格写入结束日期，格式：2025/7/31
+            ws['G4'] = end_date.strftime('%Y/%m/%d').replace('/0', '/').lstrip('0')
+            
+            # 在A6单元格写入年月，格式：2025年7月
+            ws['A6'] = start_date.strftime('%Y年%m月').replace('年0', '年')
 
             # 收集每日用量数据，统一使用 float
             daily_usage = defaultdict(lambda: defaultdict(float))
@@ -263,9 +244,9 @@ class StatementHandler:
             date_range_cell = ws.cell(row=2, column=4)
             
             # 检查单元格是否为合并单元格，如果是则不进行写操作
-            if not hasattr(customer_cell, 'merged') or not customer_cell.merged:
+            if customer_cell.coordinate not in ws.merged_cells:
                 customer_cell.value = customer_name
-            if not hasattr(date_range_cell, 'merged') or not date_range_cell.merged:
+            if date_range_cell.coordinate not in ws.merged_cells:
                 date_range_cell.value = f"{start_date.strftime('%Y-%m-%d')}至{end_date.strftime('%Y-%m-%d')}"
 
             # 在此添加更新表格内容的代码
@@ -286,13 +267,13 @@ class StatementHandler:
                     oil_cell = ws.cell(row=current_row, column=3)
                     value_cell = ws.cell(row=current_row, column=4)
                     
-                    if not hasattr(date_cell, 'merged') or not date_cell.merged:
+                    if date_cell.coordinate not in ws.merged_cells:
                         date_cell.value = date_obj
-                    if not hasattr(device_cell, 'merged') or not device_cell.merged:
+                    if device_cell.coordinate not in ws.merged_cells:
                         device_cell.value = device_code
-                    if not hasattr(oil_cell, 'merged') or not oil_cell.merged:
+                    if oil_cell.coordinate not in ws.merged_cells:
                         oil_cell.value = oil_name
-                    if not hasattr(value_cell, 'merged') or not value_cell.merged:
+                    if value_cell.coordinate not in ws.merged_cells:
                         value_cell.value = value
                     
                     current_row += 1

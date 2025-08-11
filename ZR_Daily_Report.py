@@ -16,7 +16,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 # 使用包导入简化导入路径
-from src.core import DatabaseHandler, StatementHandler
+from src.core import DatabaseHandler, CustomerStatementGenerator
 from src.utils import ConfigHandler, DataValidator
 from src.core import ExcelHandler, FileHandler
 
@@ -210,6 +210,9 @@ def generate_inventory_reports():
     print("步骤2：生成库存报表")
     print("=" * 50)
     
+    # 用于存储处理失败的设备
+    failed_devices = []
+    
     # 处理每个设备
     for i, device in enumerate(valid_devices, 1):
         device_code = device['device_code']
@@ -252,39 +255,16 @@ def generate_inventory_reports():
                 print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
                 log_messages.append(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
             
-            # 生成Excel报表
-            # 格式化日期用于文件名（将/替换为-）
-            formatted_start_date = start_date.replace("/", "-")
-            formatted_end_date = end_date.replace("/", "-")
-            output_file = os.path.join(
-                output_dir, 
-                f"{customer_name}_{device_code}_{formatted_start_date}_to_{formatted_end_date}.xlsx"
-            )
-            
-            # 确保输出目录存在
-            os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else output_dir, exist_ok=True)
-            
-            excel_handler = ExcelHandler()
-            # 将字符串日期转换为date对象，支持多种格式
-            start_date_obj = None
-            end_date_obj = None
-            
-            # 尝试多种日期格式
-            date_formats = ['%Y-%m-%d', '%Y/%m/%d']
-            for fmt in date_formats:
-                try:
-                    start_date_obj = datetime.strptime(start_date, fmt).date()
-                    end_date_obj = datetime.strptime(end_date, fmt).date()
-                    break
-                except ValueError:
-                    continue
-            
-            if start_date_obj is None or end_date_obj is None:
-                raise ValueError(f"无法解析日期格式: start_date='{start_date}', end_date='{end_date}'")
-                
-            excel_handler.generate_excel_with_chart(data, output_file, device_code, start_date_obj, end_date_obj)
-            print(f"  成功生成报表: {output_file}")
-            log_messages.append(f"  成功生成报表: {output_file}")
+            # 创建设备数据，但不保存到all_devices_data（因为库存报表不需要这个数据）
+            device_data = {
+                'device_code': device_code,
+                'oil_name': '切削液',  # 假设所有设备都是切削液设备
+                'data': data,
+                'raw_data': raw_data,
+                'columns': columns,
+                'customer_name': customer_name,
+                'customer_id': customer_id  # 添加客户ID用于高性能分组
+            }
             
         except Exception as e:
             error_msg = f"  处理设备 {device_code} 时发生错误: {e}"
@@ -319,84 +299,74 @@ def generate_inventory_reports():
 
 def generate_customer_statement():
     """
-    专门用于生成客户对账单
+    生成客户对账单的主函数
     """
-    # 初始化日志列表
+    # 初始化日志消息列表
     log_messages = []
-    
-    # 记录程序开始时间
     start_time = datetime.now()
     log_messages.append(f"程序开始执行时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    log_messages.append("")  # 添加空行分隔
+    log_messages.append("")
     
     print("=" * 50)
-    print("步骤1：读取配置文件和设备信息（客户对账单）")
+    print("ZR Daily Report - 客户对账单生成功能")
     print("=" * 50)
-    
-    # 初始化处理器
-    file_handler = FileHandler()
-    data_validator = DataValidator()
-    
-    # 读取查询配置文件
-    query_config = load_configuration()
-    
-    # 提取数据库配置和SQL模板
-    db_config = query_config.get('db_config', {})
-    sql_templates = query_config.get('sql_templates', {})
-    
-    # 获取SQL查询模板
-    device_query_template = sql_templates.get('device_id_query')
-    device_query_fallback_template = sql_templates.get('device_id_fallback_query')
-    inventory_query_template = sql_templates.get('inventory_query', "")
-    customer_query_template = sql_templates.get('customer_query')
-    
-    # 如果某些模板未在配置文件中定义，则使用默认值
-    if not device_query_template:
-        device_query_template = "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s ORDER BY create_time DESC LIMIT 1"
-    
-    if not device_query_fallback_template:
-        device_query_fallback_template = "SELECT id, customer_id FROM oil.t_device WHERE device_no = %s ORDER BY create_time DESC LIMIT 1"
-    
-    if not customer_query_template:
-        customer_query_template = "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+    log_messages.append("ZR Daily Report - 客户对账单生成功能")
     
     # 显示文件选择对话框，让用户选择设备信息CSV文件
     Tk().withdraw()  # 隐藏主窗口
-    devices_csv = askopenfilename(
-        title="选择设备信息文件（用于生成客户对账单）",
+    csv_file = askopenfilename(
+        title="选择设备信息CSV文件",
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
     )
     
-    if not devices_csv:
-        print("未选择设备信息文件，程序退出。")
+    if not csv_file:
+        print("未选择文件，程序退出。")
         return
+    
+    log_messages.append(f"选择的设备信息文件: {csv_file}")
     
     # 读取设备信息
-    devices = file_handler.read_devices_from_csv(devices_csv)
-    if not devices:
-        print("未能读取设备信息，请检查文件格式。")
-        return
-    
-    # 验证设备信息
-    valid_devices = []
-    for device in devices:
-        if data_validator.validate_csv_data(device):
-            valid_devices.append(device)
-        else:
-            print(f"设备信息验证失败: {device}")
+    try:
+        file_handler = FileHandler()
+        devices = file_handler.read_devices_from_csv(csv_file)
+        data_validator = DataValidator()
+        valid_devices = [d for d in devices if data_validator.validate_csv_data(d)]
+        log_messages.append(f"总共读取设备数量: {len(devices)}")
+        log_messages.append(f"有效设备数量: {len(valid_devices)}")
+    except Exception as e:
+        error_msg = f"读取设备信息失败: {e}"
+        print(error_msg)
+        log_messages.append(error_msg)
+        log_messages.append("")
+        exit(1)
     
     if not valid_devices:
-        print("没有有效的设备信息，请检查设备文件内容。")
-        return
+        error_msg = "没有有效的设备信息，请检查CSV文件格式。"
+        print(error_msg)
+        log_messages.append(error_msg)
+        log_messages.append("")
+        exit(1)
     
-    print(f"成功读取 {len(valid_devices)} 个有效设备信息。")
-    log_messages.append(f"成功读取 {len(valid_devices)} 个有效设备信息。")
-    log_messages.append("")  # 添加空行分隔
-    
-    # 初始化数据库连接
-    db_handler = DatabaseHandler(db_config)
+    # 加载数据库配置
     try:
+        query_config = load_configuration()
+        db_config = query_config['db_config']
+        inventory_query_template = query_config['sql_templates']['inventory_query']
+        device_query_template = query_config['sql_templates']['device_id_query']
+        device_query_fallback_template = query_config['sql_templates'].get('device_id_fallback_query')
+        customer_query_template = query_config['sql_templates']['customer_query']
+    except Exception as e:
+        error_msg = f"加载配置失败: {e}"
+        print(error_msg)
+        log_messages.append(error_msg)
+        log_messages.append("")
+        exit(1)
+    
+    # 连接数据库
+    try:
+        db_handler = DatabaseHandler(db_config)
         connection = db_handler.connect()
+        log_messages.append("数据库连接成功")
     except Exception as e:
         error_msg = f"数据库连接失败: {e}"
         print(error_msg)
@@ -471,7 +441,8 @@ def generate_customer_statement():
                 'data': data,
                 'raw_data': raw_data,
                 'columns': columns,
-                'customer_name': customer_name
+                'customer_name': customer_name,
+                'customer_id': customer_id  # 添加客户ID用于高性能分组
             }
             all_devices_data.append(device_data)
             
@@ -484,55 +455,84 @@ def generate_customer_statement():
     
     # 生成对账单
     if all_devices_data:
-        # 获取客户名称（假设所有设备属于同一客户）
-        customer_name = all_devices_data[0]['customer_name']
+        # 按客户ID对设备进行分组（使用客户ID比客户名称更准确且性能更好）
+        customers_data = {}
+        for device_data in all_devices_data:
+            customer_id = device_data['customer_id']
+            customer_name = device_data['customer_name']
+            # 使用客户ID作为键，但保存客户名称用于文件命名
+            if customer_id not in customers_data:
+                customers_data[customer_id] = {
+                    'customer_name': customer_name,
+                    'devices': []
+                }
+            customers_data[customer_id]['devices'].append(device_data)
         
-        # 获取日期范围
-        start_date = valid_devices[0]['start_date']
-        end_date = valid_devices[0]['end_date']
-        
-        # 格式化日期用于文件名
-        formatted_start_date = start_date.replace("/", "-")
-        formatted_end_date = end_date.replace("/", "-")
-        
-        # 将字符串日期转换为date对象，支持多种格式
+        # 初始化日期变量
         start_date_obj = None
         end_date_obj = None
+        formatted_start_date = None
+        formatted_end_date = None
         
-        # 尝试多种日期格式
-        date_formats = ['%Y-%m-%d', '%Y/%m/%d']
-        for fmt in date_formats:
-            try:
-                start_date_obj = datetime.strptime(start_date, fmt).date()
-                end_date_obj = datetime.strptime(end_date, fmt).date()
-                break
-            except ValueError:
-                continue
-        
-        if start_date_obj is None or end_date_obj is None:
-            raise ValueError(f"无法解析日期格式: start_date='{start_date}', end_date='{end_date}'")
-        
-        # 生成对账单文件名
-        statement_file = os.path.join(
-            output_dir,
-            f"{customer_name}_对账单_{formatted_start_date}_to_{formatted_end_date}.xlsx"
-        )
-        
-        # 生成对账单
-        statement_handler = StatementHandler()
-        try:
-            statement_handler.generate_statement_from_template(
-                all_devices_data, statement_file, customer_name, 
-                start_date_obj, end_date_obj
+        # 为每个客户生成对账单
+        for customer_id, customer_info in customers_data.items():
+            customer_name = customer_info['customer_name']
+            customer_devices = customer_info['devices']
+            
+            print(f"\n为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
+            log_messages.append(f"为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
+            
+            # 获取日期范围（使用第一个设备的日期范围）
+            if not start_date_obj or not end_date_obj:
+                start_date = valid_devices[0]['start_date']
+                end_date = valid_devices[0]['end_date']
+                
+                # 尝试多种日期格式
+                date_formats = ['%Y-%m-%d', '%Y/%m/%d']
+                for fmt in date_formats:
+                    try:
+                        start_date_obj = datetime.strptime(start_date, fmt).date()
+                        end_date_obj = datetime.strptime(end_date, fmt).date()
+                        break
+                    except ValueError:
+                        continue
+                
+                if start_date_obj is None or end_date_obj is None:
+                    raise ValueError(f"无法解析日期格式: start_date='{start_date}', end_date='{end_date}'")
+                
+                # 格式化日期用于文件名（使用统一格式）
+                formatted_start_date = start_date_obj.strftime('%Y-%m-%d')
+                formatted_end_date = end_date_obj.strftime('%Y-%m-%d')
+            
+            # 生成对账单文件名: 客户名称xxxx年xx月对账单
+            statement_file = os.path.join(
+                output_dir,
+                f"{customer_name}{start_date_obj.strftime('%Y年%m月')}对账单.xlsx"
             )
-            print(f"成功生成对账单: {statement_file}")
-            log_messages.append(f"成功生成对账单: {statement_file}")
-        except Exception as e:
-            error_msg = f"生成对账单失败: {e}"
-            print(error_msg)
-            log_messages.append(error_msg)
+            
+            # 生成对账单
+            statement_generator = CustomerStatementGenerator()
+            try:
+                statement_generator.generate_customer_statement_from_template(
+                    customer_devices, statement_file, customer_name, 
+                    start_date_obj, end_date_obj
+                )
+                print(f"成功生成对账单: {statement_file}")
+                log_messages.append(f"成功生成对账单: {statement_file}")
+            except Exception as e:
+                error_msg = f"生成对账单失败: {e}"
+                print(error_msg)
+                log_messages.append(error_msg)
     
     # 记录程序结束时间
+    
+    # 初始化日期变量
+    start_date_obj = None
+    end_date_obj = None
+    
+    # 初始化日期变量
+    start_date_obj = None
+    end_date_obj = None
     end_time = datetime.now()
     duration = end_time - start_time
     log_messages.append("")
