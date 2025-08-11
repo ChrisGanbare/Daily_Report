@@ -101,6 +101,9 @@ ZR Daily Report 是一个用于生成切削液设备日常库存报告的Python�
 2. 构建Python包
 3. 发布到PyPI(需要配置PYPI_API_TOKEN密钥)
 
+### 详细文档
+有关CI/CD流程的完整信息，请参阅[CI/CD指南](docs/ci_cd_guide.md)。
+
 ### 本地开发环境
 可以使用Docker Compose快速搭建本地开发环境：
 ```bash
@@ -110,7 +113,7 @@ docker-compose up -d
 ## 6. 使用说明
 
 ### 程序运行模式
-```
+```bash
 # 生成库存报表和客户对账单（默认）
 python ZR_Daily_Report.py
 
@@ -129,7 +132,7 @@ python ZR_Daily_Report.py --mode statement
 ## 7. 测试
 
 运行测试:
-```
+```bash
 python -m pytest tests/ -v
 ```
 
@@ -137,17 +140,17 @@ python -m pytest tests/ -v
 
 ### Docker部署
 构建Docker镜像:
-```
+```bash
 docker build -t zr-daily-report .
 ```
 
 运行容器:
-```
+```bash
 docker run -d --name zr-report zr-daily-report
 ```
 
 ### Docker Compose部署
-```
+```bash
 docker-compose up -d
 ```
 

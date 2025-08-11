@@ -5,8 +5,8 @@ from datetime import date
 from openpyxl import Workbook
 
 # 更新导入路径以适应新的目录结构
-from src.core.statement_handler import StatementHandler
-from base_test import BaseTestCase
+from src.core.statement_handler import CustomerStatementGenerator
+from tests.base_test import BaseTestCase
 
 
 class TestStatementHandler(BaseTestCase):
@@ -15,11 +15,11 @@ class TestStatementHandler(BaseTestCase):
     def setUp(self):
         """测试前准备"""
         super().setUp()
-        self.statement_handler = StatementHandler()
+        self.statement_handler = CustomerStatementGenerator()
         self.customer_name = "测试客户"
         self.start_date = date(2025, 7, 1)
         self.end_date = date(2025, 7, 31)
-        
+
         # 创建测试数据
         self.test_data = [
             {
@@ -48,7 +48,7 @@ class TestStatementHandler(BaseTestCase):
 
     def test_statement_handler_initialization(self):
         """测试对账单处理器初始化"""
-        self.assertIsInstance(self.statement_handler, StatementHandler)
+        self.assertIsInstance(self.statement_handler, CustomerStatementGenerator)
         
     def test_generate_statement_from_template_file_not_found(self):
         """测试模板文件不存在的情况"""
@@ -56,7 +56,7 @@ class TestStatementHandler(BaseTestCase):
         
         # 应该抛出FileNotFoundError异常
         with self.assertRaises(FileNotFoundError):
-            self.statement_handler.generate_statement_from_template(
+            self.statement_handler.generate_customer_statement_from_template(
                 all_devices_data=self.test_data,
                 output_file=output_file,
                 customer_name=self.customer_name,
@@ -73,9 +73,9 @@ class TestStatementHandler(BaseTestCase):
             'statement_template.xlsx'
         )
         
-        # 通过反射检查StatementHandler的模板路径逻辑
+        # 通过反射检查CustomerStatementGenerator的模板路径逻辑
         import inspect
-        source_code = inspect.getsource(self.statement_handler.generate_statement_from_template)
+        source_code = inspect.getsource(self.statement_handler.generate_customer_statement_from_template)
         self.assertIn('template', source_code)
         self.assertIn('statement_template.xlsx', source_code)
 
@@ -96,8 +96,8 @@ class TestStatementHandler(BaseTestCase):
             
             # 应该抛出KeyError异常
             with self.assertRaises(KeyError) as context:
-                statement_handler = StatementHandler()
-                statement_handler.generate_statement_from_template(
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_customer_statement_from_template(
                     self.test_data,
                     output_file,
                     self.customer_name,
@@ -127,8 +127,8 @@ class TestStatementHandler(BaseTestCase):
             
             # 应该抛出KeyError异常
             with self.assertRaises(KeyError) as context:
-                statement_handler = StatementHandler()
-                statement_handler.generate_statement_from_template(
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_customer_statement_from_template(
                     self.test_data,
                     output_file,
                     self.customer_name,
@@ -160,8 +160,8 @@ class TestStatementHandler(BaseTestCase):
             output_file = os.path.join(temp_dir, "test_output.xlsx")
             
             try:
-                statement_handler = StatementHandler()
-                statement_handler.generate_statement_from_template(
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_customer_statement_from_template(
                     self.test_data,
                     output_file,
                     self.customer_name,
@@ -195,8 +195,8 @@ class TestStatementHandler(BaseTestCase):
             output_file = os.path.join(temp_dir, "test_output.xlsx")
             
             try:
-                statement_handler = StatementHandler()
-                statement_handler.generate_statement_from_template(
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_customer_statement_from_template(
                     self.test_data,
                     output_file,
                     self.customer_name,
@@ -230,8 +230,8 @@ class TestStatementHandler(BaseTestCase):
             output_file = os.path.join(temp_dir, "test_output.xlsx")
             
             try:
-                statement_handler = StatementHandler()
-                statement_handler.generate_statement_from_template(
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_customer_statement_from_template(
                     self.test_data,
                     output_file,
                     self.customer_name,
@@ -280,8 +280,8 @@ class TestStatementHandler(BaseTestCase):
             output_file = os.path.join(temp_dir, "test_output.xlsx")
             
             try:
-                statement_handler = StatementHandler()
-                statement_handler.generate_statement_from_template(
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_customer_statement_from_template(
                     extended_test_data,
                     output_file,
                     self.customer_name,
@@ -318,8 +318,8 @@ class TestStatementHandler(BaseTestCase):
             output_file = os.path.join(temp_dir, "test_output.xlsx")
             
             try:
-                statement_handler = StatementHandler()
-                statement_handler.generate_statement_from_template(
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_customer_statement_from_template(
                     self.test_data,  # 只有2个油品
                     output_file,
                     self.customer_name,
@@ -363,8 +363,8 @@ class TestStatementHandler(BaseTestCase):
             output_file = os.path.join(temp_dir, "test_output.xlsx")
             
             try:
-                statement_handler = StatementHandler()
-                statement_handler.generate_statement_from_template(
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_customer_statement_from_template(
                     self.test_data,
                     output_file,
                     self.customer_name,
@@ -434,8 +434,8 @@ class TestStatementHandler(BaseTestCase):
             output_file = os.path.join(temp_dir, "test_output.xlsx")
             
             try:
-                statement_handler = StatementHandler()
-                statement_handler.generate_statement_from_template(
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_customer_statement_from_template(
                     aggregation_test_data,
                     output_file,
                     self.customer_name,
