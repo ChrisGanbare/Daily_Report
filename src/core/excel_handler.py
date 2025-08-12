@@ -168,21 +168,16 @@ class ExcelHandler:
             for device_data in all_devices_data:
                 device_groups[device_data['device_code']].append(device_data)
 
-            # 创建工作表
-            sheet_creators = {
-                "中润对账单": self._create_statement_sheet,
-                "订单明细": self._create_order_details_sheet,
-                "每日用量明细": self._create_daily_usage_sheet,
-                "每月用量对比": self._create_monthly_comparison_sheet
-            }
-
-            # 调用各个工作表创建函数
-            oil_data = {}
-            for sheet_name, creator_func in sheet_creators.items():
+            # 调用各个工作表更新函数
+            for sheet_name in wb.sheetnames:
                 if sheet_name == "中润对账单":
-                    oil_data = creator_func(wb, all_devices_data, customer_name, start_date, end_date)
-                else:
-                    creator_func(wb, all_devices_data, start_date, end_date)
+                    self._update_statement_sheet(wb[sheet_name], all_devices_data, customer_name, start_date, end_date)
+                elif sheet_name == "订单明细":
+                    self._update_order_details_sheet(wb[sheet_name], all_devices_data)
+                elif sheet_name == "每日用量明细":
+                    self._update_daily_usage_sheet(wb[sheet_name], all_devices_data, start_date, end_date)
+                elif sheet_name == "每月用量对比":
+                    self._update_monthly_comparison_sheet(wb[sheet_name], all_devices_data, start_date, end_date)
 
             try:
                 wb.save(output_file)
@@ -280,18 +275,6 @@ class ExcelHandler:
             # 更新客户信息和日期范围
             ws['B2'] = customer_name
             ws['D2'] = f"{start_date.strftime('%Y-%m-%d')}至{end_date.strftime('%Y-%m-%d')}"
-
-            # 在此添加更新表格内容的代码
-            current_row = 4
-            for device_data in all_devices_data:
-                device_code = device_data['device_code']
-                oil_name = device_data['oil_name']
-                for date, value in device_data['data']:
-                    ws.cell(row=current_row, column=1, value=date)
-                    ws.cell(row=current_row, column=2, value=device_code)
-                    ws.cell(row=current_row, column=3, value=oil_name)
-                    ws.cell(row=current_row, column=4, value=value)
-                    current_row += 1
 
         except Exception as e:
             print(f"更新对账单工作表时出错: {e}")

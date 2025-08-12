@@ -12,6 +12,232 @@ class CustomerStatementGenerator:
         """初始化客户对账单生成器"""
         pass
 
+    def _write_cell_safe(self, worksheet, row, column, value):
+        """
+        安全地写入单元格值，避免对合并单元格进行写操作
+        
+        Args:
+            worksheet: 工作表对象
+            row: 行号（从1开始）
+            column: 列号（从1开始）
+            value: 要写入的值
+        """
+        try:
+            cell = worksheet.cell(row=row, column=column)
+            # 检查单元格是否为合并单元格，如果是则不进行写操作
+            if cell.coordinate not in worksheet.merged_cells:
+                cell.value = value
+        except Exception as e:
+            print(f"写入单元格({row}, {column})时出错: {e}")
+
+    def _generate_date_list(self, start_date, end_date):
+        """
+        生成从开始日期到结束日期的日期列表
+        
+        Args:
+            start_date: 开始日期 (date对象)
+            end_date: 结束日期 (date对象)
+            
+        Returns:
+            list: 包含所有日期的列表
+        """
+        date_list = []
+        current_date = start_date
+        while current_date <= end_date:
+            date_list.append(current_date)
+            current_date += timedelta(days=1)
+        return date_list
+
+    def _update_charts_data_source(self, wb, all_devices_data, start_date, end_date):
+        """
+        更新工作簿中图表的数据源引用
+        
+        Args:
+            wb: 工作簿对象
+            all_devices_data: 所有设备数据
+            start_date: 开始日期
+            end_date: 结束日期
+        """
+        try:
+            # 获取工作表引用
+            daily_usage_ws = wb["每日用量明细"]
+            monthly_usage_ws = wb["每月用量对比"]
+            statement_ws = wb["中润对账单"]
+            
+            # 更新每日用量明细工作表中的图表
+            if daily_usage_ws._charts:
+                for chart in daily_usage_ws._charts:
+                    self._update_chart_series_data(chart, daily_usage_ws, "每日用量明细")
+            
+            # 更新每月用量对比工作表中的图表
+            if monthly_usage_ws._charts:
+                for chart in monthly_usage_ws._charts:
+                    self._update_chart_series_data(chart, monthly_usage_ws, "每月用量对比")
+            
+            # 更新中润对账单工作表中的图表
+            if statement_ws._charts:
+                for chart in statement_ws._charts:
+                    self._update_chart_in_statement(chart, daily_usage_ws, monthly_usage_ws)
+                    
+        except Exception as e:
+            print(f"更新图表数据源时出错: {e}")
+            # 不抛出异常，因为图表问题不应该导致整个流程失败
+
+    def _update_chart_series_data(self, chart, worksheet, sheet_name):
+        """
+        更新图表系列的数据引用
+        
+        Args:
+            chart: 图表对象
+            worksheet: 工作表对象
+            sheet_name: 工作表名称
+        """
+        try:
+            if not hasattr(chart, 'series'):
+                return
+                
+            # 获取油品列表
+            oil_names = []
+            if sheet_name == "每日用量明细":
+                # 从第3行开始查找油品名称
+                for col in range(3, worksheet.max_column + 1):
+                    cell_value = worksheet.cell(row=3, column=col).value
+                    if cell_value:
+                        oil_names.append(cell_value)
+            elif sheet_name == "每月用量对比":
+                # 从第3行开始查找油品名称
+                for col in range(2, worksheet.max_column + 1):
+                    cell_value = worksheet.cell(row=3, column=col).value
+                    if cell_value:
+                        oil_names.append(cell_value)
+            
+            # 更新图表系列
+            for i, series in enumerate(chart.series):
+                if i < len(oil_names):
+                    # 更新系列名称
+                    if hasattr(series, 'tx') and hasattr(series.tx, 'strRef'):
+                        series.tx.strRef.f = f"{sheet_name}!${chr(65+i+2)}$3"
+                    
+                    # 更新系列数据范围
+                    if hasattr(series, 'val') and hasattr(series.val, 'numRef'):
+                        if sheet_name == "每日用量明细":
+                            # 计算数据行数
+                            data_rows = worksheet.max_row - 3
+                            series.val.numRef.f = f"{sheet_name}!${chr(65+i+2)}$4:${chr(65+i+2)}${3+data_rows}"
+                        elif sheet_name == "每月用量对比":
+                            # 计算数据行数
+                            data_rows = worksheet.max_row - 3
+                            series.val.numRef.f = f"{sheet_name}!${chr(65+i+1)}$4:${chr(65+i+1)}${3+data_rows}"
+                        
+        except Exception as e:
+            print(f"更新图表系列数据时出错: {e}")
+
+    def _update_chart_in_statement(self, chart, daily_usage_ws, monthly_usage_ws):
+        """
+        更新对账单工作表中的图表
+        
+        Args:
+            chart: 图表对象
+            daily_usage_ws: 每日用量明细工作表
+            monthly_usage_ws: 每月用量对比工作表
+        """
+        try:
+            # 检查图表标题以确定图表类型
+            chart_title = ""
+            if hasattr(chart, 'title') and chart.title:
+                if hasattr(chart.title, 'tx') and hasattr(chart.title.tx, 'rich') and hasattr(chart.title.tx.rich, 'p'):
+                    try:
+                        chart_title = chart.title.tx.rich.p[0].endParaRPr.t
+                    except:
+                        pass
+            
+            print(f"处理图表: {chart_title}")
+            
+            # 根据图表标题更新数据源
+            if "月度使用量趋势分析" in chart_title:
+                # 更新月度使用量趋势分析图表
+                self._update_monthly_chart_data(chart, monthly_usage_ws)
+            elif "每日使用量" in chart_title:
+                # 更新每日使用量图表
+                self._update_daily_chart_data(chart, daily_usage_ws)
+                
+        except Exception as e:
+            print(f"更新对账单图表时出错: {e}")
+
+    def _update_monthly_chart_data(self, chart, monthly_usage_ws):
+        """
+        更新月度使用量趋势分析图表的数据
+        
+        Args:
+            chart: 图表对象
+            monthly_usage_ws: 每月用量对比工作表
+        """
+        try:
+            if not hasattr(chart, 'series'):
+                return
+                
+            # 获取油品列表
+            oil_names = []
+            for col in range(2, monthly_usage_ws.max_column + 1):
+                cell_value = monthly_usage_ws.cell(row=3, column=col).value
+                if cell_value:
+                    oil_names.append(cell_value)
+            
+            print(f"月度图表油品: {oil_names}")
+            
+            # 更新每个系列的数据
+            for i, series in enumerate(chart.series):
+                if i < len(oil_names):
+                    # 更新系列名称
+                    if hasattr(series, 'tx') and hasattr(series.tx, 'strRef'):
+                        series.tx.strRef.f = f"每月用量对比!${chr(65+i+1)}$3"
+                    
+                    # 更新系列数据范围
+                    if hasattr(series, 'val') and hasattr(series.val, 'numRef'):
+                        data_rows = monthly_usage_ws.max_row - 3
+                        if data_rows > 0:
+                            series.val.numRef.f = f"每月用量对比!${chr(65+i+1)}$4:${chr(65+i+1)}${3+data_rows}"
+                            
+        except Exception as e:
+            print(f"更新月度图表数据时出错: {e}")
+
+    def _update_daily_chart_data(self, chart, daily_usage_ws):
+        """
+        更新每日使用量图表的数据
+        
+        Args:
+            chart: 图表对象
+            daily_usage_ws: 每日用量明细工作表
+        """
+        try:
+            if not hasattr(chart, 'series'):
+                return
+                
+            # 获取油品列表
+            oil_names = []
+            for col in range(3, daily_usage_ws.max_column + 1):
+                cell_value = daily_usage_ws.cell(row=3, column=col).value
+                if cell_value:
+                    oil_names.append(cell_value)
+            
+            print(f"每日图表油品: {oil_names}")
+            
+            # 更新每个系列的数据
+            for i, series in enumerate(chart.series):
+                if i < len(oil_names):
+                    # 更新系列名称
+                    if hasattr(series, 'tx') and hasattr(series.tx, 'strRef'):
+                        series.tx.strRef.f = f"每日用量明细!${chr(65+i+2)}$3"
+                    
+                    # 更新系列数据范围
+                    if hasattr(series, 'val') and hasattr(series.val, 'numRef'):
+                        data_rows = daily_usage_ws.max_row - 5  # 从第6行开始数据
+                        if data_rows > 0:
+                            series.val.numRef.f = f"每日用量明细!${chr(65+i+2)}$6:${chr(65+i+2)}${5+data_rows}"
+                            
+        except Exception as e:
+            print(f"更新每日图表数据时出错: {e}")
+
     def generate_customer_statement_from_template(self, all_devices_data, output_file, customer_name, start_date, end_date):
         """
         基于模板生成对账单Excel报表
@@ -64,6 +290,9 @@ class CustomerStatementGenerator:
             
             # 最后更新中润对账单工作表
             self._update_statement_sheet(wb["中润对账单"], all_devices_data, customer_name, start_date, end_date)
+            
+            # 更新图表数据源引用
+            self._update_charts_data_source(wb, all_devices_data, start_date, end_date)
 
             # 保存结果前处理图表相关警告
             for sheet in wb.worksheets:
@@ -72,6 +301,20 @@ class CustomerStatementGenerator:
                         # 清理可能导致警告的图表外部数据引用
                         if hasattr(chart, 'externalData'):
                             chart.externalData = None
+                        # 进一步清理可能导致警告的图表属性
+                        if hasattr(chart, 'autoTitleDeleted'):
+                            chart.autoTitleDeleted = None
+                        if hasattr(chart, 'pivotSource'):
+                            chart.pivotSource = None
+                        # 清理图表系列中的可能问题引用
+                        if hasattr(chart, 'series'):
+                            for series in chart.series:
+                                if hasattr(series, 'tx') and hasattr(series.tx, 'strRef'):
+                                    if hasattr(series.tx.strRef, 'f') and series.tx.strRef.f is None:
+                                        series.tx.strRef.f = ''
+                                if hasattr(series, 'cat') and hasattr(series.cat, 'strRef'):
+                                    if hasattr(series.cat.strRef, 'f') and series.cat.strRef.f is None:
+                                        series.cat.strRef.f = ''
 
             try:
                 wb.save(output_file)
@@ -222,61 +465,19 @@ class CustomerStatementGenerator:
             raise
 
     def _update_statement_sheet(self, ws, all_devices_data, customer_name, start_date, end_date):
-        """
-        更新对账单工作表
-        
-        Args:
-            ws: 工作表对象
-            all_devices_data: 所有设备的数据
-            customer_name: 客户名称
-            start_date: 开始日期 (date对象)
-            end_date: 结束日期 (date对象)
-        """
+        """更新对账单工作表"""
         try:
-            # 确保start_date和end_date是date对象
-            if isinstance(start_date, str):
-                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-            if isinstance(end_date, str):
-                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-                
-            # 更新客户信息和日期范围
-            customer_cell = ws.cell(row=2, column=2)
-            date_range_cell = ws.cell(row=2, column=4)
-            
-            # 检查单元格是否为合并单元格，如果是则不进行写操作
-            if customer_cell.coordinate not in ws.merged_cells:
-                customer_cell.value = customer_name
-            if date_range_cell.coordinate not in ws.merged_cells:
-                date_range_cell.value = f"{start_date.strftime('%Y-%m-%d')}至{end_date.strftime('%Y-%m-%d')}"
+            # 更新标题和日期
+            self._write_cell_safe(ws, 5, 1, f"客户名称：{customer_name}")
+            self._write_cell_safe(ws, 5, 5, f"统计日期：{start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}")
 
-            # 在此添加更新表格内容的代码
-            current_row = 4
+            # 收集所有油品类型
+            oil_types = set()
             for device_data in all_devices_data:
-                device_code = device_data['device_code']
-                oil_name = device_data['oil_name']
-                for date, value in device_data['data']:
-                    # 确保日期是date对象
-                    if isinstance(date, str):
-                        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
-                    else:
-                        date_obj = date
-                    
-                    # 写入数据前检查单元格是否为合并单元格
-                    date_cell = ws.cell(row=current_row, column=1)
-                    device_cell = ws.cell(row=current_row, column=2)
-                    oil_cell = ws.cell(row=current_row, column=3)
-                    value_cell = ws.cell(row=current_row, column=4)
-                    
-                    if date_cell.coordinate not in ws.merged_cells:
-                        date_cell.value = date_obj
-                    if device_cell.coordinate not in ws.merged_cells:
-                        device_cell.value = device_code
-                    if oil_cell.coordinate not in ws.merged_cells:
-                        oil_cell.value = oil_name
-                    if value_cell.coordinate not in ws.merged_cells:
-                        value_cell.value = value
-                    
-                    current_row += 1
+                oil_types.add(device_data['oil_name'])
+            
+            sorted_oil_types = sorted(list(oil_types))
+            print(f"排序后的油品: {sorted_oil_types}")
 
         except Exception as e:
             print(f"更新对账单工作表时出错: {e}")

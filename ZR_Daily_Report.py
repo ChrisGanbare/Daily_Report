@@ -87,26 +87,53 @@ def get_customer_name_by_device_code(connection, device_id, customer_query_templ
         print(f"查询客户名称时发生未知错误: {e}")
         return "未知客户"
 
-def load_configuration():
+def load_config():
     """
-    独立配置管理：为每个功能创建独立的配置读取逻辑
+    加载配置文件
+    优先加载加密配置文件，如果不存在则尝试加载明文配置文件
     """
-    config_handler = ConfigHandler()
-    try:
-        # 使用项目根目录下的配置文件
-        config_path = os.path.join(os.path.dirname(__file__), 'config', 'query_config.json')
-        print(f"尝试读取配置文件: {config_path}")
-        query_config = config_handler.load_plain_config(config_path)
-        print("成功读取配置文件")
-        return query_config
-    except FileNotFoundError as e:
-        error_msg = f"配置文件未找到: {e}"
-        print(error_msg)
-        exit(1)
-    except Exception as e:
-        error_msg = f"读取查询配置文件失败: {e}"
-        print(error_msg)
-        exit(1)
+    # 定义配置目录
+    CONFIG_DIR = os.path.join(os.path.dirname(__file__), 'config')
+    config_file_encrypted = os.path.join(CONFIG_DIR, 'query_config_encrypted.json')
+    config_file_plain = os.path.join(CONFIG_DIR, 'query_config.json')
+    
+    # 优先尝试加载加密配置文件
+    if os.path.exists(config_file_encrypted):
+        try:
+            print(f"尝试读取加密配置文件: {config_file_encrypted}")
+            with open(config_file_encrypted, 'r', encoding='utf-8') as f:
+                encrypted_data = json.load(f)
+            
+            # 读取密钥
+            key_file = os.path.join(CONFIG_DIR, '.env')
+            if not os.path.exists(key_file):
+                raise FileNotFoundError(f"密钥文件不存在: {key_file}")
+            
+            with open(key_file, 'r') as f:
+                key = f.read().strip()
+            
+            # 解密配置
+            config_json = decrypt_data(encrypted_data['data'], key)
+            config = json.loads(config_json)
+            print("成功加载加密配置文件")
+            return config
+        except Exception as e:
+            print(f"加载加密配置文件失败: {e}")
+            raise
+    
+    # 如果加密配置文件不存在，尝试加载明文配置文件
+    elif os.path.exists(config_file_plain):
+        try:
+            print(f"尝试读取配置文件: {config_file_plain}")
+            with open(config_file_plain, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            print("成功加载配置文件")
+            return config
+        except Exception as e:
+            print(f"加载配置文件失败: {e}")
+            raise
+    else:
+        raise FileNotFoundError(f"配置文件不存在: {config_file_encrypted} 或 {config_file_plain}")
 
 def generate_inventory_reports():
     """
@@ -130,7 +157,7 @@ def generate_inventory_reports():
     data_validator = DataValidator()
     
     # 读取查询配置文件
-    query_config = load_configuration()
+    query_config = load_config()
     
     # 提取数据库配置和SQL模板
     db_config = query_config.get('db_config', {})
@@ -349,7 +376,7 @@ def generate_customer_statement():
     
     # 加载数据库配置
     try:
-        query_config = load_configuration()
+        query_config = load_config()
         db_config = query_config['db_config']
         inventory_query_template = query_config['sql_templates']['inventory_query']
         device_query_template = query_config['sql_templates']['device_id_query']
