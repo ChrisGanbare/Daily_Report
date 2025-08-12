@@ -89,10 +89,8 @@ def get_customer_name_by_device_code(connection, device_id, customer_query_templ
 
 def load_config():
     """
-    加载配置文件
-    优先加载加密配置文件，如果不存在则尝试加载明文配置文件
+    加载配置文件，优先加载加密配置文件，如果不存在则加载明文配置文件
     """
-    # 定义配置目录
     CONFIG_DIR = os.path.join(os.path.dirname(__file__), 'config')
     config_file_encrypted = os.path.join(CONFIG_DIR, 'query_config_encrypted.json')
     config_file_plain = os.path.join(CONFIG_DIR, 'query_config.json')
@@ -101,39 +99,28 @@ def load_config():
     if os.path.exists(config_file_encrypted):
         try:
             print(f"尝试读取加密配置文件: {config_file_encrypted}")
-            with open(config_file_encrypted, 'r', encoding='utf-8') as f:
-                encrypted_data = json.load(f)
-            
-            # 读取密钥
-            key_file = os.path.join(CONFIG_DIR, '.env')
-            if not os.path.exists(key_file):
-                raise FileNotFoundError(f"密钥文件不存在: {key_file}")
-            
-            with open(key_file, 'r') as f:
-                key = f.read().strip()
-            
-            # 解密配置
-            config_json = decrypt_data(encrypted_data['data'], key)
-            config = json.loads(config_json)
+            # 使用ConfigHandler加载加密配置
+            config_handler = ConfigHandler(CONFIG_DIR)
+            config = config_handler.load_encrypted_config(config_file_encrypted)
             print("成功加载加密配置文件")
             return config
         except Exception as e:
             print(f"加载加密配置文件失败: {e}")
-            raise
+            # 如果加密配置加载失败，继续尝试加载明文配置
     
-    # 如果加密配置文件不存在，尝试加载明文配置文件
-    elif os.path.exists(config_file_plain):
+    # 如果加密配置文件不存在或加载失败，尝试加载明文配置文件
+    if os.path.exists(config_file_plain):
         try:
-            print(f"尝试读取配置文件: {config_file_plain}")
+            print(f"尝试读取明文配置文件: {config_file_plain}")
             with open(config_file_plain, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-            print("成功加载配置文件")
+            print("成功加载明文配置文件")
             return config
         except Exception as e:
-            print(f"加载配置文件失败: {e}")
-            raise
-    else:
-        raise FileNotFoundError(f"配置文件不存在: {config_file_encrypted} 或 {config_file_plain}")
+            print(f"加载明文配置文件失败: {e}")
+            raise Exception("无法加载任何配置文件")
+    
+    raise Exception("未找到有效的配置文件")
 
 def generate_inventory_reports():
     """
@@ -293,6 +280,44 @@ def generate_inventory_reports():
                 'customer_id': customer_id  # 添加客户ID用于高性能分组
             }
             
+            # 生成Excel文件
+            excel_handler = ExcelHandler()
+            # 替换日期中的非法字符，确保文件名合法
+            safe_start_date = start_date.replace("/", "-").replace("\\", "-")
+            safe_end_date = end_date.replace("/", "-").replace("\\", "-")
+            output_filename = f"{device_code}_{safe_start_date}_to_{safe_end_date}_库存报表.xlsx"
+            output_filepath = os.path.join(output_dir, output_filename)
+            
+            try:
+                # 处理不同格式的日期字符串
+                def parse_date(date_string):
+                    # 尝试多种日期格式
+                    formats = ['%Y-%m-%d', '%Y/%m/%d']
+                    for fmt in formats:
+                        try:
+                            return datetime.strptime(date_string, fmt).date()
+                        except ValueError:
+                            continue
+                    # 如果所有格式都失败，则抛出异常
+                    raise ValueError(f"无法解析日期格式: {date_string}")
+                
+                excel_handler.generate_excel_with_chart(
+                    data=data,
+                    output_file=output_filepath,
+                    device_code=device_code,
+                    start_date=parse_date(start_date),
+                    end_date=parse_date(end_date)
+                )
+                success_msg = f"  成功生成库存报表: {output_filepath}"
+                print(success_msg)
+                log_messages.append(success_msg)
+            except Exception as e:
+                error_msg = f"  生成库存报表失败: {e}"
+                print(error_msg)
+                log_messages.append(error_msg)
+                failed_devices.append(device_code)
+                continue
+                
         except Exception as e:
             error_msg = f"  处理设备 {device_code} 时发生错误: {e}"
             print(error_msg)
