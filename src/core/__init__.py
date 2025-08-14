@@ -12,5 +12,5 @@ __all__ = [
     "DatabaseHandler",
     "ExcelHandler",
     "FileHandler",
-    "CustomerStatementGenerator"
+    "CustomerStatementGenerator",
 ]

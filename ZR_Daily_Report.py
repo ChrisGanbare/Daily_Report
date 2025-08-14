@@ -20,72 +20,6 @@ from src.core import DatabaseHandler, CustomerStatementGenerator
 from src.utils import ConfigHandler, DataValidator
 from src.core import ExcelHandler, FileHandler
 
-def get_device_and_customer_info(connection, device_no, device_query_template, device_query_fallback_template=None):
-    """
-    根据设备编号查询设备ID和客户ID，优先使用device_code查询，如果未找到则使用device_no查询
-    """
-    cursor = None
-    try:
-        cursor = connection.cursor()
-        
-        # 优先使用device_code查询
-        cursor.execute(device_query_template, (device_no,))
-        result = cursor.fetchone()
-        
-        # 如果通过device_code未找到，且提供了备用查询模板，则使用device_no查询
-        if not result and device_query_fallback_template:
-            cursor.execute(device_query_fallback_template, (device_no,))
-            result = cursor.fetchone()
-            
-        return (result[0], result[1]) if result else None
-    except mysql.connector.Error as err:
-        print(f"查询设备ID失败: {err}")
-        return None
-    finally:
-        if cursor:
-            cursor.close()
-
-def get_customer_id(connection, device_id):
-    """
-    根据设备ID获取客户ID
-    """
-    cursor = None
-    try:
-        cursor = connection.cursor()
-        cursor.execute("SELECT customer_id FROM oil.t_device WHERE id = %s", (device_id,))
-        result = cursor.fetchone()
-        return result[0] if result else None
-    except mysql.connector.Error as err:
-        print(f"查询客户ID失败: {err}")
-        return None
-    finally:
-        if cursor:
-            cursor.close()
-
-def get_customer_name_by_device_code(connection, device_id, customer_query_template):
-    """
-    根据设备ID获取客户名称
-    """
-    try:
-        # 先通过设备ID获取客户ID
-        customer_id = get_customer_id(connection, device_id)
-        
-        if customer_id:
-            # 再通过客户ID获取客户名称
-            cursor = connection.cursor()
-            cursor.execute(customer_query_template, (customer_id,))
-            customer_result = cursor.fetchone()
-            if customer_result and customer_result[0]:
-                return customer_result[0]
-        
-        print(f"警告：未找到设备ID {device_id} 对应的客户信息")
-        return "未知客户"
-    except mysql.connector.Error as err:
-        print(f"通过设备ID查询客户名称失败: {err}")
-        return "未知客户"
-    except Exception as e:
-        print(f"查询客户名称时发生未知错误: {e}")
-        return "未知客户"
 
 def load_config():
     """
@@ -152,16 +86,11 @@ def generate_inventory_reports():
     
     # 获取SQL查询模板
     device_query_template = sql_templates.get('device_id_query')
-    device_query_fallback_template = sql_templates.get('device_id_fallback_query')
-    inventory_query_template = sql_templates.get('inventory_query', "")
     customer_query_template = sql_templates.get('customer_query')
     
     # 如果某些模板未在配置文件中定义，则使用默认值
     if not device_query_template:
         device_query_template = "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s ORDER BY create_time DESC LIMIT 1"
-    
-    if not device_query_fallback_template:
-        device_query_fallback_template = "SELECT id, customer_id FROM oil.t_device WHERE device_no = %s ORDER BY create_time DESC LIMIT 1"
     
     if not customer_query_template:
         customer_query_template = "SELECT customer_name FROM oil.t_customer WHERE id = %s"
@@ -238,7 +167,7 @@ def generate_inventory_reports():
         
         try:
             # 获取设备ID和客户ID
-            device_info = get_device_and_customer_info(connection, device_code, device_query_template, device_query_fallback_template)
+            device_info = db_handler.get_device_and_customer_info(device_code, device_query_template)
             if not device_info:
                 error_msg = f"  无法找到设备 {device_code} 的信息"
                 print(error_msg)
@@ -250,10 +179,13 @@ def generate_inventory_reports():
             print(f"  设备ID: {device_id}, 客户ID: {customer_id}")
             
             # 获取客户名称
-            customer_name = get_customer_name_by_device_code(connection, device_id, customer_query_template)
+            customer_name = db_handler.get_customer_name_by_device_code(device_id, customer_query_template)
             print(f"  客户名称: {customer_name}")
             
             # 生成查询语句
+            inventory_query_template = sql_templates.get('inventory_query')
+            if not inventory_query_template:
+                inventory_query_template = "SELECT * FROM oil.t_inventory WHERE device_id = %s AND create_time BETWEEN %s AND %s ORDER BY create_time DESC"
             end_condition = f"{end_date} 23:59:59"
             query = inventory_query_template.format(
                 device_id=device_id,
@@ -405,7 +337,6 @@ def generate_customer_statement():
         db_config = query_config['db_config']
         inventory_query_template = query_config['sql_templates']['inventory_query']
         device_query_template = query_config['sql_templates']['device_id_query']
-        device_query_fallback_template = query_config['sql_templates'].get('device_id_fallback_query')
         customer_query_template = query_config['sql_templates']['customer_query']
     except Exception as e:
         error_msg = f"加载配置失败: {e}"
@@ -455,7 +386,7 @@ def generate_customer_statement():
         
         try:
             # 获取设备ID和客户ID
-            device_info = get_device_and_customer_info(connection, device_code, device_query_template, device_query_fallback_template)
+            device_info = db_handler.get_device_and_customer_info(device_code, device_query_template)
             if not device_info:
                 error_msg = f"  无法找到设备 {device_code} 的信息"
                 print(error_msg)
@@ -467,7 +398,7 @@ def generate_customer_statement():
             print(f"  设备ID: {device_id}, 客户ID: {customer_id}")
             
             # 获取客户名称
-            customer_name = get_customer_name_by_device_code(connection, device_id, customer_query_template)
+            customer_name = db_handler.get_customer_name_by_device_code(device_id, customer_query_template)
             print(f"  客户名称: {customer_name}")
             
             # 生成查询语句

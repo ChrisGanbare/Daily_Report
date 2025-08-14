@@ -86,31 +86,101 @@ ZR Daily Report 是一个用于生成切削液设备日常库存报告的Python�
    pip install -r requirements.txt
    ```
 
-## 5. CI/CD 流程
+## 5. 安装
 
-本项目使用GitHub Actions实现CI/CD流程，包括以下步骤：
+使用以下命令安装依赖：
 
-### 持续集成(CI)
-1. 代码推送或创建Pull Request时自动触发
-2. 在多个Python版本(3.8, 3.9, 3.10, 3.11)上运行测试
-3. 执行代码质量检查(flake8, black)
-4. 运行单元测试
-
-### 持续部署(CD)
-1. 当代码推送到master分支时自动触发
-2. 构建Python包
-3. 发布到PyPI(需要配置PYPI_API_TOKEN密钥)
-
-### 详细文档
-有关CI/CD流程的完整信息，请参阅[CI/CD指南](docs/ci_cd_guide.md)。
-
-### 本地开发环境
-可以使用Docker Compose快速搭建本地开发环境：
 ```bash
-docker-compose up -d
+pip install -r requirements.txt
 ```
 
-## 6. 使用说明
+或者安装开发依赖：
+
+```bash
+pip install -r requirements.txt[dev]
+```
+
+## 6. 代码质量检查
+
+本项目使用多种工具来确保代码质量：
+
+1. **flake8**: 代码风格检查工具，用于检查代码是否符合PEP 8规范
+2. **black**: 代码格式化工具，确保代码风格一致性
+3. **mypy**: 静态类型检查工具，发现潜在的类型错误
+4. **isort**: 导入语句排序工具，保持导入语句的一致性
+
+### 本地运行代码质量检查
+
+使用tox运行所有检查：
+
+```bash
+# 运行所有测试环境
+tox
+
+# 只运行代码风格检查
+tox -e lint
+
+# 只运行类型检查
+tox -e typecheck
+```
+
+或者使用Makefile：
+
+```bash
+# 安装依赖
+make install
+
+# 运行所有质量检查（可能修改文件）
+make quality
+
+# 运行所有质量检查（只读模式）
+make quality-fast
+
+# 分别运行特定检查
+make lint
+make typecheck
+```
+
+或者使用专门的脚本：
+
+```bash
+# 运行所有代码质量检查（不修改文件）
+python scripts/run_code_quality.py
+
+# 安装代码质量检查工具
+python scripts/run_code_quality.py --install
+```
+
+### Git Hooks
+
+项目支持Git hooks来在提交前自动运行代码质量检查。可以通过以下方式设置：
+
+```bash
+# 运行脚本自动设置Git hooks
+python scripts/setup-git-hooks.py
+```
+
+设置后，每次提交时会自动运行：
+1. 代码格式化 (black 和 isort)
+2. 代码风格检查 (flake8)
+3. 类型检查 (mypy)
+
+如果任何检查失败，提交将被中止。
+
+## 持续集成/持续部署 (CI/CD)
+
+项目使用GitHub Actions进行持续集成。工作流程包括：
+1. 在多个Python版本上运行测试
+2. 运行代码质量检查
+3. 构建Python包
+4. 在满足条件时部署到PyPI
+
+代码质量门禁包括：
+- 必须通过所有测试
+- 代码覆盖率必须达到80%以上
+- 必须通过所有代码质量检查
+
+## 7. 使用说明
 
 ### 程序运行模式
 ```bash
@@ -129,14 +199,14 @@ python ZR_Daily_Report.py --mode statement
 2. 创建明文配置文件 `config/query_config.json`
 3. 运行工具脚本生成加密配置文件 `config/query_config_encrypted.json`
 
-## 7. 测试
+## 8. 测试
 
 运行测试:
 ```bash
 python -m pytest tests/ -v
 ```
 
-## 8. 部署
+## 9. 部署
 
 ### Docker部署
 构建Docker镜像:
@@ -154,10 +224,10 @@ docker run -d --name zr-report zr-daily-report
 docker-compose up -d
 ```
 
-## 9. 贡献
+## 10. 贡献
 
 欢迎提交Issue和Pull Request来改进项目。
 
-## 10. 许可证
+## 11. 许可证
 
 [待定]

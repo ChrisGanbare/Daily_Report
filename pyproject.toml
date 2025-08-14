@@ -4,6 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zr-daily-report"
+version = "1.0.0"
 description = "A Python application for generating daily inventory reports for cutting fluid equipment"
 readme = "README.md"
 authors = [

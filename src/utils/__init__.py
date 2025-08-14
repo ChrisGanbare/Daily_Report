@@ -8,7 +8,4 @@ from .config_handler import ConfigHandler
 from .data_validator import DataValidator
 from .date_utils import *
 
-__all__ = [
-    "ConfigHandler",
-    "DataValidator"
-]
+__all__ = ["ConfigHandler", "DataValidator"]

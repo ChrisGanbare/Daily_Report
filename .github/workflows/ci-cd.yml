@@ -39,9 +39,64 @@ jobs:
         flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
         black --check src/ tests/
         
+  code-quality:
+    name: Code Quality Gate
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install isort
+        
+    - name: Run comprehensive code quality checks
+      run: |
+        # 运行所有代码质量检查工具
+        echo "Running flake8..."
+        flake8 src tests --count --max-complexity=10 --max-line-length=127 --statistics
+        
+        echo "Running black..."
+        black --check src tests
+        
+        echo "Running isort..."
+        isort --check-only src tests
+        
+        echo "Running mypy..."
+        mypy src tests
+        
+        echo "Running tests with coverage..."
+        python -m pytest tests/ --cov=src --cov-report=xml
+        
+    - name: Check code coverage
+      run: |
+        coverage_report=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); root = tree.getroot(); print(root.attrib['line-rate'])")
+        coverage_percent=$(echo "$coverage_report * 100" | bc -l)
+        echo "Code coverage: $coverage_percent%"
+        
+        # 设置代码覆盖率门禁 (例如要求至少80%覆盖率)
+        if (( $(echo "$coverage_percent < 80" | bc -l) )); then
+          echo "Code coverage is below threshold of 80%"
+          exit 1
+        fi
+        
+        # 检查是否有flake8错误
+        errors=$(flake8 src tests --count --select=E9,F63,F7,F82 --show-source --statistics 2>&1 | tail -1)
+        if [ "$errors" -ne "0" ]; then
+          echo "Critical flake8 errors found"
+          exit 1
+        fi
+        
   build:
     name: Build Package
-    needs: test
+    needs: [test, code-quality]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
