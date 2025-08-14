@@ -18,7 +18,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 # 使用包导入简化导入路径
 from src.core import DatabaseHandler, CustomerStatementGenerator
 from src.utils import ConfigHandler, DataValidator
-from src.core import ExcelHandler, FileHandler
+from src.core import FileHandler
+from src.core import InventoryReportHandler
 
 
 def load_config():
@@ -96,18 +97,21 @@ def generate_inventory_reports():
         customer_query_template = "SELECT customer_name FROM oil.t_customer WHERE id = %s"
     
     # 显示文件选择对话框，让用户选择设备信息CSV文件
-    Tk().withdraw()  # 隐藏主窗口
-    devices_csv = askopenfilename(
-        title="选择设备信息文件（用于生成库存报表）",
+    root = Tk()  # 创建主窗口
+    root.withdraw()  # 隐藏主窗口
+    root.geometry("800x600")  # 设置窗口大小
+    root.attributes('-topmost', True)  # 确保对话框窗口在最前面
+    csv_file = askopenfilename(
+        title="选择设备信息CSV文件",
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
     )
     
-    if not devices_csv:
+    if not csv_file:
         print("未选择设备信息文件，程序退出。")
         return
     
     # 读取设备信息
-    devices = file_handler.read_devices_from_csv(devices_csv)
+    devices = file_handler.read_devices_from_csv(csv_file)
     if not devices:
         print("未能读取设备信息，请检查文件格式。")
         return
@@ -140,6 +144,12 @@ def generate_inventory_reports():
         exit(1)
     
     # 显示目录选择对话框，让用户选择输出目录
+    root = Tk()  # 创建主窗口
+    root.withdraw()  # 隐藏主窗口
+    root.geometry("800x600")  # 设置窗口大小
+    root.attributes('-topmost', True)  # 确保对话框窗口在最前面
+    root.geometry("800x600")  # 设置窗口大小
+    root.attributes('-topmost', True)  # 确保对话框窗口在最前面
     output_dir = askdirectory(title="选择库存报表输出目录")
     if not output_dir:
         print("未选择输出目录，程序退出。")
@@ -201,10 +211,13 @@ def generate_inventory_reports():
                 print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
                 log_messages.append(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
             
-            # 创建设备数据，但不保存到all_devices_data（因为库存报表不需要这个数据）
+            # 保存设备数据供后续使用
+            if not raw_data or '油品名称' not in raw_data[0]:
+                raise ValueError(f"设备 {device_code} 的数据中未找到油品名称，请检查数据库查询结果")
+            
             device_data = {
                 'device_code': device_code,
-                'oil_name': '切削液',  # 假设所有设备都是切削液设备
+                'oil_name': raw_data[0]['油品名称'],  # 从数据库查询结果中获取油品名称
                 'data': data,
                 'raw_data': raw_data,
                 'columns': columns,
@@ -213,7 +226,7 @@ def generate_inventory_reports():
             }
             
             # 生成Excel文件
-            excel_handler = ExcelHandler()
+            inventory_handler = InventoryReportHandler()
             # 替换日期中的非法字符，确保文件名合法
             safe_start_date = start_date.replace("/", "-").replace("\\", "-")
             safe_end_date = end_date.replace("/", "-").replace("\\", "-")
@@ -233,7 +246,7 @@ def generate_inventory_reports():
                     # 如果所有格式都失败，则抛出异常
                     raise ValueError(f"无法解析日期格式: {date_string}")
                 
-                excel_handler.generate_excel_with_chart(
+                inventory_handler.generate_excel_with_chart(
                     data=data,
                     output_file=output_filepath,
                     device_code=device_code,
@@ -297,7 +310,9 @@ def generate_customer_statement():
     log_messages.append("ZR Daily Report - 客户对账单生成功能")
     
     # 显示文件选择对话框，让用户选择设备信息CSV文件
-    Tk().withdraw()  # 隐藏主窗口
+    root = Tk()  # 创建主窗口
+    root.withdraw()  # 隐藏主窗口
+    root.geometry("800x600")  # 设置窗口大小
     csv_file = askopenfilename(
         title="选择设备信息CSV文件",
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
@@ -358,6 +373,9 @@ def generate_customer_statement():
         exit(1)
     
     # 显示目录选择对话框，让用户选择输出目录
+    root = Tk()  # 创建主窗口
+    root.withdraw()  # 隐藏主窗口
+    root.geometry("800x600")  # 设置窗口大小
     output_dir = askdirectory(title="选择客户对账单输出目录")
     if not output_dir:
         print("未选择输出目录，程序退出。")
@@ -420,7 +438,7 @@ def generate_customer_statement():
             # 保存设备数据供后续使用
             device_data = {
                 'device_code': device_code,
-                'oil_name': '切削液',  # 假设所有设备都是切削液设备
+                'oil_name': raw_data[0]['油品名称'] if raw_data and '油品名称' in raw_data[0] else '切削液',  # 从数据库查询结果中获取油品名称
                 'data': data,
                 'raw_data': raw_data,
                 'columns': columns,

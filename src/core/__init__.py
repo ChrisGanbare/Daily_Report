@@ -4,13 +4,9 @@
 """
 
 from .db_handler import DatabaseHandler
-from .excel_handler import ExcelHandler
 from .file_handler import FileHandler
 from .statement_handler import CustomerStatementGenerator
-
-__all__ = [
-    "DatabaseHandler",
-    "ExcelHandler",
-    "FileHandler",
-    "CustomerStatementGenerator",
-]
+from .inventory_handler import InventoryReportHandler
+from .async_processor import AsyncDatabaseHandler, AsyncFileProcessor, AsyncReportGenerator, AsyncTaskManager
+from .cache_handler import CacheHandler
+from .dependency_injection import service_provider, register_services, get_service

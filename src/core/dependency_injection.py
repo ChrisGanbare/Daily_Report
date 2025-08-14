@@ -118,9 +118,8 @@ service_provider = ServiceProvider()
 def register_services():
     """注册所有服务到依赖注入容器"""
     from .cache_handler import CacheHandler
-    from .config_handler import ConfigHandler
+    from ..utils.config_handler import ConfigHandler
     from .db_handler import DatabaseHandler
-    from .excel_handler import ExcelHandler
 
     # 注册配置服务
     service_provider.register_singleton("IConfigService", ConfigHandler())
@@ -133,8 +132,9 @@ def register_services():
 
     service_provider.register_factory("IDatabaseService", create_database_service)
 
-    # 注册Excel服务
-    service_provider.register_singleton("IExcelService", ExcelHandler())
+    # Excel服务
+    from .inventory_handler import InventoryReportHandler
+    service_provider.register_singleton("IExcelService", InventoryReportHandler())
 
     # 注册缓存服务
     service_provider.register_singleton("ICacheService", CacheHandler())

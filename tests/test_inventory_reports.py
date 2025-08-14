@@ -4,7 +4,7 @@ import unittest
 from datetime import date
 from unittest.mock import Mock, patch
 
-from src.core.excel_handler import ExcelHandler
+from src.core.inventory_handler import InventoryReportHandler
 from tests.base_test import BaseTestCase
 
 
@@ -14,7 +14,7 @@ class TestInventoryReports(BaseTestCase):
     def setUp(self):
         """测试前准备"""
         super().setUp()
-        self.excel_handler = ExcelHandler()
+        self.excel_handler = InventoryReportHandler()
 
     def test_generate_excel_with_chart_success(self):
         """测试成功生成带图表的Excel文件"""

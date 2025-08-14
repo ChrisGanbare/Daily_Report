@@ -14,7 +14,9 @@ from openpyxl import load_workbook
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # 使用包导入简化导入路径
-from src.core import DatabaseHandler, ExcelHandler, FileHandler
+from src.core.db_handler import DatabaseHandler
+from src.core.inventory_handler import InventoryReportHandler
+from src.core.file_handler import FileHandler
 from src.utils import ConfigHandler, DataValidator
 from ZR_Daily_Report import (
     generate_customer_statement,
