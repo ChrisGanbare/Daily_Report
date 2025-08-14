@@ -1,0 +1,129 @@
+import os
+import sys
+import unittest
+from datetime import date
+from unittest.mock import patch, MagicMock
+
+# 添加项目根目录到sys.path，确保能正确导入模块
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from tests.base_test import BaseTestCase
+from ZR_Daily_Report import main
+
+
+class TestIntegration(BaseTestCase):
+    """集成测试，验证整个流程的正确性"""
+
+    def setUp(self):
+        """测试前准备"""
+        super().setUp()
+
+    @patch('ZR_Daily_Report.load_config')
+    @patch('ZR_Daily_Report.InventoryReportHandler')
+    @patch('ZR_Daily_Report.FileHandler')
+    @patch('ZR_Daily_Report.DatabaseHandler')
+    def test_main_workflow_success(self, mock_db_handler, mock_file_handler,
+                                   mock_inventory_handler, mock_load_config):
+        """测试主工作流程成功执行"""
+        # 模拟配置加载
+        mock_load_config.return_value = {
+            "db_config": {
+                "host": "localhost",
+                "port": 3306,
+                "user": "test_user",
+                "password": "test_password",
+                "database": "test_db"
+            },
+            "sql_templates": {
+                "device_id_query": "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s",
+                "inventory_query": "SELECT * FROM oil.t_order WHERE device_id = {device_id}",
+                "customer_query": "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+            }
+        }
+
+        # 模拟文件处理器
+        mock_file_instance = mock_file_handler.return_value
+        mock_file_instance.read_devices_from_csv.return_value = [
+            {
+                "device_code": "DEV001",
+                "start_date": "2025-07-01",
+                "end_date": "2025-07-31"
+            }
+        ]
+
+        # 模拟数据库处理器
+        mock_db_instance = mock_db_handler.return_value
+        mock_db_instance.get_device_and_customer_info.return_value = (1, 100)
+        mock_db_instance.get_customer_name_by_device_code.return_value = "测试客户"
+        mock_db_instance.fetch_inventory_data.return_value = (
+            [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)],
+            ["加注时间", "原油剩余比例"],
+            [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)]
+        )
+
+        # 模拟库存报告处理器
+        mock_inventory_instance = mock_inventory_handler.return_value
+        mock_inventory_instance.generate_excel_with_chart.return_value = None
+
+        # 移除了未使用的对账单处理器模拟
+
+        # 执行主函数
+        test_args = ['ZR_Daily_Report.py', '--mode', 'inventory', '--csv', 'test_devices.csv']
+        with patch.object(sys, 'argv', test_args):
+            result = main()
+
+        # 验证结果
+        self.assertIsNone(result)  # main函数没有返回值
+        mock_load_config.assert_called_once()
+        mock_file_instance.read_devices_from_csv.assert_called_once()
+        mock_db_instance.connect.assert_called_once()
+        mock_db_instance.get_device_and_customer_info.assert_called()
+        mock_db_instance.fetch_inventory_data.assert_called()
+        mock_inventory_instance.generate_excel_with_chart.assert_called()
+
+    @patch('ZR_Daily_Report.load_config')
+    def test_main_with_missing_config(self, mock_load_config):
+        """测试配置文件缺失的情况"""
+        mock_load_config.side_effect = FileNotFoundError("配置文件不存在")
+
+        test_args = ['ZR_Daily_Report.py', '--csv', 'test_devices.csv']
+        with patch.object(sys, 'argv', test_args):
+            with self.assertRaises(FileNotFoundError):
+                main()
+
+    @patch('ZR_Daily_Report.load_config')
+    @patch('ZR_Daily_Report.FileHandler')
+    def test_main_with_empty_device_list(self, mock_file_handler, mock_load_config):
+        """测试设备列表为空的情况"""
+        # 模拟配置加载
+        mock_load_config.return_value = {
+            "db_config": {
+                "host": "localhost",
+                "port": 3306,
+                "user": "test_user",
+                "password": "test_password",
+                "database": "test_db"
+            },
+            "sql_templates": {
+                "device_id_query": "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s",
+                "inventory_query": "SELECT * FROM oil.t_order WHERE device_id = {device_id}",
+                "customer_query": "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+            }
+        }
+
+        # 模拟文件处理器返回空设备列表
+        mock_file_instance = mock_file_handler.return_value
+        mock_file_instance.read_devices_from_csv.return_value = []
+
+        # 执行主函数
+        test_args = ['ZR_Daily_Report.py', '--mode', 'inventory']
+        with patch.object(sys, 'argv', test_args):
+            result = main()
+
+        # 验证结果
+        self.assertIsNone(result)
+        mock_file_instance.read_devices_from_csv.assert_called_once()
+
+
+if __name__ == '__main__':
+    unittest.main()

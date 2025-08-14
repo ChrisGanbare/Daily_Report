@@ -32,6 +32,7 @@ D:\Daily_Report\
 │   └── statement_template.xlsx # 对账单模板
 ├── tests/                      # 测试目录
 │   ├── __init__.py
+│   ├── TESTING.md              # 测试框架文档
 │   ├── test_statement_handler.py
 │   └── test_zr_daily_report.py
 ├── .env                        # 环境变量文件

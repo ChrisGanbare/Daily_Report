@@ -3,16 +3,30 @@ import re
 import os
 import json
 import argparse
+import traceback
 from datetime import datetime, timedelta
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename, askdirectory
 from collections import defaultdict
 from openpyxl import Workbook
 from openpyxl.styles import Font
-import mysql.connector
+import sys
+
+# 尝试导入mysql.connector，如果失败则使用PyMySQL
+try:
+    import mysql.connector
+    USE_PYMYSQL = False
+    print("使用 mysql-connector-python 作为数据库驱动")
+except ImportError:
+    try:
+        import pymysql
+        mysql_connector = pymysql
+        USE_PYMYSQL = True
+        print("使用 PyMySQL 作为数据库驱动")
+    except ImportError:
+        raise ImportError("无法导入数据库驱动，请安装 mysql-connector-python 或 PyMySQL")
 
 # 添加项目根目录到sys.path，确保能正确导入模块
-import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 # 使用包导入简化导入路径
@@ -41,6 +55,7 @@ def load_config():
             return config
         except Exception as e:
             print(f"加载加密配置文件失败: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
             # 如果加密配置加载失败，继续尝试加载明文配置
     
     # 如果加密配置文件不存在或加载失败，尝试加载明文配置文件
@@ -53,6 +68,7 @@ def load_config():
             return config
         except Exception as e:
             print(f"加载明文配置文件失败: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
             raise Exception("无法加载任何配置文件")
     
     raise Exception("未找到有效的配置文件")
@@ -74,225 +90,323 @@ def generate_inventory_reports():
     print("步骤1：读取配置文件和设备信息（库存报表）")
     print("=" * 50)
     
-    # 初始化处理器
-    file_handler = FileHandler()
-    data_validator = DataValidator()
-    
-    # 读取查询配置文件
-    query_config = load_config()
-    
-    # 提取数据库配置和SQL模板
-    db_config = query_config.get('db_config', {})
-    sql_templates = query_config.get('sql_templates', {})
-    
-    # 获取SQL查询模板
-    device_query_template = sql_templates.get('device_id_query')
-    customer_query_template = sql_templates.get('customer_query')
-    
-    # 如果某些模板未在配置文件中定义，则使用默认值
-    if not device_query_template:
-        device_query_template = "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s ORDER BY create_time DESC LIMIT 1"
-    
-    if not customer_query_template:
-        customer_query_template = "SELECT customer_name FROM oil.t_customer WHERE id = %s"
-    
-    # 显示文件选择对话框，让用户选择设备信息CSV文件
-    root = Tk()  # 创建主窗口
-    root.withdraw()  # 隐藏主窗口
-    root.geometry("800x600")  # 设置窗口大小
-    root.attributes('-topmost', True)  # 确保对话框窗口在最前面
-    csv_file = askopenfilename(
-        title="选择设备信息CSV文件",
-        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
-    )
-    
-    if not csv_file:
-        print("未选择设备信息文件，程序退出。")
-        return
-    
-    # 读取设备信息
-    devices = file_handler.read_devices_from_csv(csv_file)
-    if not devices:
-        print("未能读取设备信息，请检查文件格式。")
-        return
-    
-    # 验证设备信息
-    valid_devices = []
-    for device in devices:
-        if data_validator.validate_csv_data(device):
-            valid_devices.append(device)
-        else:
-            print(f"设备信息验证失败: {device}")
-    
-    if not valid_devices:
-        print("没有有效的设备信息，请检查设备文件内容。")
-        return
-    
-    print(f"成功读取 {len(valid_devices)} 个有效设备信息。")
-    log_messages.append(f"成功读取 {len(valid_devices)} 个有效设备信息。")
-    log_messages.append("")  # 添加空行分隔
-    
-    # 初始化数据库连接
-    db_handler = DatabaseHandler(db_config)
     try:
-        connection = db_handler.connect()
-    except Exception as e:
-        error_msg = f"数据库连接失败: {e}"
-        print(error_msg)
-        log_messages.append(error_msg)
-        log_messages.append("")
-        exit(1)
-    
-    # 显示目录选择对话框，让用户选择输出目录
-    root = Tk()  # 创建主窗口
-    root.withdraw()  # 隐藏主窗口
-    root.geometry("800x600")  # 设置窗口大小
-    root.attributes('-topmost', True)  # 确保对话框窗口在最前面
-    root.geometry("800x600")  # 设置窗口大小
-    root.attributes('-topmost', True)  # 确保对话框窗口在最前面
-    output_dir = askdirectory(title="选择库存报表输出目录")
-    if not output_dir:
-        print("未选择输出目录，程序退出。")
-        connection.close()
-        return
-    
-    # 确保输出目录存在
-    os.makedirs(output_dir, exist_ok=True)
-    
-    print("\n" + "=" * 50)
-    print("步骤2：生成库存报表")
-    print("=" * 50)
-    
-    # 用于存储处理失败的设备
-    failed_devices = []
-    
-    # 处理每个设备
-    for i, device in enumerate(valid_devices, 1):
-        device_code = device['device_code']
-        start_date = device['start_date']
-        end_date = device['end_date']
+        # 初始化处理器
+        file_handler = FileHandler()
+        data_validator = DataValidator()
         
-        print(f"\n处理第 {i} 个设备 ({device_code})...")
-        log_messages.append(f"处理设备 {device_code}...")
+        # 读取查询配置文件
+        query_config = load_config()
         
+        # 提取数据库配置和SQL模板
+        db_config = query_config.get('db_config', {})
+        sql_templates = query_config.get('sql_templates', {})
+        
+        # 获取SQL查询模板
+        device_query_template = sql_templates.get('device_id_query')
+        customer_query_template = sql_templates.get('customer_query')
+        
+        # 如果某些模板未在配置文件中定义，则使用默认值
+        if not device_query_template:
+            device_query_template = "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s ORDER BY create_time DESC LIMIT 1"
+        
+        if not customer_query_template:
+            customer_query_template = "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+        
+        # 显示文件选择对话框，让用户选择设备信息CSV文件
+        root = Tk()  # 创建主窗口
+        root.withdraw()  # 隐藏主窗口
+        root.geometry("800x600")  # 设置窗口大小
+        root.attributes('-topmost', True)  # 确保对话框窗口在最前面
+        csv_file = askopenfilename(
+            title="选择设备信息CSV文件",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        
+        if not csv_file:
+            print("未选择设备信息文件，程序退出。")
+            return
+        
+        # 读取设备信息
+        devices = file_handler.read_devices_from_csv(csv_file)
+        if not devices:
+            print("未能读取设备信息，请检查文件格式。")
+            return
+        
+        # 验证设备信息
+        valid_devices = []
+        for device in devices:
+            if data_validator.validate_csv_data(device):
+                valid_devices.append(device)
+            else:
+                print(f"设备信息验证失败: {device}")
+        
+        if not valid_devices:
+            print("没有有效的设备信息，请检查设备文件内容。")
+            return
+        
+        print(f"成功读取 {len(valid_devices)} 个有效设备信息。")
+        log_messages.append(f"成功读取 {len(valid_devices)} 个有效设备信息。")
+        log_messages.append("")  # 添加空行分隔
+        
+        # 初始化数据库连接
+        db_handler = DatabaseHandler(db_config)
+        connection = None
         try:
-            # 获取设备ID和客户ID
-            device_info = db_handler.get_device_and_customer_info(device_code, device_query_template)
-            if not device_info:
-                error_msg = f"  无法找到设备 {device_code} 的信息"
-                print(error_msg)
-                log_messages.append(error_msg)
-                failed_devices.append(device_code)
-                continue
-                
-            device_id, customer_id = device_info
-            print(f"  设备ID: {device_id}, 客户ID: {customer_id}")
+            print("开始数据库连接...")
+            connection = db_handler.connect()
+            print("数据库连接对象创建成功")
+        except mysql.connector.Error as err:
+            error_msg = f"数据库连接失败 (MySQL错误): {err}"
+            print(error_msg)
+            print(f"错误代码: {err.errno}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            log_messages.append(error_msg)
+            log_messages.append("")
             
-            # 获取客户名称
-            customer_name = db_handler.get_customer_name_by_device_code(device_id, customer_query_template)
-            print(f"  客户名称: {customer_name}")
+            # 生成错误日志文件
+            error_time = datetime.now()
+            error_log_file = os.path.join(os.getcwd(), f"数据库连接错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
+            try:
+                with open(error_log_file, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(log_messages))
+                    f.write(f"\n\nMySQL错误详情: {err}\n")
+                    f.write(f"错误代码: {err.errno}\n")
+                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
+                print(f"数据库连接错误日志已保存到: {error_log_file}")
+            except Exception as log_e:
+                print(f"保存数据库连接错误日志文件失败: {log_e}")
             
-            # 生成查询语句
-            inventory_query_template = sql_templates.get('inventory_query')
-            if not inventory_query_template:
-                inventory_query_template = "SELECT * FROM oil.t_inventory WHERE device_id = %s AND create_time BETWEEN %s AND %s ORDER BY create_time DESC"
-            end_condition = f"{end_date} 23:59:59"
-            query = inventory_query_template.format(
-                device_id=device_id,
-                start_date=start_date,
-                end_condition=end_condition
-            )
+            exit(1)
+        except Exception as e:
+            error_msg = f"数据库连接失败 (未知错误): {e}"
+            print(error_msg)
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            log_messages.append(error_msg)
+            log_messages.append("")
             
-            # 获取库存数据
-            print("  正在获取库存数据...")
-            data, columns, raw_data = db_handler.fetch_inventory_data(query)
+            # 生成错误日志文件
+            error_time = datetime.now()
+            error_log_file = os.path.join(os.getcwd(), f"数据库连接错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
+            try:
+                with open(error_log_file, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(log_messages))
+                    f.write(f"\n\n未知错误: {e}\n")
+                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
+                print(f"数据库连接错误日志已保存到: {error_log_file}")
+            except Exception as log_e:
+                print(f"保存数据库连接错误日志文件失败: {log_e}")
             
-            if not data:
-                print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
-                log_messages.append(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
+            exit(1)
+        except BaseException as e:
+            error_msg = f"数据库连接过程中发生严重错误: {e}"
+            print(error_msg)
+            print(f"错误类型: {type(e)}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            log_messages.append(error_msg)
+            log_messages.append("")
             
-            # 保存设备数据供后续使用
-            if not raw_data or '油品名称' not in raw_data[0]:
-                raise ValueError(f"设备 {device_code} 的数据中未找到油品名称，请检查数据库查询结果")
+            # 生成错误日志文件
+            error_time = datetime.now()
+            error_log_file = os.path.join(os.getcwd(), f"数据库连接严重错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
+            try:
+                with open(error_log_file, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(log_messages))
+                    f.write(f"\n\n严重错误: {e}\n")
+                    f.write(f"错误类型: {type(e)}\n")
+                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
+                print(f"数据库连接严重错误日志已保存到: {error_log_file}")
+            except Exception as log_e:
+                print(f"保存数据库连接严重错误日志文件失败: {log_e}")
             
-            device_data = {
-                'device_code': device_code,
-                'oil_name': raw_data[0]['油品名称'],  # 从数据库查询结果中获取油品名称
-                'data': data,
-                'raw_data': raw_data,
-                'columns': columns,
-                'customer_name': customer_name,
-                'customer_id': customer_id  # 添加客户ID用于高性能分组
-            }
+            exit(1)
+
+        # 显示目录选择对话框，让用户选择输出目录
+        root = Tk()  # 创建主窗口
+        root.withdraw()  # 隐藏主窗口
+        root.geometry("800x600")  # 设置窗口大小
+        root.attributes('-topmost', True)  # 确保对话框窗口在最前面
+        root.geometry("800x600")  # 设置窗口大小
+        root.attributes('-topmost', True)  # 确保对话框窗口在最前面
+        output_dir = askdirectory(title="选择库存报表输出目录")
+        if not output_dir:
+            print("未选择输出目录，程序退出。")
+            connection.close()
+            return
+        
+        # 确保输出目录存在
+        os.makedirs(output_dir, exist_ok=True)
+        
+        print("\n" + "=" * 50)
+        print("步骤2：生成库存报表")
+        print("=" * 50)
+        
+        # 用于存储处理失败的设备
+        failed_devices = []
+        
+        # 处理每个设备
+        for i, device in enumerate(valid_devices, 1):
+            device_code = device['device_code']
+            start_date = device['start_date']
+            end_date = device['end_date']
             
-            # 生成Excel文件
-            inventory_handler = InventoryReportHandler()
-            # 替换日期中的非法字符，确保文件名合法
-            safe_start_date = start_date.replace("/", "-").replace("\\", "-")
-            safe_end_date = end_date.replace("/", "-").replace("\\", "-")
-            output_filename = f"{device_code}_{safe_start_date}_to_{safe_end_date}_库存报表.xlsx"
-            output_filepath = os.path.join(output_dir, output_filename)
+            print(f"\n处理第 {i} 个设备 ({device_code})...")
+            log_messages.append(f"处理设备 {device_code}...")
             
             try:
-                # 处理不同格式的日期字符串
-                def parse_date(date_string):
-                    # 尝试多种日期格式
-                    formats = ['%Y-%m-%d', '%Y/%m/%d']
-                    for fmt in formats:
-                        try:
-                            return datetime.strptime(date_string, fmt).date()
-                        except ValueError:
-                            continue
-                    # 如果所有格式都失败，则抛出异常
-                    raise ValueError(f"无法解析日期格式: {date_string}")
+                # 获取设备ID和客户ID
+                device_info = db_handler.get_device_and_customer_info(device_code, device_query_template)
+                if not device_info:
+                    error_msg = f"  无法找到设备 {device_code} 的信息"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
+                    
+                device_id, customer_id = device_info
+                print(f"  设备ID: {device_id}, 客户ID: {customer_id}")
                 
-                inventory_handler.generate_excel_with_chart(
-                    data=data,
-                    output_file=output_filepath,
-                    device_code=device_code,
-                    start_date=parse_date(start_date),
-                    end_date=parse_date(end_date)
+                # 获取客户名称
+                customer_name = db_handler.get_customer_name_by_device_code(device_id, customer_query_template)
+                print(f"  客户名称: {customer_name}")
+                
+                # 生成查询语句
+                inventory_query_template = sql_templates.get('inventory_query')
+                if not inventory_query_template:
+                    inventory_query_template = "SELECT * FROM oil.t_inventory WHERE device_id = %s AND create_time BETWEEN %s AND %s ORDER BY create_time DESC"
+                end_condition = f"{end_date} 23:59:59"
+                query = inventory_query_template.format(
+                    device_id=device_id,
+                    start_date=start_date,
+                    end_condition=end_condition
                 )
-                success_msg = f"  成功生成库存报表: {output_filepath}"
-                print(success_msg)
-                log_messages.append(success_msg)
+                
+                # 获取库存数据
+                print("  正在获取库存数据...")
+                data, columns, raw_data = db_handler.fetch_inventory_data(query)
+                
+                if not data:
+                    print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
+                    log_messages.append(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
+                
+                # 保存设备数据供后续使用
+                if not raw_data or '油品名称' not in raw_data[0]:
+                    raise ValueError(f"设备 {device_code} 的数据中未找到油品名称，请检查数据库查询结果")
+                
+                device_data = {
+                    'device_code': device_code,
+                    'oil_name': raw_data[0]['油品名称'],  # 从数据库查询结果中获取油品名称
+                    'data': data,
+                    'raw_data': raw_data,
+                    'columns': columns,
+                    'customer_name': customer_name,
+                    'customer_id': customer_id  # 添加客户ID用于高性能分组
+                }
+                
+                # 生成Excel文件
+                inventory_handler = InventoryReportHandler()
+                # 替换日期中的非法字符，确保文件名合法
+                safe_start_date = start_date.replace("/", "-").replace("\\", "-")
+                safe_end_date = end_date.replace("/", "-").replace("\\", "-")
+                output_filename = f"{device_code}_{safe_start_date}_to_{safe_end_date}_库存报表.xlsx"
+                output_filepath = os.path.join(output_dir, output_filename)
+                
+                try:
+                    # 处理不同格式的日期字符串
+                    def parse_date(date_string):
+                        # 尝试多种日期格式
+                        formats = ['%Y-%m-%d', '%Y/%m/%d']
+                        for fmt in formats:
+                            try:
+                                return datetime.strptime(date_string, fmt).date()
+                            except ValueError:
+                                continue
+                        # 如果所有格式都失败，则抛出异常
+                        raise ValueError(f"无法解析日期格式: {date_string}")
+                    
+                    inventory_handler.generate_excel_with_chart(
+                        data=data,
+                        output_file=output_filepath,
+                        device_code=device_code,
+                        start_date=parse_date(start_date),
+                        end_date=parse_date(end_date)
+                    )
+                    success_msg = f"  成功生成库存报表: {output_filepath}"
+                    print(success_msg)
+                    log_messages.append(success_msg)
+                except Exception as e:
+                    error_msg = f"  生成库存报表失败: {e}"
+                    print(error_msg)
+                    print(f"详细错误信息:\n{traceback.format_exc()}")
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
+                    
             except Exception as e:
-                error_msg = f"  生成库存报表失败: {e}"
+                error_msg = f"  处理设备 {device_code} 时发生错误: {e}"
                 print(error_msg)
+                print(f"详细错误信息:\n{traceback.format_exc()}")
                 log_messages.append(error_msg)
                 failed_devices.append(device_code)
                 continue
-                
-        except Exception as e:
-            error_msg = f"  处理设备 {device_code} 时发生错误: {e}"
-            print(error_msg)
-            log_messages.append(error_msg)
-            failed_devices.append(device_code)
-            continue
-    
-    # 记录程序结束时间
-    end_time = datetime.now()
-    duration = end_time - start_time
-    log_messages.append("")
-    log_messages.append(f"程序结束执行时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    log_messages.append(f"总执行时间: {duration}")
-    
-    # 记录失败设备
-    if failed_devices:
+        
+        # 记录程序结束时间
+        end_time = datetime.now()
+        duration = end_time - start_time
         log_messages.append("")
-        log_messages.append(f"失败设备列表: {', '.join(failed_devices)}")
-    
-    # 生成日志文件
-    log_file = os.path.join(output_dir, f"处理日志_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
-    try:
-        with open(log_file, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(log_messages))
-        print(f"\n日志文件已保存到: {log_file}")
+        log_messages.append(f"程序结束执行时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        log_messages.append(f"总执行时间: {duration}")
+        
+        # 记录失败设备
+        if failed_devices:
+            log_messages.append("")
+            log_messages.append(f"失败设备列表: {', '.join(failed_devices)}")
+        
+        # 生成日志文件
+        log_file = os.path.join(output_dir, f"处理日志_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
+        try:
+            with open(log_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(log_messages))
+            print(f"\n日志文件已保存到: {log_file}")
+        except Exception as e:
+            print(f"保存日志文件失败: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+        
+        print("\n库存报表生成功能执行完毕！")
+        try:
+            if connection and connection.is_connected():
+                connection.close()
+                print("数据库连接已关闭")
+        except Exception as e:
+            print(f"关闭数据库连接时发生错误: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+        
     except Exception as e:
-        print(f"保存日志文件失败: {e}")
-    
-    print("\n库存报表生成功能执行完毕！")
-    connection.close()
+        error_msg = f"库存报表生成过程中发生未处理异常: {e}"
+        print(error_msg)
+        print(f"详细错误信息:\n{traceback.format_exc()}")
+        log_messages.append(error_msg)
+        
+        # 生成错误日志文件
+        error_time = datetime.now()
+        error_log_file = os.path.join(os.getcwd(), f"错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
+        try:
+            with open(error_log_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(log_messages))
+                f.write(f"\n\n未处理异常: {e}\n")
+                f.write(f"详细错误信息:\n{traceback.format_exc()}")
+            print(f"错误日志已保存到: {error_log_file}")
+        except Exception as log_e:
+            print(f"保存错误日志文件失败: {log_e}")
+        
+        # 确保数据库连接关闭
+        try:
+            if 'connection' in locals() and connection.is_connected():
+                connection.close()
+        except:
+            pass
+        
+        exit(1)
 
 def generate_customer_statement():
     """
@@ -304,283 +418,388 @@ def generate_customer_statement():
     log_messages.append(f"程序开始执行时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
     log_messages.append("")
     
-    print("=" * 50)
-    print("ZR Daily Report - 客户对账单生成功能")
-    print("=" * 50)
-    log_messages.append("ZR Daily Report - 客户对账单生成功能")
-    
-    # 显示文件选择对话框，让用户选择设备信息CSV文件
-    root = Tk()  # 创建主窗口
-    root.withdraw()  # 隐藏主窗口
-    root.geometry("800x600")  # 设置窗口大小
-    csv_file = askopenfilename(
-        title="选择设备信息CSV文件",
-        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
-    )
-    
-    if not csv_file:
-        print("未选择文件，程序退出。")
-        return
-    
-    log_messages.append(f"选择的设备信息文件: {csv_file}")
-    
-    # 读取设备信息
     try:
-        file_handler = FileHandler()
-        devices = file_handler.read_devices_from_csv(csv_file)
-        data_validator = DataValidator()
-        valid_devices = [d for d in devices if data_validator.validate_csv_data(d)]
-        log_messages.append(f"总共读取设备数量: {len(devices)}")
-        log_messages.append(f"有效设备数量: {len(valid_devices)}")
-    except Exception as e:
-        error_msg = f"读取设备信息失败: {e}"
-        print(error_msg)
-        log_messages.append(error_msg)
-        log_messages.append("")
-        exit(1)
-    
-    if not valid_devices:
-        error_msg = "没有有效的设备信息，请检查CSV文件格式。"
-        print(error_msg)
-        log_messages.append(error_msg)
-        log_messages.append("")
-        exit(1)
-    
-    # 加载数据库配置
-    try:
-        query_config = load_config()
-        db_config = query_config['db_config']
-        inventory_query_template = query_config['sql_templates']['inventory_query']
-        device_query_template = query_config['sql_templates']['device_id_query']
-        customer_query_template = query_config['sql_templates']['customer_query']
-    except Exception as e:
-        error_msg = f"加载配置失败: {e}"
-        print(error_msg)
-        log_messages.append(error_msg)
-        log_messages.append("")
-        exit(1)
-    
-    # 连接数据库
-    try:
-        db_handler = DatabaseHandler(db_config)
-        connection = db_handler.connect()
-        log_messages.append("数据库连接成功")
-    except Exception as e:
-        error_msg = f"数据库连接失败: {e}"
-        print(error_msg)
-        log_messages.append(error_msg)
-        log_messages.append("")
-        exit(1)
-    
-    # 显示目录选择对话框，让用户选择输出目录
-    root = Tk()  # 创建主窗口
-    root.withdraw()  # 隐藏主窗口
-    root.geometry("800x600")  # 设置窗口大小
-    output_dir = askdirectory(title="选择客户对账单输出目录")
-    if not output_dir:
-        print("未选择输出目录，程序退出。")
-        connection.close()
-        return
-    
-    # 确保输出目录存在
-    os.makedirs(output_dir, exist_ok=True)
-    
-    print("\n" + "=" * 50)
-    print("步骤2：生成客户对账单")
-    print("=" * 50)
-    
-    # 用于存储所有设备数据，供生成对账单使用
-    all_devices_data = []
-    failed_devices = []
-    
-    # 处理每个设备
-    for i, device in enumerate(valid_devices, 1):
-        device_code = device['device_code']
-        start_date = device['start_date']
-        end_date = device['end_date']
+        print("=" * 50)
+        print("ZR Daily Report - 客户对账单生成功能")
+        print("=" * 50)
+        log_messages.append("ZR Daily Report - 客户对账单生成功能")
         
-        print(f"\n处理第 {i} 个设备 ({device_code})...")
-        log_messages.append(f"处理设备 {device_code}...")
+        # 显示文件选择对话框，让用户选择设备信息CSV文件
+        root = Tk()  # 创建主窗口
+        root.withdraw()  # 隐藏主窗口
+        root.geometry("800x600")  # 设置窗口大小
+        csv_file = askopenfilename(
+            title="选择设备信息CSV文件",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
         
+        if not csv_file:
+            print("未选择文件，程序退出。")
+            return
+        
+        log_messages.append(f"选择的设备信息文件: {csv_file}")
+        
+        # 读取设备信息
         try:
-            # 获取设备ID和客户ID
-            device_info = db_handler.get_device_and_customer_info(device_code, device_query_template)
-            if not device_info:
-                error_msg = f"  无法找到设备 {device_code} 的信息"
+            file_handler = FileHandler()
+            devices = file_handler.read_devices_from_csv(csv_file)
+            data_validator = DataValidator()
+            valid_devices = [d for d in devices if data_validator.validate_csv_data(d)]
+            log_messages.append(f"总共读取设备数量: {len(devices)}")
+            log_messages.append(f"有效设备数量: {len(valid_devices)}")
+        except Exception as e:
+            error_msg = f"读取设备信息失败: {e}"
+            print(error_msg)
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            log_messages.append(error_msg)
+            log_messages.append("")
+            exit(1)
+        
+        if not valid_devices:
+            error_msg = "没有有效的设备信息，请检查CSV文件格式。"
+            print(error_msg)
+            log_messages.append(error_msg)
+            log_messages.append("")
+            exit(1)
+        
+        # 加载数据库配置
+        try:
+            query_config = load_config()
+            db_config = query_config['db_config']
+            inventory_query_template = query_config['sql_templates']['inventory_query']
+            device_query_template = query_config['sql_templates']['device_id_query']
+            customer_query_template = query_config['sql_templates']['customer_query']
+        except Exception as e:
+            error_msg = f"加载配置失败: {e}"
+            print(error_msg)
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            log_messages.append(error_msg)
+            log_messages.append("")
+            exit(1)
+        
+        # 连接数据库
+        connection = None
+        try:
+            print("开始数据库连接...")
+            db_handler = DatabaseHandler(db_config)
+            connection = db_handler.connect()
+            log_messages.append("数据库连接成功")
+        except mysql.connector.Error as err:
+            error_msg = f"数据库连接失败 (MySQL错误): {err}"
+            print(error_msg)
+            print(f"错误代码: {err.errno}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            log_messages.append(error_msg)
+            log_messages.append("")
+            
+            # 生成错误日志文件
+            error_time = datetime.now()
+            error_log_file = os.path.join(os.getcwd(), f"数据库连接错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
+            try:
+                with open(error_log_file, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(log_messages))
+                    f.write(f"\n\nMySQL错误详情: {err}\n")
+                    f.write(f"错误代码: {err.errno}\n")
+                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
+                print(f"数据库连接错误日志已保存到: {error_log_file}")
+            except Exception as log_e:
+                print(f"保存数据库连接错误日志文件失败: {log_e}")
+            
+            exit(1)
+        except Exception as e:
+            error_msg = f"数据库连接失败 (未知错误): {e}"
+            print(error_msg)
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            log_messages.append(error_msg)
+            log_messages.append("")
+            
+            # 生成错误日志文件
+            error_time = datetime.now()
+            error_log_file = os.path.join(os.getcwd(), f"数据库连接错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
+            try:
+                with open(error_log_file, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(log_messages))
+                    f.write(f"\n\n未知错误: {e}\n")
+                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
+                print(f"数据库连接错误日志已保存到: {error_log_file}")
+            except Exception as log_e:
+                print(f"保存数据库连接错误日志文件失败: {log_e}")
+            
+            exit(1)
+        except BaseException as e:
+            error_msg = f"数据库连接过程中发生严重错误: {e}"
+            print(error_msg)
+            print(f"错误类型: {type(e)}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            log_messages.append(error_msg)
+            log_messages.append("")
+            
+            # 生成错误日志文件
+            error_time = datetime.now()
+            error_log_file = os.path.join(os.getcwd(), f"数据库连接严重错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
+            try:
+                with open(error_log_file, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(log_messages))
+                    f.write(f"\n\n严重错误: {e}\n")
+                    f.write(f"错误类型: {type(e)}\n")
+                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
+                print(f"数据库连接严重错误日志已保存到: {error_log_file}")
+            except Exception as log_e:
+                print(f"保存数据库连接严重错误日志文件失败: {log_e}")
+            
+            exit(1)
+
+        # 显示目录选择对话框，让用户选择输出目录
+        root = Tk()  # 创建主窗口
+        root.withdraw()  # 隐藏主窗口
+        root.geometry("800x600")  # 设置窗口大小
+        output_dir = askdirectory(title="选择客户对账单输出目录")
+        if not output_dir:
+            print("未选择输出目录，程序退出。")
+            connection.close()
+            return
+        
+        # 确保输出目录存在
+        os.makedirs(output_dir, exist_ok=True)
+        
+        print("\n" + "=" * 50)
+        print("步骤2：生成客户对账单")
+        print("=" * 50)
+        
+        # 用于存储所有设备数据，供生成对账单使用
+        all_devices_data = []
+        failed_devices = []
+        
+        # 处理每个设备
+        for i, device in enumerate(valid_devices, 1):
+            device_code = device['device_code']
+            start_date = device['start_date']
+            end_date = device['end_date']
+            
+            print(f"\n处理第 {i} 个设备 ({device_code})...")
+            log_messages.append(f"处理设备 {device_code}...")
+            
+            try:
+                # 获取设备ID和客户ID
+                device_info = db_handler.get_device_and_customer_info(device_code, device_query_template)
+                if not device_info:
+                    error_msg = f"  无法找到设备 {device_code} 的信息"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
+                    
+                device_id, customer_id = device_info
+                print(f"  设备ID: {device_id}, 客户ID: {customer_id}")
+                
+                # 获取客户名称
+                customer_name = db_handler.get_customer_name_by_device_code(device_id, customer_query_template)
+                print(f"  客户名称: {customer_name}")
+                
+                # 生成查询语句
+                end_condition = f"{end_date} 23:59:59"
+                query = inventory_query_template.format(
+                    device_id=device_id,
+                    start_date=start_date,
+                    end_condition=end_condition
+                )
+                
+                # 获取库存数据
+                print("  正在获取库存数据...")
+                data, columns, raw_data = db_handler.fetch_inventory_data(query)
+                
+                if not data:
+                    print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
+                    log_messages.append(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
+                
+                # 保存设备数据供后续使用
+                device_data = {
+                    'device_code': device_code,
+                    'oil_name': raw_data[0]['油品名称'] if raw_data and '油品名称' in raw_data[0] else '切削液',  # 从数据库查询结果中获取油品名称
+                    'data': data,
+                    'raw_data': raw_data,
+                    'columns': columns,
+                    'customer_name': customer_name,
+                    'customer_id': customer_id  # 添加客户ID用于高性能分组
+                }
+                all_devices_data.append(device_data)
+                
+            except Exception as e:
+                error_msg = f"  处理设备 {device_code} 时发生错误: {e}"
                 print(error_msg)
+                print(f"详细错误信息:\n{traceback.format_exc()}")
                 log_messages.append(error_msg)
                 failed_devices.append(device_code)
                 continue
+        
+        # 生成对账单
+        if all_devices_data:
+            # 按客户ID对设备进行分组（使用客户ID比客户名称更准确且性能更好）
+            customers_data = {}
+            for device_data in all_devices_data:
+                customer_id = device_data['customer_id']
+                customer_name = device_data['customer_name']
+                # 使用客户ID作为键，但保存客户名称用于文件命名
+                if customer_id not in customers_data:
+                    customers_data[customer_id] = {
+                        'customer_name': customer_name,
+                        'devices': []
+                    }
+                customers_data[customer_id]['devices'].append(device_data)
+            
+            # 初始化日期变量
+            start_date_obj = None
+            end_date_obj = None
+            formatted_start_date = None
+            formatted_end_date = None
+            
+            # 为每个客户生成对账单
+            for customer_id, customer_info in customers_data.items():
+                customer_name = customer_info['customer_name']
+                customer_devices = customer_info['devices']
                 
-            device_id, customer_id = device_info
-            print(f"  设备ID: {device_id}, 客户ID: {customer_id}")
-            
-            # 获取客户名称
-            customer_name = db_handler.get_customer_name_by_device_code(device_id, customer_query_template)
-            print(f"  客户名称: {customer_name}")
-            
-            # 生成查询语句
-            end_condition = f"{end_date} 23:59:59"
-            query = inventory_query_template.format(
-                device_id=device_id,
-                start_date=start_date,
-                end_condition=end_condition
-            )
-            
-            # 获取库存数据
-            print("  正在获取库存数据...")
-            data, columns, raw_data = db_handler.fetch_inventory_data(query)
-            
-            if not data:
-                print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
-                log_messages.append(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
-            
-            # 保存设备数据供后续使用
-            device_data = {
-                'device_code': device_code,
-                'oil_name': raw_data[0]['油品名称'] if raw_data and '油品名称' in raw_data[0] else '切削液',  # 从数据库查询结果中获取油品名称
-                'data': data,
-                'raw_data': raw_data,
-                'columns': columns,
-                'customer_name': customer_name,
-                'customer_id': customer_id  # 添加客户ID用于高性能分组
-            }
-            all_devices_data.append(device_data)
-            
-        except Exception as e:
-            error_msg = f"  处理设备 {device_code} 时发生错误: {e}"
-            print(error_msg)
-            log_messages.append(error_msg)
-            failed_devices.append(device_code)
-            continue
-    
-    # 生成对账单
-    if all_devices_data:
-        # 按客户ID对设备进行分组（使用客户ID比客户名称更准确且性能更好）
-        customers_data = {}
-        for device_data in all_devices_data:
-            customer_id = device_data['customer_id']
-            customer_name = device_data['customer_name']
-            # 使用客户ID作为键，但保存客户名称用于文件命名
-            if customer_id not in customers_data:
-                customers_data[customer_id] = {
-                    'customer_name': customer_name,
-                    'devices': []
-                }
-            customers_data[customer_id]['devices'].append(device_data)
+                print(f"\n为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
+                log_messages.append(f"为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
+                
+                # 获取日期范围（使用第一个设备的日期范围）
+                if not start_date_obj or not end_date_obj:
+                    start_date = valid_devices[0]['start_date']
+                    end_date = valid_devices[0]['end_date']
+                    
+                    # 尝试多种日期格式
+                    date_formats = ['%Y-%m-%d', '%Y/%m/%d']
+                    for fmt in date_formats:
+                        try:
+                            start_date_obj = datetime.strptime(start_date, fmt).date()
+                            end_date_obj = datetime.strptime(end_date, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if start_date_obj is None or end_date_obj is None:
+                        raise ValueError(f"无法解析日期格式: start_date='{start_date}', end_date='{end_date}'")
+                    
+                    # 格式化日期用于文件名（使用统一格式）
+                    formatted_start_date = start_date_obj.strftime('%Y-%m-%d')
+                    formatted_end_date = end_date_obj.strftime('%Y-%m-%d')
+                
+                # 生成对账单文件名: 客户名称xxxx年xx月对账单
+                statement_file = os.path.join(
+                    output_dir,
+                    f"{customer_name}{start_date_obj.strftime('%Y年%m月')}对账单.xlsx"
+                )
+                
+                # 生成对账单
+                statement_generator = CustomerStatementGenerator()
+                try:
+                    statement_generator.generate_customer_statement_from_template(
+                        customer_devices, statement_file, customer_name, 
+                        start_date_obj, end_date_obj
+                    )
+                    print(f"成功生成对账单: {statement_file}")
+                    log_messages.append(f"成功生成对账单: {statement_file}")
+                except Exception as e:
+                    error_msg = f"生成对账单失败: {e}"
+                    print(error_msg)
+                    print(f"详细错误信息:\n{traceback.format_exc()}")
+                    log_messages.append(error_msg)
+        
+        # 记录程序结束时间
         
         # 初始化日期变量
         start_date_obj = None
         end_date_obj = None
-        formatted_start_date = None
-        formatted_end_date = None
         
-        # 为每个客户生成对账单
-        for customer_id, customer_info in customers_data.items():
-            customer_name = customer_info['customer_name']
-            customer_devices = customer_info['devices']
-            
-            print(f"\n为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
-            log_messages.append(f"为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
-            
-            # 获取日期范围（使用第一个设备的日期范围）
-            if not start_date_obj or not end_date_obj:
-                start_date = valid_devices[0]['start_date']
-                end_date = valid_devices[0]['end_date']
-                
-                # 尝试多种日期格式
-                date_formats = ['%Y-%m-%d', '%Y/%m/%d']
-                for fmt in date_formats:
-                    try:
-                        start_date_obj = datetime.strptime(start_date, fmt).date()
-                        end_date_obj = datetime.strptime(end_date, fmt).date()
-                        break
-                    except ValueError:
-                        continue
-                
-                if start_date_obj is None or end_date_obj is None:
-                    raise ValueError(f"无法解析日期格式: start_date='{start_date}', end_date='{end_date}'")
-                
-                # 格式化日期用于文件名（使用统一格式）
-                formatted_start_date = start_date_obj.strftime('%Y-%m-%d')
-                formatted_end_date = end_date_obj.strftime('%Y-%m-%d')
-            
-            # 生成对账单文件名: 客户名称xxxx年xx月对账单
-            statement_file = os.path.join(
-                output_dir,
-                f"{customer_name}{start_date_obj.strftime('%Y年%m月')}对账单.xlsx"
-            )
-            
-            # 生成对账单
-            statement_generator = CustomerStatementGenerator()
-            try:
-                statement_generator.generate_customer_statement_from_template(
-                    customer_devices, statement_file, customer_name, 
-                    start_date_obj, end_date_obj
-                )
-                print(f"成功生成对账单: {statement_file}")
-                log_messages.append(f"成功生成对账单: {statement_file}")
-            except Exception as e:
-                error_msg = f"生成对账单失败: {e}"
-                print(error_msg)
-                log_messages.append(error_msg)
-    
-    # 记录程序结束时间
-    
-    # 初始化日期变量
-    start_date_obj = None
-    end_date_obj = None
-    
-    # 初始化日期变量
-    start_date_obj = None
-    end_date_obj = None
-    end_time = datetime.now()
-    duration = end_time - start_time
-    log_messages.append("")
-    log_messages.append(f"程序结束执行时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    log_messages.append(f"总执行时间: {duration}")
-    
-    # 记录失败设备
-    if failed_devices:
+        # 初始化日期变量
+        start_date_obj = None
+        end_date_obj = None
+        end_time = datetime.now()
+        duration = end_time - start_time
         log_messages.append("")
-        log_messages.append(f"失败设备列表: {', '.join(failed_devices)}")
-    
-    # 生成日志文件
-    log_file = os.path.join(output_dir, f"处理日志_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
-    try:
-        with open(log_file, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(log_messages))
-        print(f"\n日志文件已保存到: {log_file}")
+        log_messages.append(f"程序结束执行时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        log_messages.append(f"总执行时间: {duration}")
+        
+        # 记录失败设备
+        if failed_devices:
+            log_messages.append("")
+            log_messages.append(f"失败设备列表: {', '.join(failed_devices)}")
+        
+        # 生成日志文件
+        log_file = os.path.join(output_dir, f"处理日志_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
+        try:
+            with open(log_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(log_messages))
+            print(f"\n日志文件已保存到: {log_file}")
+        except Exception as e:
+            print(f"保存日志文件失败: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+        
+        print("\n客户对账单生成功能执行完毕！")
+        try:
+            if connection and connection.is_connected():
+                connection.close()
+                print("数据库连接已关闭")
+        except Exception as e:
+            print(f"关闭数据库连接时发生错误: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+
     except Exception as e:
-        print(f"保存日志文件失败: {e}")
-    
-    print("\n客户对账单生成功能执行完毕！")
-    connection.close()
+        error_msg = f"客户对账单生成过程中发生未处理异常: {e}"
+        print(error_msg)
+        print(f"详细错误信息:\n{traceback.format_exc()}")
+        log_messages.append(error_msg)
+        
+        # 生成错误日志文件
+        error_time = datetime.now()
+        error_log_file = os.path.join(os.getcwd(), f"错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
+        try:
+            with open(error_log_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(log_messages))
+                f.write(f"\n\n未处理异常: {e}\n")
+                f.write(f"详细错误信息:\n{traceback.format_exc()}")
+            print(f"错误日志已保存到: {error_log_file}")
+        except Exception as log_e:
+            print(f"保存错误日志文件失败: {log_e}")
+        
+        # 确保数据库连接关闭
+        try:
+            if 'connection' in locals() and connection.is_connected():
+                connection.close()
+        except:
+            pass
+        
+        exit(1)
 
 def main():
     """
     主函数，根据命令行参数选择执行哪个功能
     """
-    parser = argparse.ArgumentParser(description='ZR Daily Report Generator')
-    parser.add_argument('--mode', choices=['inventory', 'statement', 'both'], 
-                        default='both', help='选择执行模式: inventory(库存报表), statement(客户对账单), both(两者都执行)')
-    
-    args = parser.parse_args()
-    
-    if args.mode == 'inventory':
-        generate_inventory_reports()
-    elif args.mode == 'statement':
-        generate_customer_statement()
-    elif args.mode == 'both':
-        # 先执行库存报表功能
-        generate_inventory_reports()
-        # 添加分割线以区分两个任务
-        print("\n" + "=" * 50)
-        print("以上为库存报表生成日志")
-        print("以下为客户对账单生成日志")
-        print("=" * 50 + "\n")
-        # 再执行客户对账单功能
-        generate_customer_statement()
+    try:
+        parser = argparse.ArgumentParser(description='ZR Daily Report Generator')
+        parser.add_argument('--mode', choices=['inventory', 'statement', 'both'], 
+                            default='both', help='选择执行模式: inventory(库存报表), statement(客户对账单), both(两者都执行)')
+        
+        args = parser.parse_args()
+        
+        if args.mode == 'inventory':
+            generate_inventory_reports()
+        elif args.mode == 'statement':
+            generate_customer_statement()
+        elif args.mode == 'both':
+            # 先执行库存报表功能
+            generate_inventory_reports()
+            # 添加分割线以区分两个任务
+            print("\n" + "=" * 50)
+            print("以上为库存报表生成日志")
+            print("以下为客户对账单生成日志")
+            print("=" * 50 + "\n")
+            # 再执行客户对账单功能
+            generate_customer_statement()
+            
+    except Exception as e:
+        print(f"主程序执行过程中发生异常: {e}")
+        print(f"详细错误信息:\n{traceback.format_exc()}")
+        exit(1)
 
 if __name__ == "__main__":
     main()

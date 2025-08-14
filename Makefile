@@ -1,4 +1,4 @@
-.PHONY: help install test quality quality-fast lint typecheck clean
+.PHONY: help install test quality quality-fast lint typecheck clean docs doc-serve doc-build
 
 help:
 	@echo "Available targets:"
@@ -9,6 +9,9 @@ help:
 	@echo "  lint        Run style checks"
 	@echo "  typecheck   Run type checks"
 	@echo "  clean       Clean build artifacts"
+	@echo "  docs        Build documentation"
+	@echo "  doc-serve   Start documentation server"
+	@echo "  doc-build   Build documentation"
 
 install:
 	pip install -r requirements.txt
@@ -35,6 +38,14 @@ typecheck:
 	mypy src tests
 
 clean:
-	rm -rf .tox .pytest_cache .mypy_cache .coverage htmlcov *.egg-info dist build
+	rm -rf .tox .pytest_cache .mypy_cache .coverage htmlcov *.egg-info dist build site
 	find . -type d -name __pycache__ -delete
 	find . -type f -name "*.pyc" -delete
+
+docs: doc-build
+
+doc-serve:
+	python scripts/build_docs.py serve
+
+doc-build:
+	python scripts/build_docs.py build
