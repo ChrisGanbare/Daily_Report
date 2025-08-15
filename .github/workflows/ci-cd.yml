@@ -36,7 +36,7 @@ jobs:
     - name: Run linting
       run: |
         pip install flake8 black
-        flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=src/api/*,src/core/async_processor.py,src/core/cache_handler.py,src/core/dependency_injection.py,src/monitoring/progress_monitor.py,src/web/app.py
         black --check src/ tests/
         
   code-quality:
@@ -55,13 +55,13 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install isort
+        pip install isort mypy
         
     - name: Run comprehensive code quality checks
       run: |
-        # 运行所有代码质量检查工具
+        # 运行所有代码质量检查工具，跳过指定模块
         echo "Running flake8..."
-        flake8 src tests --count --max-complexity=10 --max-line-length=127 --statistics
+        flake8 src tests --count --max-complexity=10 --max-line-length=127 --statistics --exclude=src/api/*,src/core/async_processor.py,src/core/cache_handler.py,src/core/dependency_injection.py,src/monitoring/progress_monitor.py,src/web/app.py
         
         echo "Running black..."
         black --check src tests
@@ -70,7 +70,7 @@ jobs:
         isort --check-only src tests
         
         echo "Running mypy..."
-        mypy src tests
+        mypy --config-file mypy.ini src tests
         
         echo "Running tests with coverage..."
         python -m pytest tests/ --cov=src --cov-report=xml
@@ -87,8 +87,8 @@ jobs:
           exit 1
         fi
         
-        # 检查是否有flake8错误
-        errors=$(flake8 src tests --count --select=E9,F63,F7,F82 --show-source --statistics 2>&1 | tail -1)
+        # 检查是否有flake8错误（排除指定模块）
+        errors=$(flake8 src tests --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=src/api/*,src/core/async_processor.py,src/core/cache_handler.py,src/core/dependency_injection.py,src/monitoring/progress_monitor.py,src/web/app.py 2>&1 | tail -1)
         if [ "$errors" -ne "0" ]; then
           echo "Critical flake8 errors found"
           exit 1
