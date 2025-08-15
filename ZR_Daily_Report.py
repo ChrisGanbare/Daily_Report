@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from src.core import DatabaseHandler, CustomerStatementGenerator
 from src.utils import ConfigHandler, DataValidator
 from src.core import FileHandler
-from src.core import InventoryReportHandler
+from src.core import InventoryReportGenerator
 
 
 def load_config():
@@ -290,12 +290,35 @@ def generate_inventory_reports():
                     log_messages.append(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
                 
                 # 保存设备数据供后续使用
-                if not raw_data or '油品名称' not in raw_data[0]:
-                    raise ValueError(f"设备 {device_code} 的数据中未找到油品名称，请检查数据库查询结果")
+                # 检查是否存在油品名称列
+                if not raw_data or '油品名称' not in columns:
+                    error_msg = f"  错误：设备 {device_code} 的数据中未找到油品名称列，请检查数据库查询结果"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
+                
+                # 获取第一条记录的油品名称作为该设备的油品名称
+                # 注意：这里假设一个设备只使用一种油品，这是业务上的合理假设
+                first_row = raw_data[0]
+                if isinstance(first_row, dict):
+                    oil_name = first_row.get('油品名称')
+                else:
+                    # 如果是元组或列表形式，根据列名索引获取油品名称
+                    oil_name_index = columns.index('油品名称')
+                    oil_name = first_row[oil_name_index] if oil_name_index < len(first_row) else None
+                
+                # 检查油品名称是否有效
+                if not oil_name:
+                    error_msg = f"  错误：设备 {device_code} 的数据中油品名称为空，请检查数据库数据完整性"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
                 
                 device_data = {
                     'device_code': device_code,
-                    'oil_name': raw_data[0]['油品名称'],  # 从数据库查询结果中获取油品名称
+                    'oil_name': oil_name,  # 从数据库查询结果中获取油品名称
                     'data': data,
                     'raw_data': raw_data,
                     'columns': columns,
@@ -304,7 +327,7 @@ def generate_inventory_reports():
                 }
                 
                 # 生成Excel文件
-                inventory_handler = InventoryReportHandler()
+                inventory_handler = InventoryReportGenerator()
                 # 替换日期中的非法字符，确保文件名合法
                 safe_start_date = start_date.replace("/", "-").replace("\\", "-")
                 safe_end_date = end_date.replace("/", "-").replace("\\", "-")
@@ -324,12 +347,13 @@ def generate_inventory_reports():
                         # 如果所有格式都失败，则抛出异常
                         raise ValueError(f"无法解析日期格式: {date_string}")
                     
-                    inventory_handler.generate_excel_with_chart(
-                        data=data,
-                        output_file=output_filepath,
+                    inventory_handler.generate_inventory_report_with_chart(
+                        inventory_data=data,
+                        output_file_path=output_filepath,
                         device_code=device_code,
                         start_date=parse_date(start_date),
-                        end_date=parse_date(end_date)
+                        end_date=parse_date(end_date),
+                        oil_name=oil_name  # 添加油品名称参数
                     )
                     success_msg = f"  成功生成库存报表: {output_filepath}"
                     print(success_msg)

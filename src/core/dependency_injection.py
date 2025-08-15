@@ -133,8 +133,9 @@ def register_services():
     service_provider.register_factory("IDatabaseService", create_database_service)
 
     # Excel服务
-    from .inventory_handler import InventoryReportHandler
-    service_provider.register_singleton("IExcelService", InventoryReportHandler())
+    if "IExcelService" not in service_provider._services and "IExcelService" not in service_provider._factories:
+        from .inventory_handler import InventoryReportGenerator
+        service_provider.register_singleton("IExcelService", InventoryReportGenerator())
 
     # 注册缓存服务
     service_provider.register_singleton("ICacheService", CacheHandler())

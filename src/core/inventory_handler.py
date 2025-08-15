@@ -3,48 +3,52 @@ import os
 from datetime import timedelta
 from decimal import Decimal
 
+import openpyxl
 from openpyxl import Workbook
 from openpyxl.chart import LineChart, Reference
 from openpyxl.chart.marker import Marker
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.chart.label import DataLabelList
 
 
-class InventoryReportHandler:
-    """库存报表处理类，专门负责库存报表的生成"""
+class InventoryReportGenerator:
+    """库存报表生成器，专门负责生成设备库存报表和图表"""
 
     def __init__(self):
-        """初始化库存报表处理器"""
+        """初始化库存报表生成器"""
         pass
 
-    def generate_excel_with_chart(
+    def generate_inventory_report_with_chart(
         self,
-        data,
-        output_file,
+        inventory_data,
+        output_file_path,
         device_code,
         start_date,
         end_date,
+        oil_name=None,
         chart_style=None,
         export_format="xlsx",
     ):
         """
-        根据数据生成折线图并保存为Excel文件
+        生成包含库存数据和趋势图表的Excel报告文件
 
         Args:
-            data (list): 库存数据列表
-            output_file (str): 输出文件路径
+            inventory_data (list): 库存数据列表，格式为[(date, value), ...]
+            output_file_path (str): 输出文件路径
             device_code (str): 设备编码
             start_date (date): 开始日期
             end_date (date): 结束日期
+            oil_name (str): 油品名称
             chart_style (dict): 图表样式配置
-            export_format (str): 导出格式
+            export_format (str): 导出格式，支持xlsx和csv
         """
         try:
             # 验证并清理数据
             cleaned_data = []
             invalid_records = []
-            for date, value in data:
+            for date, value in inventory_data:
                 try:
                     validated_value = self._validate_inventory_value(value)
                     if validated_value > 100:
@@ -68,11 +72,11 @@ class InventoryReportHandler:
 
             # 处理不同导出格式
             if export_format.lower() == "csv":
-                with open(output_file.replace(".xlsx", ".csv"), "w", newline="") as f:
+                with open(output_file_path.replace(".xlsx", ".csv"), "w", newline="") as f:
                     writer = csv.writer(f)
                     writer.writerow(["日期", "库存百分比"])
                     writer.writerows(cleaned_data)
-                print(f"数据已导出为CSV格式：{output_file.replace('.xlsx', '.csv')}")
+                print(f"数据已导出为CSV格式：{output_file_path.replace('.xlsx', '.csv')}")
                 return
 
             # 补全数据
@@ -93,10 +97,13 @@ class InventoryReportHandler:
             ws.title = "库存数据"
 
             # 添加标题行
-            title = f"{device_code}每日库存余量变化趋势({start_date} - {end_date})"
+            oil_name_str = f" {oil_name} " if oil_name else " "
+            title = f"{device_code}{oil_name_str}每日库存余量变化趋势({start_date} - {end_date})"
             ws.append([title])
-            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2)
+            # 将合并单元格的宽度增加到18列
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=20)
             ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
+            ws.cell(row=1, column=1).font = Font(size=14, bold=True)
 
             # 添加数据列标题
             ws.append(["日期", "库存百分比"])
@@ -105,12 +112,20 @@ class InventoryReportHandler:
             for row in complete_data:
                 ws.append(row)
 
+            # 调整列宽
+            ws.column_dimensions['A'].width = 12  # 日期列宽度
+            ws.column_dimensions['B'].width = 12  # 库存百分比列宽度
+
             # 创建图表
             chart = LineChart()
             chart.title = "每日库存余量变化趋势"
             chart.style = 13
             chart.y_axis.title = "库存百分比"
             chart.x_axis.title = "日期"
+            
+            # 设置图表显示数据标签
+
+
 
             # 添加这部分配置来调整x轴日期显示
             chart.x_axis.tickLblSkip = 3  # 每隔3个标签显示一个
@@ -144,15 +159,19 @@ class InventoryReportHandler:
                 # 默认样式
                 chart.series[0].marker = Marker(symbol="circle", size=8)
 
-            # 添加图表到工作表
+            # 恢复图表到初始大小
+            chart.width = 30
+            chart.height = 15
+
+            # 添加图表到工作表，从E5开始绘制
             ws.add_chart(chart, "E5")
 
             try:
-                wb.save(output_file)
+                wb.save(output_file_path)
                 print(f"  库存余量图表已生成并保存为{export_format.upper()}格式")
             except PermissionError:
                 print(
-                    f"错误：无法保存文件 '{output_file}'，可能是文件正在被其他程序占用。"
+                    f"错误：无法保存文件 '{output_file_path}'，可能是文件正在被其他程序占用。"
                 )
                 print("请关闭相关文件后重试。")
                 raise

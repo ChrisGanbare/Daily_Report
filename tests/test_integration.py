@@ -19,7 +19,7 @@ class TestIntegration(BaseTestCase):
         super().setUp()
 
     @patch('ZR_Daily_Report.load_config')
-    @patch('ZR_Daily_Report.InventoryReportHandler')
+    @patch('ZR_Daily_Report.InventoryReportGenerator')
     @patch('ZR_Daily_Report.FileHandler')
     @patch('ZR_Daily_Report.DatabaseHandler')
     def test_main_workflow_success(self, mock_db_handler, mock_file_handler,
