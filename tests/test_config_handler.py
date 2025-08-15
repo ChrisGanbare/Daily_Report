@@ -126,7 +126,7 @@ class TestConfigHandler(BaseTestCase):
         non_existent_file = os.path.join(self.test_output_dir, "non_existent.json")
         with self.assertRaises(FileNotFoundError) as context:
             self.config_handler.load_plain_config(non_existent_file)
-        self.assertIn("No such file or directory", str(context.exception))
+        self.assertIn("明文配置文件不存在", str(context.exception))
 
     def test_load_plain_config_invalid_json(self):
         """测试加载无效JSON格式的明文配置文件"""
