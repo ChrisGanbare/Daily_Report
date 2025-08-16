@@ -53,7 +53,10 @@ pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
 pip install -r requirements.txt
 
-# 方式4: 直接安装（可能较慢，特别是中国大陆用户）
+# 方式4: 安装锁定版本的依赖（确保环境一致性，推荐用于生产环境）
+pip install -r requirements-lock.txt
+
+# 方式5: 直接安装（可能较慢，特别是中国大陆用户）
 pip install -r requirements.txt
 ```
 
@@ -70,7 +73,7 @@ pip install -r requirements.txt
 mkdocs serve
 ```
 
-然后在浏览器中打开 http://localhost:8000 查看文档。
+Then in your browser open http://localhost:8000 to view the documentation.
 
 ### 构建文档
 
@@ -122,8 +125,38 @@ python ZR_Daily_Report.py --mode statement
 ├── tests/               # 测试用例目录
 │   └── TESTING.md       # 测试框架文档
 ├── ZR_Daily_Report.py   # 主程序
-└── requirements.txt     # 依赖配置文件
+├── requirements.txt     # 依赖配置文件
+└── requirements-lock.txt # 锁定版本的依赖配置文件
 ```
+
+## 依赖管理最佳实践
+
+本项目遵循以下依赖管理最佳实践：
+
+### 1. 虚拟环境强制使用
+- 所有开发必须在虚拟环境中进行
+- 虚拟环境目录(.venv)必须加入.gitignore
+
+### 2. 依赖版本控制
+- 使用requirements.txt管理依赖
+- 对关键依赖指定具体版本号(如`package==1.2.3`)
+- 使用`requirements-lock.txt`锁定所有依赖的确切版本
+
+### 3. 依赖安装验证
+- 新开发者应使用`pip install -r requirements.txt`验证依赖安装
+- 使用阿里云镜像加速安装: `pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/`
+
+### 4. 自动化验证流程
+- 在CI/CD中集成依赖安装和测试流程
+- 使用GitHub Actions等工具自动验证不同Python版本的依赖兼容性
+
+### 5. 依赖管理工具
+- 推荐使用pipenv或poetry进行依赖管理
+- 使用tox进行多环境测试
+
+### 6. 文档化要求
+- 在README.md中明确记录环境设置和依赖安装步骤
+- 包含虚拟环境创建、激活和依赖安装的完整流程说明
 
 ## 4. 开发环境搭建
 

@@ -4,7 +4,8 @@ import json
 import os
 import sys
 import traceback
-
+import tkinter as tk
+from tkinter import ttk
 
 
 # 添加项目根目录到sys.path，确保能正确导入模块
@@ -33,6 +34,23 @@ except ImportError:
         raise ImportError("无法导入数据库驱动，请安装 mysql-connector-python 或 PyMySQL")
 
 
+def print_usage():
+    """
+    打印使用说明
+    """
+    print("ZR Daily Report Generator 使用说明:")
+    print("=" * 50)
+    print("命令行参数选项:")
+    print("  --mode inventory    只生成库存报表")
+    print("  --mode statement    只生成客户对账单")
+    print("  --mode both         同时生成库存报表和客户对账单（默认）")
+    print()
+    print("示例:")
+    print("  python ZR_Daily_Report.py")
+    print("  python ZR_Daily_Report.py --mode inventory")
+    print("  python ZR_Daily_Report.py --mode statement")
+    print("  python ZR_Daily_Report.py --mode both")
+    print("=" * 50)
 
 
 def load_config():
@@ -125,7 +143,7 @@ def _handle_db_connection_error(log_messages, error, error_type="MySQL错误"):
     
     _save_error_log(log_messages, error_details, "数据库连接错误日志")
 
-def generate_inventory_reports():
+def generate_inventory_reports(log_prefix="库存表处理日志"):
     """
     专门用于生成库存报表
     """
@@ -168,18 +186,19 @@ def generate_inventory_reports():
         # 显示文件选择对话框，让用户选择设备信息CSV文件
         csv_file = choose_file(
             title="选择设备信息CSV文件",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            initialdir=os.path.dirname(__file__)  # 返回首页路径
         )
         
         if not csv_file:
             print("未选择设备信息文件，程序退出。")
-            return
+            return None
         
         # 读取设备信息
         devices = file_handler.read_devices_from_csv(csv_file)
         if not devices:
             print("未能读取设备信息，请检查文件格式。")
-            return
+            return None
         
         # 验证设备信息
         valid_devices = []
@@ -191,7 +210,7 @@ def generate_inventory_reports():
         
         if not valid_devices:
             print("没有有效的设备信息，请检查设备文件内容。")
-            return
+            return None
         
         print(f"成功读取 {len(valid_devices)} 个有效设备信息。")
         log_messages.append(f"成功读取 {len(valid_devices)} 个有效设备信息。")
@@ -230,11 +249,11 @@ def generate_inventory_reports():
             exit(1)
 
         # 显示目录选择对话框，让用户选择输出目录
-        output_dir = choose_directory(title="选择库存报表输出目录")
+        output_dir = choose_directory(title="选择库存报表输出目录", initialdir=os.path.dirname(__file__))
         if not output_dir:
             print("未选择输出目录，程序退出。")
             connection.close()
-            return
+            return None
         
         # 确保输出目录存在
         os.makedirs(output_dir, exist_ok=True)
@@ -343,7 +362,8 @@ def generate_inventory_reports():
                         formats = ['%Y-%m-%d', '%Y/%m/%d']
                         for fmt in formats:
                             try:
-                                return datetime.strptime(date_string, fmt).date()
+                                parsed_date = datetime.datetime.strptime(date_string, fmt).date()
+                                return parsed_date
                             except ValueError:
                                 continue
                         # 如果所有格式都失败，则抛出异常
@@ -389,7 +409,7 @@ def generate_inventory_reports():
             log_messages.append(f"失败设备列表: {', '.join(failed_devices)}")
         
         # 生成日志文件
-        log_file = os.path.join(output_dir, f"处理日志_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
+        log_file = os.path.join(output_dir, f"{log_prefix}_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
         try:
             with open(log_file, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(log_messages))
@@ -406,6 +426,9 @@ def generate_inventory_reports():
         except Exception as e:
             print(f"关闭数据库连接时发生错误: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
+        
+        # 返回有效的设备数据，供后续使用
+        return valid_devices
         
     except Exception as e:
         error_msg = f"库存报表生成过程中发生未处理异常: {e}"
@@ -430,7 +453,7 @@ def generate_inventory_reports():
         
         exit(1)
 
-def generate_customer_statement():
+def generate_customer_statement(log_prefix="对账单处理日志", devices_data=None):
     """
     生成客户对账单的主函数
     """
@@ -446,40 +469,46 @@ def generate_customer_statement():
         print("=" * 50)
         log_messages.append("ZR Daily Report - 客户对账单生成功能")
         
-        # 显示文件选择对话框，让用户选择设备信息CSV文件
-        csv_file = choose_file(
-            title="选择设备信息CSV文件",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
-        )
-        
-        if not csv_file:
-            print("未选择文件，程序退出。")
-            return
-        
-        log_messages.append(f"选择的设备信息文件: {csv_file}")
-        
-        # 读取设备信息
-        try:
-            file_handler = FileHandler()
-            devices = file_handler.read_devices_from_csv(csv_file)
-            data_validator = DataValidator()
-            valid_devices = [d for d in devices if data_validator.validate_csv_data(d)]
-            log_messages.append(f"总共读取设备数量: {len(devices)}")
-            log_messages.append(f"有效设备数量: {len(valid_devices)}")
-        except Exception as e:
-            error_msg = f"读取设备信息失败: {e}"
-            print(error_msg)
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            log_messages.append(error_msg)
-            log_messages.append("")
-            exit(1)
-        
-        if not valid_devices:
-            error_msg = "没有有效的设备信息，请检查CSV文件格式。"
-            print(error_msg)
-            log_messages.append(error_msg)
-            log_messages.append("")
-            exit(1)
+        # 如果传入了设备数据，则不需要重新选择文件
+        if devices_data:
+            valid_devices = devices_data
+            log_messages.append(f"使用已提供的设备数据，设备数量: {len(valid_devices)}")
+        else:
+            # 显示文件选择对话框，让用户选择设备信息CSV文件
+            csv_file = choose_file(
+                title="选择设备信息CSV文件",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+                initialdir=os.path.dirname(__file__)  # 返回首页路径
+            )
+            
+            if not csv_file:
+                print("未选择文件，程序退出。")
+                return
+            
+            log_messages.append(f"选择的设备信息文件: {csv_file}")
+            
+            # 读取设备信息
+            try:
+                file_handler = FileHandler()
+                devices = file_handler.read_devices_from_csv(csv_file)
+                data_validator = DataValidator()
+                valid_devices = [d for d in devices if data_validator.validate_csv_data(d)]
+                log_messages.append(f"总共读取设备数量: {len(devices)}")
+                log_messages.append(f"有效设备数量: {len(valid_devices)}")
+            except Exception as e:
+                error_msg = f"读取设备信息失败: {e}"
+                print(error_msg)
+                print(f"详细错误信息:\n{traceback.format_exc()}")
+                log_messages.append(error_msg)
+                log_messages.append("")
+                exit(1)
+            
+            if not valid_devices:
+                error_msg = "没有有效的设备信息，请检查CSV文件格式。"
+                print(error_msg)
+                log_messages.append(error_msg)
+                log_messages.append("")
+                exit(1)
         
         # 加载数据库配置
         try:
@@ -529,7 +558,7 @@ def generate_customer_statement():
             exit(1)
 
         # 显示目录选择对话框，让用户选择输出目录
-        output_dir = choose_directory(title="选择客户对账单输出目录")
+        output_dir = choose_directory(title="选择客户对账单输出目录", initialdir=os.path.dirname(__file__))
         if not output_dir:
             print("未选择输出目录，程序退出。")
             connection.close()
@@ -646,8 +675,8 @@ def generate_customer_statement():
                     date_formats = ['%Y-%m-%d', '%Y/%m/%d']
                     for fmt in date_formats:
                         try:
-                            start_date_obj = datetime.strptime(start_date, fmt).date()
-                            end_date_obj = datetime.strptime(end_date, fmt).date()
+                            start_date_obj = datetime.datetime.strptime(start_date, fmt).date()
+                            end_date_obj = datetime.datetime.strptime(end_date, fmt).date()
                             break
                         except ValueError:
                             continue
@@ -701,7 +730,7 @@ def generate_customer_statement():
             log_messages.append(f"失败设备列表: {', '.join(failed_devices)}")
         
         # 生成日志文件
-        log_file = os.path.join(output_dir, f"处理日志_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
+        log_file = os.path.join(output_dir, f"{log_prefix}_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
         try:
             with open(log_file, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(log_messages))
@@ -742,31 +771,128 @@ def generate_customer_statement():
         
         exit(1)
 
+def show_mode_selection_dialog():
+    """
+    显示模式选择对话框
+    """
+    def on_select():
+        selected_value = combo.get()
+        if selected_value == "请选择":
+            result.set("")
+        elif selected_value == "同时生成库存表和对账单":
+            result.set("both")
+        elif selected_value == "生成库存表":
+            result.set("inventory")
+        elif selected_value == "生成对账单":
+            result.set("statement")
+        root.quit()
+    
+    def on_cancel():
+        result.set(None)
+        root.quit()
+    
+    root = tk.Tk()
+    root.title("ZR Daily Report - 模式选择")
+    root.geometry("400x200")
+    root.attributes('-topmost', True)
+    
+    # 居中显示窗口
+    root.update_idletasks()
+    x = (root.winfo_screenwidth() // 2) - (400 // 2)
+    y = (root.winfo_screenheight() // 2) - (200 // 2)
+    root.geometry(f"400x200+{x}+{y}")
+    
+    # 创建主框架
+    main_frame = ttk.Frame(root, padding="20")
+    main_frame.pack(fill=tk.BOTH, expand=True)
+    
+    # 添加标签
+    label = ttk.Label(main_frame, text="请选择执行模式:", font=("Arial", 12))
+    label.pack(pady=(0, 10))
+    
+    # 添加下拉框
+    options = ["请选择", "同时生成库存表和对账单", "生成库存表", "生成对账单"]
+    combo = ttk.Combobox(main_frame, values=options, state="readonly", font=("Arial", 10), width=30)
+    combo.set("请选择")
+    combo.pack(pady=(0, 20))
+    
+    # 添加按钮框架
+    button_frame = ttk.Frame(main_frame)
+    button_frame.pack(fill=tk.X)
+    
+    # 添加确定按钮
+    ok_button = ttk.Button(button_frame, text="确定", command=on_select)
+    ok_button.pack(side=tk.LEFT, padx=(0, 10))
+    
+    # 添加取消按钮
+    cancel_button = ttk.Button(button_frame, text="取消", command=on_cancel)
+    cancel_button.pack(side=tk.LEFT)
+    
+    # 存储结果
+    result = tk.StringVar()
+    
+    # 绑定回车键
+    root.bind('<Return>', lambda event: on_select())
+    # 绑定ESC键
+    root.bind('<Escape>', lambda event: on_cancel())
+    
+    root.mainloop()
+    root.destroy()
+    
+    return result.get()
+
 def main():
     """
-    主函数，根据命令行参数选择执行哪个功能
+    主函数，根据命令行参数或UI选择执行功能
     """
     try:
-        parser = argparse.ArgumentParser(description='ZR Daily Report Generator')
-        parser.add_argument('--mode', choices=['inventory', 'statement', 'both'], 
-                            default='both', help='选择执行模式: inventory(库存报表), statement(客户对账单), both(两者都执行)')
+        # 检查是否有命令行参数
+        if len(sys.argv) == 1:
+            # 没有命令行参数，显示使用说明
+            print_usage()
+            
+            # 显示模式选择对话框
+            mode = show_mode_selection_dialog()
+            
+            if mode is None:
+                print("用户取消操作，程序退出。")
+                return
+                
+            if not mode:
+                print("未选择有效模式，程序退出。")
+                return
+        else:
+            # 有命令行参数，使用argparse解析
+            parser = argparse.ArgumentParser(description='ZR Daily Report Generator')
+            parser.add_argument('--mode', choices=['inventory', 'statement', 'both'], 
+                                default='both', help='选择执行模式: inventory(库存报表), statement(客户对账单), both(两者都执行)')
+            
+            args = parser.parse_args()
+            mode = args.mode
         
-        args = parser.parse_args()
-        
-        if args.mode == 'inventory':
+        # 根据选择的模式执行相应功能
+        if mode == 'inventory':
             generate_inventory_reports()
-        elif args.mode == 'statement':
+        elif mode == 'statement':
             generate_customer_statement()
-        elif args.mode == 'both':
-            # 先执行库存报表功能
-            generate_inventory_reports()
+        elif mode == 'both':
+            # 先执行库存报表功能，并获取设备数据
+            print("开始执行库存报表生成功能...")
+            devices_data = generate_inventory_reports("库存表处理日志")
+            
             # 添加分割线以区分两个任务
             print("\n" + "=" * 50)
             print("以上为库存报表生成日志")
             print("以下为客户对账单生成日志")
             print("=" * 50 + "\n")
-            # 再执行客户对账单功能
-            generate_customer_statement()
+            
+            # 再执行客户对账单功能，传递设备数据避免重复选择
+            print("开始执行客户对账单生成功能...")
+            if devices_data:
+                generate_customer_statement("对账单处理日志", devices_data)
+            else:
+                # 如果没有获取到设备数据，则正常执行
+                generate_customer_statement("对账单处理日志")
             
     except Exception as e:
         print(f"主程序执行过程中发生异常: {e}")
