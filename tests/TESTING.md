@@ -13,6 +13,10 @@ tests/
 ├── test_inventory_reports.py  # 库存报表功能测试
 ├── test_statement_handler.py  # 对账单处理模块测试
 ├── test_zr_daily_report.py    # 主程序功能测试
+├── test_integration.py     # 集成测试
+├── generated/              # 自动生成的测试模板
+│   ├── test_*.py           # 各模块的测试模板
+│   └── test_integration_generated.py # 集成测试模板
 └── TESTING.md               # 测试文档
 ```
 
@@ -24,6 +28,8 @@ tests/
 - pytest-cov: 代码覆盖率工具
 - mock: 模拟对象库
 - flake8: 代码风格检查工具
+- pytest-testmon: 测试监控工具
+- hypothesis: 基于属性的测试库
 
 ## 运行测试
 
@@ -64,6 +70,36 @@ python run_tests.py --coverage
 # 运行代码风格检查
 python run_tests.py --lint
 ```
+
+### 自动生成测试用例
+
+项目支持自动生成测试用例模板：
+
+```bash
+# 自动生成测试用例
+make generate-tests
+
+# 或者直接运行脚本
+python scripts/generate_tests.py
+
+# 指定输出目录
+python scripts/generate_tests.py --output-dir tests/generated
+```
+
+生成的测试文件遵循以下规范：
+1. 继承自BaseTestCase基类，自动获得临时目录管理等功能
+2. 使用与手工编写测试一致的命名规范
+3. 包含setUp和tearDown方法，自动调用父类方法
+4. 为每个公共类和函数生成测试方法模板
+
+### 完善自动生成的测试
+
+自动生成的测试文件仅提供基本结构，需要手动完善：
+
+1. 在setUp方法中初始化测试对象
+2. 实现具体的测试逻辑
+3. 使用BaseTestCase提供的辅助方法（如create_test_device_data）
+4. 将完善后的测试文件移动到tests目录下，与手工编写的测试一起运行
 
 ## 测试类型
 
@@ -120,4 +156,19 @@ tox -e py38
 
 # 运行代码风格检查
 tox -e lint
+```
+
+## 测试监控
+
+使用`pytest-testmon`插件可以只运行受影响的测试：
+
+```bash
+# 首次运行，建立基线
+pytest --testmon-noselect
+
+# 后续运行，只运行受影响的测试
+pytest
+
+# 重置testmon数据库
+pytest --testmon-nocov
 ```

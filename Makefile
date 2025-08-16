@@ -1,51 +1,74 @@
-.PHONY: help install test quality quality-fast lint typecheck clean docs doc-serve doc-build
+# Makefile for ZR Daily Report project
 
+# 默认目标
+.PHONY: help
 help:
-	@echo "Available targets:"
-	@echo "  install     Install all dependencies"
-	@echo "  test        Run tests"
-	@echo "  quality     Run all quality checks (may modify files)"
-	@echo "  quality-fast  Run all quality checks (read-only)"
-	@echo "  lint        Run style checks"
-	@echo "  typecheck   Run type checks"
-	@echo "  clean       Clean build artifacts"
-	@echo "  docs        Build documentation"
-	@echo "  doc-serve   Start documentation server"
-	@echo "  doc-build   Build documentation"
+	@echo "ZR Daily Report - Makefile Commands"
+	@echo "===================================="
+	@echo "install      - 安装项目依赖"
+	@echo "dev-install  - 安装开发依赖"
+	@echo "test         - 运行测试"
+	@echo "test-cov     - 运行测试并生成覆盖率报告"
+	@echo "generate-tests - 自动生成测试用例"
+	@echo "clean        - 清理临时文件和缓存"
+	@echo "docs         - 生成文档"
+	@echo "lint         - 运行代码风格检查"
+	@echo "format       - 格式化代码"
+	@echo "type-check   - 运行类型检查"
 
+# 安装项目依赖
+.PHONY: install
 install:
-	pip install -r requirements.txt
+	pip install -e .
 
+# 安装开发依赖
+.PHONY: dev-install
+dev-install:
+	pip install -e .[dev,test,docs]
+
+# 运行测试
+.PHONY: test
 test:
-	python -m pytest tests/
+	python -m pytest tests/ -v
 
-quality:
-	black src tests
-	isort src tests
-	flake8 src tests
-	mypy src tests
+# 运行测试并生成覆盖率报告
+.PHONY: test-cov
+test-cov:
+	python -m pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing
 
-quality-fast:
-	black --check src tests
-	isort --check-only src tests
-	flake8 src tests
-	mypy src tests
+# 自动生成测试用例
+.PHONY: generate-tests
+generate-tests:
+	python scripts/generate_tests.py
 
-lint:
-	flake8 src tests
-
-typecheck:
-	mypy src tests
-
+# 清理临时文件和缓存
+.PHONY: clean
 clean:
-	rm -rf .tox .pytest_cache .mypy_cache .coverage htmlcov *.egg-info dist build site
+	rm -rf *.egg-info
+	rm -rf build/
+	rm -rf dist/
+	rm -rf .pytest_cache/
+	rm -rf .mypy_cache/
+	rm -rf htmlcov/
 	find . -type d -name __pycache__ -delete
 	find . -type f -name "*.pyc" -delete
 
-docs: doc-build
+# 生成文档
+.PHONY: docs
+docs:
+	mkdocs build
 
-doc-serve:
-	python scripts/build_docs.py serve
+# 运行代码风格检查
+.PHONY: lint
+lint:
+	flake8 src/ tests/
 
-doc-build:
-	python scripts/build_docs.py build
+# 格式化代码
+.PHONY: format
+format:
+	black src/ tests/
+
+# 运行类型检查
+.PHONY: type-check
+type-check:
+	mypy src/

@@ -39,6 +39,10 @@ test = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "mock>=4.0.0",
+    # 添加测试生成工具
+    "pytest-testmon>=2.0.0",
+    "hypothesis>=6.0.0",
+    "pytest-testdoctest>=1.1",
 ]
 dev = [
     "flake8>=5.0.0",

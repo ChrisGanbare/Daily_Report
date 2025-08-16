@@ -1,16 +1,22 @@
-import csv
-import re
-import os
-import json
 import argparse
-import traceback
-from datetime import datetime, timedelta
-from tkinter import Tk
-from tkinter.filedialog import askopenfilename, askdirectory
-from collections import defaultdict
-from openpyxl import Workbook
-from openpyxl.styles import Font
+import datetime
+import json
+import os
 import sys
+import traceback
+
+
+
+# 添加项目根目录到sys.path，确保能正确导入模块
+sys.path.insert(0, os.path.dirname(__file__))
+# 导入项目模块
+from src.core.db_handler import DatabaseHandler
+from src.core.inventory_handler import InventoryReportGenerator
+from src.core.statement_handler import CustomerStatementGenerator
+from src.core.file_handler import FileHandler
+from src.utils.data_validator import DataValidator
+from src.utils.config_handler import ConfigHandler
+from src.utils.ui_utils import choose_file, choose_directory  # 导入文件对话框工具类
 
 # 尝试导入mysql.connector，如果失败则使用PyMySQL
 try:
@@ -26,14 +32,7 @@ except ImportError:
     except ImportError:
         raise ImportError("无法导入数据库驱动，请安装 mysql-connector-python 或 PyMySQL")
 
-# 添加项目根目录到sys.path，确保能正确导入模块
-sys.path.insert(0, os.path.dirname(__file__))
 
-# 使用包导入简化导入路径
-from src.core import DatabaseHandler, CustomerStatementGenerator
-from src.utils import ConfigHandler, DataValidator
-from src.core import FileHandler
-from src.core import InventoryReportGenerator
 
 
 def load_config():
@@ -73,6 +72,59 @@ def load_config():
     
     raise Exception("未找到有效的配置文件")
 
+def _save_error_log(log_messages, error_details, log_filename_prefix):
+    """
+    保存错误日志到文件
+    
+    Args:
+        log_messages (list): 日志消息列表
+        error_details (dict): 错误详细信息
+        log_filename_prefix (str): 日志文件名前缀
+    """
+    error_time = datetime.datetime.now()
+    error_log_file = os.path.join(os.getcwd(), f"{log_filename_prefix}_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
+    try:
+        with open(error_log_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(log_messages))
+            if 'error' in error_details:
+                f.write(f"\n\n{error_details.get('error_type', 'Error')}: {error_details['error']}\n")
+            if 'error_code' in error_details:
+                f.write(f"错误代码: {error_details['error_code']}\n")
+            if 'traceback' in error_details:
+                f.write(f"详细错误信息:\n{error_details['traceback']}")
+        print(f"{error_details.get('log_description', '错误日志')}已保存到: {error_log_file}")
+    except Exception as log_e:
+        print(f"保存{error_details.get('log_description', '日志文件')}失败: {log_e}")
+
+def _handle_db_connection_error(log_messages, error, error_type="MySQL错误"):
+    """
+    处理数据库连接错误
+    
+    Args:
+        log_messages (list): 日志消息列表
+        error (Exception): 错误对象
+        error_type (str): 错误类型描述
+    """
+    error_msg = f"数据库连接失败 ({error_type}): {error}"
+    print(error_msg)
+    if hasattr(error, 'errno'):
+        print(f"错误代码: {error.errno}")
+    print(f"详细错误信息:\n{traceback.format_exc()}")
+    log_messages.append(error_msg)
+    log_messages.append("")
+    
+    # 生成错误日志文件
+    error_details = {
+        'error': error,
+        'error_type': error_type,
+        'traceback': traceback.format_exc(),
+        'log_description': '数据库连接错误日志'
+    }
+    if hasattr(error, 'errno'):
+        error_details['error_code'] = error.errno
+    
+    _save_error_log(log_messages, error_details, "数据库连接错误日志")
+
 def generate_inventory_reports():
     """
     专门用于生成库存报表
@@ -82,7 +134,7 @@ def generate_inventory_reports():
     failed_devices = []
     
     # 记录程序开始时间
-    start_time = datetime.now()
+    start_time = datetime.datetime.now()
     log_messages.append(f"程序开始执行时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
     log_messages.append("")  # 添加空行分隔
     
@@ -114,11 +166,7 @@ def generate_inventory_reports():
             customer_query_template = "SELECT customer_name FROM oil.t_customer WHERE id = %s"
         
         # 显示文件选择对话框，让用户选择设备信息CSV文件
-        root = Tk()  # 创建主窗口
-        root.withdraw()  # 隐藏主窗口
-        root.geometry("800x600")  # 设置窗口大小
-        root.attributes('-topmost', True)  # 确保对话框窗口在最前面
-        csv_file = askopenfilename(
+        csv_file = choose_file(
             title="选择设备信息CSV文件",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
         )
@@ -157,46 +205,10 @@ def generate_inventory_reports():
             connection = db_handler.connect()
             print("数据库连接对象创建成功")
         except mysql.connector.Error as err:
-            error_msg = f"数据库连接失败 (MySQL错误): {err}"
-            print(error_msg)
-            print(f"错误代码: {err.errno}")
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            log_messages.append(error_msg)
-            log_messages.append("")
-            
-            # 生成错误日志文件
-            error_time = datetime.now()
-            error_log_file = os.path.join(os.getcwd(), f"数据库连接错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
-            try:
-                with open(error_log_file, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(log_messages))
-                    f.write(f"\n\nMySQL错误详情: {err}\n")
-                    f.write(f"错误代码: {err.errno}\n")
-                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
-                print(f"数据库连接错误日志已保存到: {error_log_file}")
-            except Exception as log_e:
-                print(f"保存数据库连接错误日志文件失败: {log_e}")
-            
+            _handle_db_connection_error(log_messages, err, "MySQL错误")
             exit(1)
         except Exception as e:
-            error_msg = f"数据库连接失败 (未知错误): {e}"
-            print(error_msg)
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            log_messages.append(error_msg)
-            log_messages.append("")
-            
-            # 生成错误日志文件
-            error_time = datetime.now()
-            error_log_file = os.path.join(os.getcwd(), f"数据库连接错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
-            try:
-                with open(error_log_file, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(log_messages))
-                    f.write(f"\n\n未知错误: {e}\n")
-                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
-                print(f"数据库连接错误日志已保存到: {error_log_file}")
-            except Exception as log_e:
-                print(f"保存数据库连接错误日志文件失败: {log_e}")
-            
+            _handle_db_connection_error(log_messages, e, "未知错误")
             exit(1)
         except BaseException as e:
             error_msg = f"数据库连接过程中发生严重错误: {e}"
@@ -207,28 +219,18 @@ def generate_inventory_reports():
             log_messages.append("")
             
             # 生成错误日志文件
-            error_time = datetime.now()
-            error_log_file = os.path.join(os.getcwd(), f"数据库连接严重错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
-            try:
-                with open(error_log_file, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(log_messages))
-                    f.write(f"\n\n严重错误: {e}\n")
-                    f.write(f"错误类型: {type(e)}\n")
-                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
-                print(f"数据库连接严重错误日志已保存到: {error_log_file}")
-            except Exception as log_e:
-                print(f"保存数据库连接严重错误日志文件失败: {log_e}")
+            error_details = {
+                'error': e,
+                'error_type': '严重错误',
+                'traceback': traceback.format_exc(),
+                'log_description': '数据库连接严重错误日志'
+            }
+            _save_error_log(log_messages, error_details, "数据库连接严重错误日志")
             
             exit(1)
 
         # 显示目录选择对话框，让用户选择输出目录
-        root = Tk()  # 创建主窗口
-        root.withdraw()  # 隐藏主窗口
-        root.geometry("800x600")  # 设置窗口大小
-        root.attributes('-topmost', True)  # 确保对话框窗口在最前面
-        root.geometry("800x600")  # 设置窗口大小
-        root.attributes('-topmost', True)  # 确保对话框窗口在最前面
-        output_dir = askdirectory(title="选择库存报表输出目录")
+        output_dir = choose_directory(title="选择库存报表输出目录")
         if not output_dir:
             print("未选择输出目录，程序退出。")
             connection.close()
@@ -375,7 +377,7 @@ def generate_inventory_reports():
                 continue
         
         # 记录程序结束时间
-        end_time = datetime.now()
+        end_time = datetime.datetime.now()
         duration = end_time - start_time
         log_messages.append("")
         log_messages.append(f"程序结束执行时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -412,16 +414,12 @@ def generate_inventory_reports():
         log_messages.append(error_msg)
         
         # 生成错误日志文件
-        error_time = datetime.now()
-        error_log_file = os.path.join(os.getcwd(), f"错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
-        try:
-            with open(error_log_file, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(log_messages))
-                f.write(f"\n\n未处理异常: {e}\n")
-                f.write(f"详细错误信息:\n{traceback.format_exc()}")
-            print(f"错误日志已保存到: {error_log_file}")
-        except Exception as log_e:
-            print(f"保存错误日志文件失败: {log_e}")
+        error_details = {
+            'error': e,
+            'traceback': traceback.format_exc(),
+            'log_description': '错误日志'
+        }
+        _save_error_log(log_messages, error_details, "错误日志")
         
         # 确保数据库连接关闭
         try:
@@ -438,7 +436,7 @@ def generate_customer_statement():
     """
     # 初始化日志消息列表
     log_messages = []
-    start_time = datetime.now()
+    start_time = datetime.datetime.now()
     log_messages.append(f"程序开始执行时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
     log_messages.append("")
     
@@ -449,10 +447,7 @@ def generate_customer_statement():
         log_messages.append("ZR Daily Report - 客户对账单生成功能")
         
         # 显示文件选择对话框，让用户选择设备信息CSV文件
-        root = Tk()  # 创建主窗口
-        root.withdraw()  # 隐藏主窗口
-        root.geometry("800x600")  # 设置窗口大小
-        csv_file = askopenfilename(
+        csv_file = choose_file(
             title="选择设备信息CSV文件",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
         )
@@ -509,46 +504,10 @@ def generate_customer_statement():
             connection = db_handler.connect()
             log_messages.append("数据库连接成功")
         except mysql.connector.Error as err:
-            error_msg = f"数据库连接失败 (MySQL错误): {err}"
-            print(error_msg)
-            print(f"错误代码: {err.errno}")
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            log_messages.append(error_msg)
-            log_messages.append("")
-            
-            # 生成错误日志文件
-            error_time = datetime.now()
-            error_log_file = os.path.join(os.getcwd(), f"数据库连接错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
-            try:
-                with open(error_log_file, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(log_messages))
-                    f.write(f"\n\nMySQL错误详情: {err}\n")
-                    f.write(f"错误代码: {err.errno}\n")
-                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
-                print(f"数据库连接错误日志已保存到: {error_log_file}")
-            except Exception as log_e:
-                print(f"保存数据库连接错误日志文件失败: {log_e}")
-            
+            _handle_db_connection_error(log_messages, err, "MySQL错误")
             exit(1)
         except Exception as e:
-            error_msg = f"数据库连接失败 (未知错误): {e}"
-            print(error_msg)
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            log_messages.append(error_msg)
-            log_messages.append("")
-            
-            # 生成错误日志文件
-            error_time = datetime.now()
-            error_log_file = os.path.join(os.getcwd(), f"数据库连接错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
-            try:
-                with open(error_log_file, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(log_messages))
-                    f.write(f"\n\n未知错误: {e}\n")
-                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
-                print(f"数据库连接错误日志已保存到: {error_log_file}")
-            except Exception as log_e:
-                print(f"保存数据库连接错误日志文件失败: {log_e}")
-            
+            _handle_db_connection_error(log_messages, e, "未知错误")
             exit(1)
         except BaseException as e:
             error_msg = f"数据库连接过程中发生严重错误: {e}"
@@ -559,25 +518,18 @@ def generate_customer_statement():
             log_messages.append("")
             
             # 生成错误日志文件
-            error_time = datetime.now()
-            error_log_file = os.path.join(os.getcwd(), f"数据库连接严重错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
-            try:
-                with open(error_log_file, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(log_messages))
-                    f.write(f"\n\n严重错误: {e}\n")
-                    f.write(f"错误类型: {type(e)}\n")
-                    f.write(f"详细错误信息:\n{traceback.format_exc()}")
-                print(f"数据库连接严重错误日志已保存到: {error_log_file}")
-            except Exception as log_e:
-                print(f"保存数据库连接严重错误日志文件失败: {log_e}")
+            error_details = {
+                'error': e,
+                'error_type': '严重错误',
+                'traceback': traceback.format_exc(),
+                'log_description': '数据库连接严重错误日志'
+            }
+            _save_error_log(log_messages, error_details, "数据库连接严重错误日志")
             
             exit(1)
 
         # 显示目录选择对话框，让用户选择输出目录
-        root = Tk()  # 创建主窗口
-        root.withdraw()  # 隐藏主窗口
-        root.geometry("800x600")  # 设置窗口大小
-        output_dir = askdirectory(title="选择客户对账单输出目录")
+        output_dir = choose_directory(title="选择客户对账单输出目录")
         if not output_dir:
             print("未选择输出目录，程序退出。")
             connection.close()
@@ -737,7 +689,7 @@ def generate_customer_statement():
         # 初始化日期变量
         start_date_obj = None
         end_date_obj = None
-        end_time = datetime.now()
+        end_time = datetime.datetime.now()
         duration = end_time - start_time
         log_messages.append("")
         log_messages.append(f"程序结束执行时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -774,16 +726,12 @@ def generate_customer_statement():
         log_messages.append(error_msg)
         
         # 生成错误日志文件
-        error_time = datetime.now()
-        error_log_file = os.path.join(os.getcwd(), f"错误日志_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
-        try:
-            with open(error_log_file, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(log_messages))
-                f.write(f"\n\n未处理异常: {e}\n")
-                f.write(f"详细错误信息:\n{traceback.format_exc()}")
-            print(f"错误日志已保存到: {error_log_file}")
-        except Exception as log_e:
-            print(f"保存错误日志文件失败: {log_e}")
+        error_details = {
+            'error': e,
+            'traceback': traceback.format_exc(),
+            'log_description': '错误日志'
+        }
+        _save_error_log(log_messages, error_details, "错误日志")
         
         # 确保数据库连接关闭
         try:

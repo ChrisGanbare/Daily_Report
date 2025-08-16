@@ -124,19 +124,7 @@ class CustomerStatementGenerator:
                 return
 
             # 获取油品列表
-            oil_names = []
-            if sheet_name == "每日用量明细":
-                # 从第3行开始查找油品名称
-                for col in range(3, worksheet.max_column + 1):
-                    cell_value = worksheet.cell(row=3, column=col).value
-                    if cell_value:
-                        oil_names.append(cell_value)
-            elif sheet_name == "每月用量对比":
-                # 从第3行开始查找油品名称
-                for col in range(2, worksheet.max_column + 1):
-                    cell_value = worksheet.cell(row=3, column=col).value
-                    if cell_value:
-                        oil_names.append(cell_value)
+            oil_names = self._get_oil_names_from_sheet(worksheet, sheet_name)
 
             # 更新图表系列
             for i, series in enumerate(chart.series):
@@ -147,18 +135,41 @@ class CustomerStatementGenerator:
 
                     # 更新系列数据范围
                     if hasattr(series, "val") and hasattr(series.val, "numRef"):
+                        data_rows = worksheet.max_row - 3
                         if sheet_name == "每日用量明细":
-                            # 计算数据行数
-                            data_rows = worksheet.max_row - 3
                             series.val.numRef.f = f"{sheet_name}!${chr(65+i+2)}$4:${chr(65+i+2)}${3+data_rows}"
                         elif sheet_name == "每月用量对比":
-                            # 计算数据行数
-                            data_rows = worksheet.max_row - 3
                             series.val.numRef.f = f"{sheet_name}!${chr(65+i+1)}$4:${chr(65+i+1)}${3+data_rows}"
 
         except Exception as e:
             print(f"更新图表系列数据时出错: {e}")
             raise
+
+    def _get_oil_names_from_sheet(self, worksheet, sheet_name):
+        """
+        从工作表中获取油品名称列表
+
+        Args:
+            worksheet: 工作表对象
+            sheet_name: 工作表名称
+
+        Returns:
+            list: 油品名称列表
+        """
+        oil_names = []
+        if sheet_name == "每日用量明细":
+            # 从第3行开始查找油品名称
+            for col in range(3, worksheet.max_column + 1):
+                cell_value = worksheet.cell(row=3, column=col).value
+                if cell_value:
+                    oil_names.append(cell_value)
+        elif sheet_name == "每月用量对比":
+            # 从第3行开始查找油品名称
+            for col in range(2, worksheet.max_column + 1):
+                cell_value = worksheet.cell(row=3, column=col).value
+                if cell_value:
+                    oil_names.append(cell_value)
+        return oil_names
 
     def _update_chart_in_statement(self, chart, daily_usage_ws, monthly_usage_ws):
         """
@@ -179,17 +190,7 @@ class CustomerStatementGenerator:
                     return
 
             # 检查图表标题以确定图表类型
-            chart_title = ""
-            if hasattr(chart, "title") and chart.title:
-                if (
-                    hasattr(chart.title, "tx")
-                    and hasattr(chart.title.tx, "rich")
-                    and hasattr(chart.title.tx.rich, "p")
-                ):
-                    try:
-                        chart_title = chart.title.tx.rich.p[0].endParaRPr.t
-                    except:
-                        pass
+            chart_title = self._get_chart_title(chart)
 
             print(f"处理图表: {chart_title}")
 
@@ -204,6 +205,29 @@ class CustomerStatementGenerator:
         except Exception as e:
             print(f"更新对账单图表时出错: {e}")
             raise
+
+    def _get_chart_title(self, chart):
+        """
+        获取图表标题
+
+        Args:
+            chart: 图表对象
+
+        Returns:
+            str: 图表标题
+        """
+        chart_title = ""
+        if hasattr(chart, "title") and chart.title:
+            if (
+                hasattr(chart.title, "tx")
+                and hasattr(chart.title.tx, "rich")
+                and hasattr(chart.title.tx.rich, "p")
+            ):
+                try:
+                    chart_title = chart.title.tx.rich.p[0].endParaRPr.t
+                except:
+                    pass
+        return chart_title
 
     def _update_monthly_chart_data(self, chart, monthly_usage_ws):
         """
@@ -374,6 +398,43 @@ class CustomerStatementGenerator:
             print(f"生成对账单时发生错误: {str(e)}")
             raise
 
+    def _prepare_date_range(self, start_date, end_date):
+        """
+        准备日期范围，确保输入是date对象
+
+        Args:
+            start_date: 开始日期 (date对象或字符串)
+            end_date: 结束日期 (date对象或字符串)
+
+        Returns:
+            tuple: (start_date, end_date) 日期对象元组
+        """
+        # 确保start_date和end_date是date对象
+        if isinstance(start_date, str):
+            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        if isinstance(end_date, str):
+            end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+        return start_date, end_date
+
+    def _clear_old_data(self, worksheet, start_row, num_rows, start_col=3):
+        """
+        清除工作表中的旧数据
+
+        Args:
+            worksheet: 工作表对象
+            start_row: 开始行号
+            num_rows: 需要清除的行数
+            start_col: 开始列号（默认为3，即C列）
+        """
+        max_cols = worksheet.max_column
+        if max_cols >= start_col:
+            for col in range(start_col, max_cols + 1):
+                # 清除数据
+                for row in range(start_row, start_row + num_rows):
+                    cell = worksheet.cell(row=row, column=col)
+                    if cell.coordinate not in worksheet.merged_cells:
+                        cell.value = None
+
     def _update_daily_usage_sheet(self, ws, all_devices_data, start_date, end_date):
         """
         更新每日用量明细工作表
@@ -385,11 +446,7 @@ class CustomerStatementGenerator:
             end_date: 结束日期 (date对象)
         """
         try:
-            # 确保start_date和end_date是date对象
-            if isinstance(start_date, str):
-                start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-            if isinstance(end_date, str):
-                end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+            start_date, end_date = self._prepare_date_range(start_date, end_date)
 
             # 在G3单元格写入开始日期，格式：2025/7/1
             ws["G3"] = start_date.strftime("%Y/%m/%d").replace("/0", "/").lstrip("0")
@@ -446,18 +503,8 @@ class CustomerStatementGenerator:
             # 清除模板中可能存在的旧数据（C列及之后的列）
             # 从第5行开始清除表头
             # 从第6行开始清除数据
-            max_cols = ws.max_column
-            if max_cols > 2:  # 如果存在C列及之后的列
-                for col in range(3, max_cols + 1):
-                    # 清除表头（第5行）
-                    cell = ws.cell(row=5, column=col)
-                    if cell.coordinate not in ws.merged_cells:
-                        cell.value = None
-                    # 清除数据（第6行到第6+日期数量-1行）
-                    for row in range(6, 6 + len(date_list)):
-                        cell = ws.cell(row=row, column=col)
-                        if cell.coordinate not in ws.merged_cells:
-                            cell.value = None
+            self._clear_old_data(ws, 5, 1, 3)  # 清除表头（第5行）
+            self._clear_old_data(ws, 6, len(date_list), 3)  # 清除数据（第6行到第6+日期数量-1行）
 
             # 为每个设备的油品写入数据
             print(f"设备油品组合: {oil_columns}")
@@ -496,11 +543,7 @@ class CustomerStatementGenerator:
             end_date: 结束日期 (date对象)
         """
         try:
-            # 确保start_date和end_date是date对象
-            if isinstance(start_date, str):
-                start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-            if isinstance(end_date, str):
-                end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+            start_date, end_date = self._prepare_date_range(start_date, end_date)
 
             # 构建显示日期范围的字符串
             ws.cell(
@@ -565,6 +608,21 @@ class CustomerStatementGenerator:
             print(f"更新每月用量对比工作表时出错: {e}")
             raise
 
+    def _collect_oil_types(self, all_devices_data):
+        """
+        收集所有油品类型
+
+        Args:
+            all_devices_data: 所有设备的数据
+
+        Returns:
+            list: 排序后的油品类型列表
+        """
+        oil_types = set()
+        for device_data in all_devices_data:
+            oil_types.add(device_data["oil_name"])
+        return sorted(list(oil_types))
+
     def _update_statement_sheet(
         self, ws, all_devices_data, customer_name, start_date, end_date
     ):
@@ -580,11 +638,7 @@ class CustomerStatementGenerator:
             )
 
             # 收集所有油品类型
-            oil_types = set()
-            for device_data in all_devices_data:
-                oil_types.add(device_data["oil_name"])
-
-            sorted_oil_types = sorted(list(oil_types))
+            sorted_oil_types = self._collect_oil_types(all_devices_data)
             print(f"排序后的油品: {sorted_oil_types}")
 
         except Exception as e:
