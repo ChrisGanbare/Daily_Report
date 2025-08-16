@@ -34,7 +34,7 @@ test:
 # 运行测试并生成覆盖率报告
 .PHONY: test-cov
 test-cov:
-	python -m pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing
+	python -m pytest tests/ -v --cov=src --cov-report=html:htmlcov --cov-report=term-missing
 
 # 自动生成测试用例
 .PHONY: generate-tests

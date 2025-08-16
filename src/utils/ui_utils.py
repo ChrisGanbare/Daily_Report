@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog
 from typing import Optional, Union
+import logging
 
 
 class FileDialogUtil:
@@ -60,6 +61,9 @@ class FileDialogUtil:
                 initialdir=initialdir
             )
             return file_path if file_path else None
+        except Exception as e:
+            logging.warning(f"文件选择对话框出现异常: {e}")
+            return None
         finally:
             root.destroy()
 
@@ -82,6 +86,9 @@ class FileDialogUtil:
                 initialdir=initialdir
             )
             return dir_path if dir_path else None
+        except Exception as e:
+            logging.warning(f"目录选择对话框出现异常: {e}")
+            return None
         finally:
             root.destroy()
 

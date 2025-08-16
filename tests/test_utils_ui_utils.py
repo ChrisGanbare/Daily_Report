@@ -101,6 +101,25 @@ class TestUtilsUi_utils(BaseTestCase):
         mock_root.destroy.assert_called_once()
 
     @patch('src.utils.ui_utils.tk.Tk')
+    @patch('src.utils.ui_utils.filedialog.askopenfilename')
+    def test_filedialogutil_choose_file_exception_handling(self, mock_askopenfilename, mock_tk):
+        """
+        测试 FileDialogUtil.choose_file 方法的异常处理
+        """
+        # 模拟异常
+        mock_askopenfilename.side_effect = Exception("Dialog error")
+        mock_root = Mock()
+        mock_tk.return_value = mock_root
+        
+        # 调用方法
+        result = self.dialog_util.choose_file("选择文件")
+        
+        # 验证结果
+        self.assertIsNone(result)
+        mock_tk.assert_called_once()
+        mock_root.destroy.assert_called_once()
+
+    @patch('src.utils.ui_utils.tk.Tk')
     @patch('src.utils.ui_utils.filedialog.askdirectory')
     def test_filedialogutil_choose_directory(self, mock_askdirectory, mock_tk):
         """
@@ -161,6 +180,25 @@ class TestUtilsUi_utils(BaseTestCase):
             title="选择目录",
             initialdir=None
         )
+        mock_root.destroy.assert_called_once()
+
+    @patch('src.utils.ui_utils.tk.Tk')
+    @patch('src.utils.ui_utils.filedialog.askdirectory')
+    def test_filedialogutil_choose_directory_exception_handling(self, mock_askdirectory, mock_tk):
+        """
+        测试 FileDialogUtil.choose_directory 方法的异常处理
+        """
+        # 模拟异常
+        mock_askdirectory.side_effect = Exception("Dialog error")
+        mock_root = Mock()
+        mock_tk.return_value = mock_root
+        
+        # 调用方法
+        result = self.dialog_util.choose_directory("选择目录")
+        
+        # 验证结果
+        self.assertIsNone(result)
+        mock_tk.assert_called_once()
         mock_root.destroy.assert_called_once()
 
     @patch('src.utils.ui_utils.file_dialog_util')
@@ -252,6 +290,32 @@ class TestUtilsUi_utils(BaseTestCase):
         # 验证结果
         self.assertEqual(result, "/path/to/directory")
         mock_util.choose_directory.assert_called_once_with("选择目录", None)
+
+    @patch('src.utils.ui_utils.tk.Tk')
+    def test_filedialogutil_create_root(self, mock_tk):
+        """
+        测试 FileDialogUtil._create_root 方法
+        """
+        mock_root = Mock()
+        mock_tk.return_value = mock_root
+        
+        # 创建根窗口
+        root = self.dialog_util._create_root()
+        
+        # 验证根窗口属性设置
+        mock_root.withdraw.assert_called_once()
+        mock_root.geometry.assert_called_once_with("400x300")
+        mock_root.attributes.assert_called_once_with('-topmost', True)
+
+    def test_global_instance(self):
+        """
+        测试全局实例的创建和属性
+        """
+        from src.utils.ui_utils import file_dialog_util
+        self.assertIsInstance(file_dialog_util, FileDialogUtil)
+        self.assertEqual(file_dialog_util.width, 400)
+        self.assertEqual(file_dialog_util.height, 300)
+        self.assertTrue(file_dialog_util.topmost)
 
 
 if __name__ == "__main__":
