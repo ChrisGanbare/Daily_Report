@@ -1,21 +1,24 @@
-import json
 import os
+import sys
 import tempfile
 import unittest
-from unittest.mock import patch, mock_open
-import sys
+from datetime import date
+from unittest.mock import Mock, patch
 from cryptography.fernet import Fernet
+import json
 
-# 添加项目根目录到sys.path，确保能正确导入模块
+# 添加项目根目录到sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.utils.config_handler import ConfigHandler
 from tests.base_test import BaseTestCase
 
 
-class TestConfigHandler(BaseTestCase):
-    """测试配置处理功能"""
-
+class TestUtilsConfigHandler(BaseTestCase):
+    """
+    utils.config_handler 模块的单元测试
+    """
+    
     def setUp(self):
         """测试前准备"""
         super().setUp()
@@ -36,7 +39,15 @@ class TestConfigHandler(BaseTestCase):
                 "customer_query": "SELECT customer_name FROM oil.t_customer WHERE id = %s"
             }
         }
+        
+    def test_confighandler_initialization(self):
+        """
+        测试 ConfigHandler 类的初始化
+        """
+        # ConfigHandler的__init__方法目前为空，只需确认能创建实例
+        self.assertIsInstance(self.config_handler, ConfigHandler)
 
+    # 以下是从test_config_handler.py合并过来的测试用例
     def test_init_with_default_config_dir(self):
         """测试使用默认配置目录初始化"""
         default_handler = ConfigHandler()
@@ -139,5 +150,5 @@ class TestConfigHandler(BaseTestCase):
             self.config_handler.load_plain_config(plain_file)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

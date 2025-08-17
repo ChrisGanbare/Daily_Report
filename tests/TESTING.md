@@ -2,7 +2,7 @@
 
 ## 测试框架概述
 
-本项目采用现代化的测试框架，基于pytest构建，包含单元测试、集成测试和功能测试。
+本项目采用现代化的测试框架，基于pytest构建，包含单元测试、集成测试和功能测试，全面覆盖核心模块和业务功能。
 
 ## 测试结构
 
@@ -10,13 +10,16 @@
 tests/
 ├── __init__.py              # 包初始化文件
 ├── base_test.py            # 测试基类，提供通用测试工具
-├── test_inventory_reports.py  # 库存报表功能测试
-├── test_statement_handler.py  # 对账单处理模块测试
-├── test_zr_daily_report.py    # 主程序功能测试
+├── test_core_db_handler.py    # 数据库处理模块测试
+├── test_core_file_handler.py  # 文件处理模块测试
+├── test_core_inventory_handler.py  # 库存处理模块测试
+├── test_core_statement_handler.py  # 对账单处理模块测试
+├── test_utils_config_encrypt.py   # 配置加密工具测试
+├── test_utils_config_handler.py   # 配置处理模块测试
+├── test_utils_data_validator.py   # 数据验证模块测试
+├── test_utils_date_utils.py       # 日期工具模块测试
+├── test_dependency_compatibility.py  # 依赖兼容性测试
 ├── test_integration.py     # 集成测试
-├── generated/              # 自动生成的测试模板
-│   ├── test_*.py           # 各模块的测试模板
-│   └── test_integration_generated.py # 集成测试模板
 └── TESTING.md               # 测试文档
 ```
 
@@ -40,13 +43,16 @@ tests/
 pytest
 
 # 运行特定测试文件
-pytest tests/test_inventory_reports.py
+pytest tests/test_core_inventory_handler.py
 
 # 运行特定测试类
-pytest tests/test_inventory_reports.py::TestInventoryReports
+pytest tests/test_core_inventory_handler.py::TestInventoryReportGenerator
 
 # 运行特定测试方法
-pytest tests/test_inventory_reports.py::TestInventoryReports::test_generate_excel_with_chart_success
+pytest tests/test_core_inventory_handler.py::TestInventoryReportGenerator::test_generate_inventory_report_with_chart_success
+
+# 运行依赖兼容性测试
+pytest tests/test_dependency_compatibility.py
 
 # 运行测试并生成覆盖率报告
 pytest --cov=src --cov-report=html
@@ -63,6 +69,9 @@ python run_tests.py --unit
 
 # 运行集成测试
 python run_tests.py --integration
+
+# 运行依赖兼容性测试
+python run_tests.py --compatibility
 
 # 运行测试并生成覆盖率报告
 python run_tests.py --coverage
@@ -119,9 +128,63 @@ python scripts/generate_tests.py --output-dir tests/generated
 
 功能测试验证整个功能模块的正确性。
 
+标记: `@pytest.mark.functional`
+
+### 依赖兼容性测试
+
+依赖兼容性测试验证关键依赖库不同版本下功能的正确性。
+
+标记: `@pytest.mark.compatibility`
+
 ## 测试覆盖率
 
 项目要求测试覆盖率达到80%以上。覆盖率报告会自动生成在`htmlcov`目录中。
+
+## 依赖版本兼容性测试
+
+### 测试目的
+
+依赖版本兼容性测试旨在确保项目在关键依赖库不同版本下能够正常工作，避免因依赖升级导致的功能异常。
+
+### 测试范围
+
+当前测试覆盖以下关键依赖：
+1. openpyxl - Excel文件处理，特别是图表生成
+2. mysql-connector-python - 数据库连接
+3. pandas - 数据处理
+
+### 测试内容
+
+1. **openpyxl兼容性测试**：
+   - 图表生成功能
+   - 图表坐标轴标签显示
+   - 数据引用范围正确性
+
+2. **mysql-connector-python兼容性测试**：
+   - 基本连接功能
+   - 查询执行功能
+   - 数据读取功能
+
+3. **pandas兼容性测试**：
+   - DataFrame创建和操作
+   - 数据转换功能
+   - 文件读写功能
+
+### 测试执行
+
+在进行依赖版本升级前，应执行依赖兼容性测试：
+
+```bash
+# 执行依赖兼容性测试
+python -m pytest tests/test_dependency_compatibility.py -v
+```
+
+### 测试维护
+
+当添加新的关键依赖或修改依赖使用方式时，应及时更新依赖兼容性测试：
+1. 在test_dependency_compatibility.py中添加相应的测试用例
+2. 更新TESTING.md文档中的测试范围说明
+3. 确保新添加的测试用例能够验证核心功能在不同版本下的行为
 
 ## 编写测试
 

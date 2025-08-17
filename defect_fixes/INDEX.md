@@ -12,6 +12,14 @@
 
 ### 2025年
 
+#### [2025-08-17] 库存表图表显示问题修复
+- **文件**: [20250817_inventory_chart_display_issue.md](20250817_inventory_chart_display_issue.md)
+- **问题类型**: 图表显示异常
+- **严重程度**: 中
+- **核心修改**: 
+  - 修复因openpyxl版本升级导致的图表显示问题
+  - 回退openpyxl版本至3.1.0解决兼容性问题
+
 #### [2025-08-08] 配置文件读取问题修复
 - **文件**: [20250808_config_file_reading_issue.md](20250808_config_file_reading_issue.md)
 - **问题类型**: 配置文件读取失败
