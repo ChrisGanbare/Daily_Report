@@ -1,6 +1,11 @@
-# ZR_Daily_Report 项目技术文档
+# ZR Daily Report 项目技术文档
 
-## 1. 项目结构
+## 1. 概述
+
+本文档详细描述了 ZR Daily Report 项目的技术架构、模块设计和实现细节。文档旨在帮助开发者理解项目结构、核心组件和扩展功能。
+
+## 2. 项目结构
+
 ```
 D:\Daily_Report\
 ├── config/                     # 配置文件目录
@@ -14,20 +19,21 @@ D:\Daily_Report\
 │   └── version_plan.md
 ├── src/                        # 源代码目录
 │   ├── __init__.py
-│   ├── core/                   # 核心模块
+│   ├── core/                   # 核心功能模块
 │   │   ├── __init__.py
 │   │   ├── db_handler.py       # 数据库处理模块
-│   │   ├── excel_handler.py    # Excel处理模块
 │   │   ├── file_handler.py     # 文件处理模块
-│   │   └── statement_handler.py # 对账单处理模块
-│   ├── handlers/               # 处理器模块
-│   │   └── __init__.py
-│   └── utils/                  # 工具模块
-│       ├── __init__.py
-│       ├── config_encrypt.py   # 配置加密模块
-│       ├── config_handler.py   # 配置处理模块
-│       ├── data_validator.py   # 数据验证模块
-│       └── date_utils.py       # 日期处理模块
+│   │   ├── inventory_handler.py  # 库存报表处理模块
+│   │   ├── statement_handler.py  # 对账单处理模块
+│   │   └── async_processor.py  # 异步处理模块
+│   ├── utils/                  # 工具模块
+│   │   ├── __init__.py
+│   │   ├── config_encrypt.py   # 配置加密模块
+│   │   ├── config_handler.py   # 配置处理模块
+│   │   ├── data_validator.py   # 数据验证模块
+│   │   └── date_utils.py       # 日期处理模块
+│   └── web/                    # Web应用模块
+│       └── app.py              # Web应用入口
 ├── template/                   # 模板目录
 │   └── statement_template.xlsx # 对账单模板
 ├── tests/                      # 测试目录
@@ -40,7 +46,7 @@ D:\Daily_Report\
 ├── defect_fixes/               # 缺陷修复记录
 │   ├── 20250808_config_file_reading_issue.md
 │   ├── 20250808_statement_multiple_oil_issue.md
-│   ├── INDEX.md
+│   ├── defect_fixes_index.md
 │   └── README.md
 ├── query_config.json           # 查询配置文件(加密)
 ├── README.md                   # 项目说明文档
@@ -48,345 +54,50 @@ D:\Daily_Report\
 └── ZR_Daily_Report.py          # 主程序文件
 ```
 
-## 2. 依赖关系
+## 3. 核心模块说明
 
-### 核心依赖
+### 3.1 数据库处理模块 (db_handler.py)
+负责与MySQL数据库的连接和数据查询操作。
 
-1. **openpyxl** - Excel文件处理
-   - 版本要求: ==3.1.0 (为确保图表功能兼容性)
-   - 用途: 生成Excel报表，特别是图表创建和格式化
+### 3.2 文件处理模块 (file_handler.py)
+处理设备信息文件的读取和解析。
 
-2. **mysql-connector-python** - MySQL数据库连接
-   - 版本要求: >=8.0.33,<9.0.0
-   - 用途: 连接和查询MySQL数据库
+### 3.3 库存报表处理模块 (inventory_handler.py)
+生成设备库存报表和趋势图表。
 
-3. **pandas** - 数据处理
-   - 版本要求: >=1.5.0
-   - 用途: 数据清洗、转换和分析
+### 3.4 对账单处理模块 (statement_handler.py)
+生成客户对账单，支持动态油品列处理。
 
-### 测试依赖
+## 4. 扩展模块说明
 
-1. **pytest** - 测试框架
-2. **pytest-cov** - 代码覆盖率工具
-3. **mock** - 模拟对象库
+### 4.1 异步处理模块 (async_processor.py)
+实现异步任务处理功能。
 
-## 3. 依赖版本兼容性管理
+### 4.2 工具模块 (utils/)
+提供各种辅助工具函数。
 
-### 重要性说明
+### 4.3 Web应用模块 (web/app.py)
+提供Web界面访问功能。
 
-通过2025年8月17日的库存表图表显示问题([缺陷记录](../defect_fixes/20250817_inventory_chart_display_issue.md))，我们认识到依赖版本兼容性测试的重要性。openpyxl从3.1.0升级到3.1.5后，图表标题的处理机制发生变化，导致原本代码无法正确设置坐标轴标题。
+## 5. 数据流说明
 
-### 兼容性测试方案
+1. 程序启动后读取配置文件
+2. 从数据库查询设备数据
+3. 处理数据并生成报表
+4. 输出Excel文件
 
-#### 测试范围
-当前测试覆盖以下关键依赖：
-1. openpyxl - Excel文件处理，特别是图表生成
-2. mysql-connector-python - 数据库连接
-3. pandas - 数据处理
+## 6. 配置说明
 
-#### 测试内容
-1. **openpyxl兼容性测试**：
-   - 图表生成功能
-   - 图表坐标轴标签显示
-   - 数据引用范围正确性
-
-2. **mysql-connector-python兼容性测试**：
-   - 基本连接功能
-   - 查询执行功能
-   - 数据读取功能
-
-3. **pandas兼容性测试**：
-   - DataFrame创建和操作
-   - 数据转换功能
-   - 文件读写功能
-
-#### 测试执行
-在进行依赖版本升级前，应执行依赖兼容性测试：
-
-```bash
-# Linux/MacOS执行方式
-python scripts/test_compatibility.py
-
-# Windows执行方式
-scripts\test_compatibility.bat
-
-# 或直接运行测试
-python -m pytest tests/test_dependency_compatibility.py -v
-```
-
-#### 测试维护
-当添加新的关键依赖或修改依赖使用方式时，应及时更新依赖兼容性测试：
-1. 在test_dependency_compatibility.py中添加相应的测试用例
-2. 更新TESTING.md文档中的测试范围说明
-3. 确保新添加的测试用例能够验证核心功能在不同版本下的行为
-
-### 版本管理规范
-
-1. **版本锁定**：对关键依赖指定具体版本号(如openpyxl==3.1.0)
-2. **避免宽松版本范围**：避免使用只指定>=而不指定<的版本范围
-3. **定期测试**：建立定期测试机制，验证新版本依赖是否与现有代码兼容
-4. **升级前验证**：在升级依赖前进行充分测试
-
-## 3. 文件结构
+项目使用JSON格式的配置文件，包含数据库连接信息和查询语句模板。
 
 ```
-Daily_Report/ 
-├── ZR_Daily_Report.py              # 主程序 
-├── config/                         # 配置文件目录
-│   ├── .env                        # 加密密钥
-│   ├── query_config.json           # 数据库配置
-│   └── query_config_encrypted.json # 加密的数据库配置
-├── data/                           # 数据文件目录
-│   ├── devices.csv                 # 设备信息文件
-│   └── devices_template.csv        # 设备信息模板
-├── defect_fixes/                   # 缺陷修复记录目录
-│   ├── 20250808_config_file_reading_issue.md  # 配置文件读取问题记录
-│   ├── 20250808_statement_multiple_oil_issue.md  # 多油品处理问题记录
-│   └── README.md                   # 缺陷修复记录索引
-├── docs/                           # 文档目录
-│   ├── technical_documentation.md  # 技术文档 
-│   └── version_plan.md             # 版本规划文档
-├── src/                            # 源代码目录
-│   ├── core/                       # 核心模块目录
-│   │   ├── db_handler.py           # 数据库处理模块
-│   │   ├── excel_handler.py        # Excel处理模块
-│   │   ├── file_handler.py         # 文件处理模块
-│   │   └── statement_handler.py    # 对账单处理模块
-│   ├── utils/                      # 工具模块目录
-│   │   ├── config_encrypt.py       # 配置加密工具
-│   │   ├── config_handler.py       # 配置处理模块
-│   │   ├── data_validator.py       # 数据验证模块
-│   │   └── date_utils.py           # 日期处理工具 
-│   └── handlers/                   # 处理器模块目录（预留）
-│       └── __init__.py             # 包初始化文件
-├── template/                       # 模板目录
-│   └── statement_template.xlsx     # 对账单模板
-├── tests/                          # 测试目录
-│   ├── test_zr_daily_report.py     # 主测试用例 
-│   └── test_statement_handler.py   # 对账单处理模块测试用例 
-└── test_output/                    # 测试输出目录 
-  ├── test_无效数据测试.xlsx 
-  ├── test_空数据测试.xlsx 
-  ├── test_缺失数据测试.xlsx 
-  └── test_连续数据测试.xlsx
-```
-
-## 4. 功能特性
-1. 支持多设备批量处理
-2. 自动生成库存趋势图表
-3. 生成增强版对账单
-4. 详细的执行日志
-5. 完善的错误处理机制
-6. 支持多种日期格式
-
-## 5. 数据库配置
-
-### 5.1 连接信息
-- 主机：[加密保护]
-- 端口：3306
-- 数据库：oil
-- 用户：[加密保护]
-
-### 主要查询模板
-1. 设备ID查询
-2. 库存数据查询
-3. 客户信息查询
-
-## 6. 输入要求
-
-### 设备信息文件(CSV)
-- 文件编码：UTF-8
-- 必需字段：
-  - device_no（设备编号）
-  - start_date（开始日期）
-  - end_date（结束日期）
-- 日期格式支持：
-  - YYYY-MM-DD
-  - YYYY/M/D
-
-## 7. 输出规范
-
-### Excel文件命名
-1. 标准格式：`油品名称_设备编码_年月.xlsx`
-2. 对账单格式：`客户名称年月对账单.xlsx`
-
-### Excel内容格式
-- 字体：Arial/等线
-- 数值：保留2位小数
-- 日期：YYYY-MM-DD
-- 图表：折线图（库存趋势）
-
-## 8. 程序执行流程
-1. 读取配置和设备信息
-2. 数据库连接与查询
-3. 生成Excel报表
-4. 保存结果文件
-
-## 9. 版本管理
-项目采用语义化版本控制，当前处于子版本阶段（v0.x.x），尚未达到正式版本1.0的要求。
-
-### 分支策略
-- **master**：主分支，用于发布正式版本
-- **development**：开发分支，用于日常开发和优化
-
-详细版本规划请参考 [version_plan.md](version_plan.md) 文件。
-
-## 10. 错误处理
-1. 文件读取错误
-2. 数据库连接错误
-3. 无效设备信息
-4. 日期格式错误
-5. 数据查询异常
-6. 文件保存错误
-
-## 11. 日志规范
-- 格式：程序执行日志_YYYYMMDD_HHMMSS.txt
-- 内容分段：
-  - 步骤1：配置读取
-  - 步骤2：数据库操作
-  - 步骤3：报表生成
-  - 步骤4：文件保存
-
-## 12. 测试用例
-1. 数据验证测试
-2. 日期处理测试
-3. 图表生成测试
-4. 异常处理测试
-5. 数据库操作测试
-6. 文件处理测试
-7. 配置处理测试
-8. 对账单处理测试
-
-### 12.1 对账单处理测试用例
-针对对账单处理模块设计了以下测试用例：
-
-1. **类名和方法名测试** - 验证类名和方法名是否符合对账单相关要求
-2. **模板不存在错误测试** - 测试模板不存在时的错误提示
-3. **对账单文件名格式测试** - 测试对账单文件名格式是否正确
-4. **必需工作表识别测试** - 测试必需工作表的识别功能
-5. **每日用量明细工作表更新测试** - 测试每日用量明细工作表的数据更新
-6. **每日用量明细工作表日期字段测试** - 测试每日用量明细工作表的日期字段格式和位置
-7. **每日用量明细工作表数据结构测试** - 测试每日用量明细工作表的数据结构是否符合要求
-8. **多油品处理测试** - 测试多油品处理功能
-9. **动态油品数量处理测试** - 测试根据实际油品数量动态处理列，清除模板中多余的油品列
-
-## 13. 版本历史
-| 版本 | 日期 | 更新内容 | 作者 |
-|------|------|---------|------|
-| 1.0 | 2025-07-14 | 初始版本 | Lingma |
-| 1.1 | 2025-08-01 | 数据库功能 | Lingma |
-| 1.2 | 2025-08-02 | 测试用例 | Lingma |
-| 1.3 | 2025-08-03 | 日期处理优化 | Lingma |
-| 1.4 | 2025-08-04 | 图表优化 | Lingma |
-| 1.5 | 2025-08-07 | 项目重构，模块化设计 | Lingma |
-| 1.6 | 2025-08-07 | 更新测试用例以适配重构后的项目结构 | Lingma |
-| 1.7 | 2025-08-07 | 优化对账单生成功能，创建专用处理模块 | Lingma |
-| 1.8 | 2025-08-08 | 添加对账单处理模块测试用例 | Lingma |
-| 1.9 | 2025-08-08 | 优化动态油品数量处理功能 | Lingma |
-
-## 14. 常见问题
-1. 日期格式错误
-2. 数据库连接超时
-3. 文件权限问题
-4. 中文编码问题
-
-## 15. 维护建议
-1. 定期备份配置文件
-2. 监控数据库连接
-3. 检查日志文件大小
-4. 更新测试用例
-
-## 16. 部署说明
-
-### 16.1 环境要求
-- Python >= 3.8
-- pip（Python包管理器）
-- Git（版本控制）
-
-### 16.2 安装步骤
-1. 克隆代码仓库
-```bash
-git clone https://github.com/ChrisGanbare/Daily_Report.git
-cd Daily_Report
-```
-
-2. 创建虚拟环境
-python -m venv .venv
-.venv\Scripts\activate
-3. 安装依赖包
-pip install -r requirements.txt
-
-### 16.3 配置文件设置
-1. 复制配置模板
-```bash
-cp query_config_template.json query_config.json
-```
-2. 修改配置文件 query_config.json 填入实际配置
-3. 运行配置加密工具
-python encrypt_config.py
-4. 确认加密后的配置文件 query_config.json 已正确生成
-.env（密钥文件）
-query_config_encrypted.json（加密配置）
-
-### 16.4 运行程序
-Daily_Report/
-├── .env                        # 加密密钥（不要提交到Git）
-├── config_encrypt.py          # 配置加密工具
-├── query_config.json          # 原始配置（不要提交到Git）
-├── query_config_encrypted.json # 加密后的配置
-├── query_config_template.json  # 配置模板
-└── scripts/                    # 脚本目录
-    ├── test_compatibility.py   # 依赖兼容性测试脚本
-    └── test_compatibility.bat  # Windows依赖兼容性测试脚本
-
-## 17 使用说明
-### 17.1 准备工作
-1.准备设备信息文件
-使用 devices_template.csv 作为模板
-确保UTF-8编码
-填写正确的设备编号和日期范围
-
-2.确认配置文件
-检查数据库连接配置
-验证SQL模板正确性
-
-### 17.2 运行程序
-1.激活虚拟环境
-.venv\Scripts\activate
-2.运行程序
-python ZR_Daily_Report.py
-3.生成报表
-报表生成完成，结果保存在当前目录下。
-4.查看日志
-日志保存在当前目录下，文件名为程序执行日志_YYYYMMDD_HHMMSS.txt
-5.查看错误  
-错误信息保存在当前目录下，文件名为程序错误日志_YYYYMMDD_HHMMSS.txt
-6.查看测试用例
-测试用例保存在当前目录下，文件名为test_output/test_*.xlsx
-7.查看版本历史
-版本历史保存在当前目录下，文件名为版本历史.md
-8.查看常见问题
-常见问题保存在当前目录下，文件名为常见问题.md
-
-### 17.3 安全建议
-妥善保管 .env 文件
-定期更新加密密钥
-不要提交敏感信息到版本控制
-定期备份配置文件
-
-## 19 动态油品处理说明
-
-### 18.1 功能描述
-对账单处理模块能够根据实际客户设备的油品数量动态调整Excel表格中的列数。如果模板中预设了较多的油品列，而实际客户只有较少的油品，系统会自动清除模板中多余的油品列，只显示实际需要的油品数据。
-
-### 18.2 实现原理
-1. 收集所有设备的油品名称
-2. 清除模板中可能存在的旧数据（包括表头和数据）
-3. 根据实际油品数量重新写入表头和数据
-4. 确保只显示与实际油品数量相符的列数
-
-### 18.3 优势
-1. 提高模板的通用性 - 一个模板可以适用于不同数量油品的客户
-2. 避免显示无用的空列
-3. 保证数据展示的整洁性
-4. 减少手动调整模板的工作量
+{
+    "host": "[加密保护]",
+    "port": 3306,
+    "database": "oil",
+    "user": "[加密保护]",
+    "queries": {
+        "device_id": "SELECT device_id FROM devices",
+        "inventory_data": "SELECT * FROM inventory WHERE device_id = %s"
+    }
+}

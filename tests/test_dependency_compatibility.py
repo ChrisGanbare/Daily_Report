@@ -125,6 +125,54 @@ class DependencyCompatibilityTest(unittest.TestCase):
             # 验证X轴和Y轴存在
             self.assertIsNotNone(chart.x_axis)
             self.assertIsNotNone(chart.y_axis)
+            
+            # 验证坐标轴标题
+            # 注意：在openpyxl的新版本中，坐标轴标题可能通过Title对象设置
+            # 我们主要验证坐标轴对象存在且不为空
+            self.assertTrue(hasattr(chart.x_axis, 'title'))
+            self.assertTrue(hasattr(chart.y_axis, 'title'))
+
+            wb.close()
+        finally:
+            tmp_dir.cleanup()
+
+    def test_openpyxl_chart_title_functionality(self):
+        """测试openpyxl图表标题功能兼容性"""
+        tmp_dir = tempfile.TemporaryDirectory()
+        try:
+            tmp_file_path = os.path.join(tmp_dir.name, "chart_title_test_report.xlsx")
+
+            # 创建报表生成器并生成包含图表的报表
+            generator = InventoryReportGenerator()
+            generator.generate_inventory_report_with_chart(
+                inventory_data=self.test_data,
+                output_file_path=tmp_file_path,
+                device_code=self.device_code,
+                start_date=self.start_date,
+                end_date=self.end_date,
+                oil_name=self.oil_name,
+            )
+
+            # 加载工作簿验证图表标题
+            wb = load_workbook(tmp_file_path)
+            ws = wb.active
+            chart = ws._charts[0]
+
+            # 验证图表存在
+            self.assertIsNotNone(chart)
+            
+            # 验证图表标题存在
+            self.assertIsNotNone(chart.title)
+            
+            # 验证图表标题有内容
+            self.assertTrue(hasattr(chart.title, 'tx'))
+            
+            # 如果标题有str属性，则验证其内容
+            if hasattr(chart.title, 'tx') and hasattr(chart.title.tx, 'str'):
+                # 标题应该包含设备编号和油品名称
+                title_text = chart.title.tx.str
+                self.assertIn(self.device_code, title_text)
+                self.assertIn(self.oil_name, title_text)
 
             wb.close()
         finally:

@@ -89,7 +89,7 @@ pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 |------|----------|----------|------|
 | mysql-connector-python | 8.0.33 | 固定版本 | 避免内存访问冲突问题 |
 | PyMySQL | >=1.0.0 | 最小版本 | 备选数据库驱动 |
-| openpyxl | 3.1.2 | 固定版本 | Excel处理库 |
+| openpyxl | 3.1.0 | 固定版本 | Excel处理库 |
 | pandas | >=1.5.0 | 最小版本 | 数据处理库 |
 
 ## 环境维护建议

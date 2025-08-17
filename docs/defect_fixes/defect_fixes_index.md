@@ -12,6 +12,15 @@
 
 ### 2025年
 
+#### [2025-08-20] 数据库驱动内存访问冲突问题修复
+- **文件**: [20250820_mysql_driver_memory_conflict_issue.md](20250820_mysql_driver_memory_conflict_issue.md)
+- **问题类型**: 数据库驱动兼容性问题
+- **严重程度**: 高
+- **核心修改**: 
+  - 解决mysql-connector-python 9.0+版本在Windows环境下的内存访问冲突问题
+  - 实现双驱动支持机制（mysql-connector-python和PyMySQL）
+  - 固定mysql-connector-python版本为8.0.33
+
 #### [2025-08-17] 库存表图表显示问题修复
 - **文件**: [20250817_inventory_chart_display_issue.md](20250817_inventory_chart_display_issue.md)
 - **问题类型**: 图表显示异常
@@ -34,6 +43,16 @@
 - **严重程度**: 中
 - **核心修改**: 
   - 修复"每日用量明细"工作表多油品写入问题
+
+## 文档维护说明
+
+为避免文档重复和保持一致性，项目采用以下文档维护策略：
+
+1. 主要文档保留在其逻辑位置（如测试文档保留在tests目录下）
+2. 通过MkDocs导航配置引用不同目录的文档
+3. 避免在多个位置维护相同内容的文档
+
+## 历史记录
 
 ---
 *注: 所有修复均已提交到Git版本控制系统并推送到远程仓库*

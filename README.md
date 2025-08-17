@@ -15,8 +15,34 @@ ZR Daily Report 是一个用于生成切削液设备日常库存报告的Python�
 ## 项目依赖
 
 - Python 3.8+
-- Windows 7+ 操作系统
+- Windows 7+ 操作系统（Linux/macOS也支持部分功能）
 - MySQL数据库访问权限
+
+核心依赖：
+- openpyxl == 3.1.0 (Excel处理)  # 改回正确的版本3.1.0
+- mysql-connector-python >= 8.0.0, < 9.0.0 (MySQL数据库连接)
+- PyMySQL >= 1.0.0 (备选数据库驱动)
+- pandas >= 1.5.0 (数据处理)
+- cryptography >= 3.4.8 (配置文件加密)
+
+Web框架依赖：
+- fastapi == 0.104.1 (Web API框架)
+- uvicorn[standard] == 0.24.0 (ASGI服务器)
+- jinja2 == 3.1.2 (模板引擎)
+- python-multipart == 0.0.6 (文件上传支持)
+
+异步处理依赖：
+- aiohttp >= 3.8.0 (异步HTTP客户端)
+- aiomysql == 0.2.0 (异步MySQL客户端)
+- asyncio-mqtt == 0.16.1 (MQTT支持)
+
+缓存支持依赖：
+- redis == 5.0.1
+- aioredis == 2.0.1
+
+监控和日志依赖：
+- prometheus-client == 0.19.0
+- structlog == 23.2.0
 
 ## 安装步骤
 
@@ -49,55 +75,35 @@ install_deps.bat
 # 方式2: 使用阿里云镜像源安装（推荐，特别是中国大陆用户）
 pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 
-# 方式3: 配置永久使用阿里云镜像源，然后正常安装
-pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
-pip install -r requirements.txt
+# 方式3: 使用pip安装基础依赖
+pip install .
 
-# 方式4: 安装锁定版本的依赖（确保环境一致性，推荐用于生产环境）
-pip install -r requirements-lock.txt
+# 方式4: 安装所有依赖（包括测试和开发依赖）
+pip install .[all]
 
-# 方式5: 直接安装（可能较慢，特别是中国大陆用户）
-pip install -r requirements.txt
+# 方式5: 分别安装特定功能依赖
+pip install .[test]     # 测试依赖
+pip install .[dev]      # 开发依赖
+pip install .[docs]     # 文档依赖
 ```
 
-推荐中国大陆用户使用阿里云镜像源安装依赖，可以显著提高下载速度。
+### 4. 配置环境
 
-## 文档
+1. 复制环境配置文件：
+   ```bash
+   copy .env.example .env
+   ```
 
-本项目使用 MkDocs 和 Material for MkDocs 构建文档。
+2. 编辑 .env 文件，配置数据库连接信息
 
-### 预览文档
+3. 配置 query_config.json 文件，设置数据库查询语句
 
-```bash
-# 启动本地服务器预览文档
-mkdocs serve
-```
+## 运行程序
 
-Then in your browser open http://localhost:8000 to view the documentation.
-
-### 构建文档
+### 基本用法
 
 ```bash
-# 构建静态文档站点
-mkdocs build
-```
-
-构建后的文档将位于 [site](file:///D:/pythonfile/Daily_Report/site) 目录中。
-
-## 环境配置
-
-项目支持双重数据库驱动以提高兼容性：
-- 优先使用 `mysql-connector-python`（版本8.0.33）
-- 备选使用 `PyMySQL`（版本1.0.0+）
-
-详细环境配置信息请参考 [环境配置文档](docs/environment_config.md)。
-
-## 使用方法
-
-### 运行程序
-
-```bash
-# 生成库存报表和客户对账单（默认）
+# 生成库存报表和客户对账单（默认模式）
 python ZR_Daily_Report.py
 
 # 只生成库存报表
@@ -106,6 +112,10 @@ python ZR_Daily_Report.py --mode inventory
 # 只生成客户对账单
 python ZR_Daily_Report.py --mode statement
 ```
+
+### 配置说明
+
+程序需要正确配置数据库连接信息和查询语句。详细配置说明请参考 [环境配置文档](docs/environment_config.md)。
 
 ## 项目结构
 ```
@@ -119,86 +129,37 @@ python ZR_Daily_Report.py --mode statement
 │   ├── handlers/        # 处理器模块
 │   ├── monitoring/      # 监控模块
 │   ├── utils/           # 工具模块
-│   └── web/             # Web应用模块
-├── template/            # 报表模板目录
-├── test_output/         # 测试输出目录
-├── tests/               # 测试用例目录
-│   └── TESTING.md       # 测试框架文档
-├── ZR_Daily_Report.py   # 主程序
-├── requirements.txt     # 依赖配置文件
-└── requirements-lock.txt # 锁定版本的依赖配置文件
+├── template/            # 模板目录
+├── tests/               # 测试目录
+├── .env                 # 环境变量文件
+├── .gitignore           # Git忽略文件
+├── query_config.json    # 查询配置文件(加密)
+├── README.md            # 项目说明文档
+├── requirements.txt     # 依赖包列表
+└── ZR_Daily_Report.py   # 主程序文件
 ```
 
-## 依赖管理最佳实践
+## 核心功能模块
 
-本项目遵循以下依赖管理最佳实践：
+### 数据库处理模块
+负责与MySQL数据库的连接和数据查询操作。
 
-### 1. 虚拟环境强制使用
-- 所有开发必须在虚拟环境中进行
-- 虚拟环境目录(.venv)必须加入.gitignore
+### 文件处理模块
+处理设备信息文件的读取和解析。
 
-### 2. 依赖版本控制
-- 使用requirements.txt管理依赖
-- 对关键依赖指定具体版本号(如`package==1.2.3`)
-- 使用`requirements-lock.txt`锁定所有依赖的确切版本
+### 库存报表处理模块
+生成设备库存报表和趋势图表。
 
-### 3. 依赖安装验证
-- 新开发者应使用`pip install -r requirements.txt`验证依赖安装
-- 使用阿里云镜像加速安装: `pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/`
+### 对账单处理模块
+生成客户对账单，支持动态油品列处理。
 
-### 4. 自动化验证流程
-- 在CI/CD中集成依赖安装和测试流程
-- 使用GitHub Actions等工具自动验证不同Python版本的依赖兼容性
+## 配置文件
 
-### 5. 依赖管理工具
-- 推荐使用pipenv或poetry进行依赖管理
-- 使用tox进行多环境测试
+项目使用加密的配置文件存储数据库连接信息和查询语句。配置文件位于 `config/` 目录下。
 
-### 6. 文档化要求
-- 在README.md中明确记录环境设置和依赖安装步骤
-- 包含虚拟环境创建、激活和依赖安装的完整流程说明
+## 代码质量
 
-## 4. 开发环境搭建
-
-### 必需工具
-- Python 3.8+
-- Windows 7+ 操作系统或Linux/macOS
-- MySQL数据库访问权限
-
-### 搭建步骤
-1. 克隆项目:
-   ```bash
-   git clone https://github.com/ChrisGanbare/Daily_Report.git
-   ```
-2. 创建虚拟环境:
-   ```bash
-   python -m venv .venv
-   ```
-3. 激活虚拟环境:
-   - Windows: `.venv\Scripts\activate`
-   - Linux/macOS: `source .venv/bin/activate`
-4. 安装依赖:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## 5. 安装
-
-使用以下命令安装依赖：
-
-```bash
-pip install -r requirements.txt
-```
-
-或者安装开发依赖：
-
-```bash
-pip install -r requirements.txt[dev]
-```
-
-## 6. 代码质量检查
-
-本项目使用多种工具来确保代码质量：
+项目使用多种工具来确保代码质量：
 
 1. **flake8**: 代码风格检查工具，用于检查代码是否符合PEP 8规范
 2. **black**: 代码格式化工具，确保代码风格一致性
@@ -269,28 +230,15 @@ python scripts/setup-git-hooks.py
 1. 在多个Python版本上运行测试
 2. 运行代码质量检查
 3. 构建Python包
-4. 在满足条件时部署到PyPI
 
-代码质量门禁包括：
-- 必须通过所有测试
-- 代码覆盖率必须达到80%以上
-- 必须通过所有代码质量检查
+## 测试
 
+项目包含全面的测试套件，详情请参考 [测试文档](tests/TESTING.md)。
 
-### 配置文件
-1. 创建加密密钥文件 `config/.env`
-2. 创建明文配置文件 `config/query_config.json`
-3. 运行工具脚本生成加密配置文件 `config/query_config_encrypted.json`
+## 缺陷修复记录
 
-## 8. 测试
+项目开发过程中发现并修复的重要缺陷记录请参考 [缺陷修复记录](docs/defect_fixes/defect_fixes_index.md)
 
-运行测试:
-```bash
-python -m pytest tests/ -v
-```
+## 贡献
 
-
-
-## 11. 许可证
-
-[待定]
+欢迎提交 Issue 和 Pull Request 来帮助改进项目。

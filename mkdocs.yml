@@ -21,35 +21,9 @@ theme:
 
 nav:
   - 首页: index.md
-  - 安装指南: ../README.md
-  - 使用说明: ../README.md
-  - 技术文档: 
-    - 概述: ../docs/technical_documentation.md
-    - 环境配置: ../docs/environment_config.md
-    - 版本规划: ../docs/version_plan.md
-    - 发布计划: ../docs/release_plan.md
-    - 改进建议: ../docs/improvements.md
-    - CI/CD指南: ../docs/ci_cd_guide.md
-    - 代码质量: ../docs/code-quality.md
+  - 安装与配置: ../README.md#安装步骤
+  - 使用说明: ../README.md#运行程序
+  - 技术文档: technical_documentation.md
   - 测试指南: ../tests/TESTING.md
-  - 缺陷修复:
-    - 索引: ../defect_fixes/INDEX.md
-    - 配置文件读取问题: ../defect_fixes/20250808_config_file_reading_issue.md
-    - 对账单多油品问题: ../defect_fixes/20250808_statement_multiple_oil_issue.md
-
-markdown_extensions:
-  - pymdownx.highlight:
-      anchor_linenums: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - admonition
-  - pymdownx.arithmatex:
-      generic: true
-  - footnotes
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.mark
-  - attr_list
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - 缺陷修复: defect_fixes/defect_fixes_index.md
+  - 开发指南: code-quality.md

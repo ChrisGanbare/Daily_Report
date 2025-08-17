@@ -899,5 +899,7 @@ def main():
         print(f"详细错误信息:\n{traceback.format_exc()}")
         exit(1)
 
+
+# 保证这个部分没有额外的缩进或空行
 if __name__ == "__main__":
     main()

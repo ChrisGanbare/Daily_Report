@@ -2,6 +2,7 @@
 import os
 import sys
 import unittest
+from unittest.mock import patch, MagicMock
 
 from tests.base_test import BaseTestCase
 
@@ -36,3 +37,57 @@ class TestZRDailyReport(BaseTestCase):
         
         # 如果没有抛出异常，说明导入成功
         self.assertTrue(True)
+
+    @patch('ZR_Daily_Report.print_usage')
+    @patch('ZR_Daily_Report.show_mode_selection_dialog')
+    def test_main_function_with_no_args(self, mock_dialog, mock_print_usage):
+        """测试主程序在没有参数时的行为"""
+        from ZR_Daily_Report import main
+        mock_dialog.return_value = None
+        
+        # 模拟没有命令行参数的情况
+        with patch('sys.argv', ['ZR_Daily_Report.py']):
+            main()
+            
+        # 验证调用了使用说明和对话框
+        mock_print_usage.assert_called_once()
+        mock_dialog.assert_called_once()
+
+    @patch('ZR_Daily_Report.generate_inventory_reports')
+    def test_main_function_with_inventory_mode(self, mock_generate_inventory):
+        """测试主程序在库存模式下的行为"""
+        from ZR_Daily_Report import main
+        
+        # 模拟命令行参数
+        with patch('sys.argv', ['ZR_Daily_Report.py', '--mode', 'inventory']):
+            main()
+            
+        # 验证调用了库存报表生成函数
+        mock_generate_inventory.assert_called_once()
+
+    @patch('ZR_Daily_Report.generate_customer_statement')
+    def test_main_function_with_statement_mode(self, mock_generate_statement):
+        """测试主程序在对账单模式下的行为"""
+        from ZR_Daily_Report import main
+        
+        # 模拟命令行参数
+        with patch('sys.argv', ['ZR_Daily_Report.py', '--mode', 'statement']):
+            main()
+            
+        # 验证调用了客户对账单生成函数
+        mock_generate_statement.assert_called_once()
+
+    @patch('ZR_Daily_Report.generate_inventory_reports')
+    @patch('ZR_Daily_Report.generate_customer_statement')
+    def test_main_function_with_both_mode(self, mock_generate_statement, mock_generate_inventory):
+        """测试主程序在同时生成两种报表模式下的行为"""
+        from ZR_Daily_Report import main
+        mock_generate_inventory.return_value = []
+        
+        # 模拟命令行参数
+        with patch('sys.argv', ['ZR_Daily_Report.py', '--mode', 'both']):
+            main()
+            
+        # 验证调用了库存报表和客户对账单生成函数
+        mock_generate_inventory.assert_called_once()
+        mock_generate_statement.assert_called_once()
