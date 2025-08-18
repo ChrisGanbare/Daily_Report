@@ -18,7 +18,7 @@ class ConfigHandler:
         if config_dir is None:
             # 默认使用项目根目录下的config文件夹
             self.config_dir = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config"
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config"
             )
         else:
             self.config_dir = config_dir
@@ -122,6 +122,14 @@ class ConfigHandler:
             config_str = decrypted_data.decode("utf-8")
             print(f"解密数据转字符串成功，字符串长度: {len(config_str)} 字节")
             config = json.loads(config_str)
+        except json.JSONDecodeError as e:
+            error_msg = (f"解析解密后的配置文件失败: {e}\n"
+                        f"请检查以下事项：\n"
+                        f"1. 确认解密后的配置文件内容是有效的JSON格式\n"
+                        f"2. 检查配置文件是否完整未损坏")
+            print(error_msg)
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            raise Exception(error_msg) from e
         except Exception as e:
             error_msg = (f"解析解密后的配置文件失败: {e}\n"
                         f"请检查以下事项：\n"
@@ -211,7 +219,7 @@ class ConfigHandler:
                         f"2. 检查是否有语法错误，如缺少引号、括号不匹配等\n"
                         f"3. 可以使用在线JSON验证工具检查文件格式")
             print(error_msg)
-            raise Exception(error_msg) from e
+            raise json.JSONDecodeError(error_msg, e.doc, e.pos) from e
         except Exception as e:
             error_msg = (f"加载明文配置文件失败: {e}\n"
                         f"请检查以下事项：\n"

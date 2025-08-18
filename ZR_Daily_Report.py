@@ -143,7 +143,7 @@ def _handle_db_connection_error(log_messages, error, error_type="MySQL错误"):
     
     _save_error_log(log_messages, error_details, "数据库连接错误日志")
 
-def generate_inventory_reports(log_prefix="库存表处理日志"):
+def generate_inventory_reports(log_prefix="库存表处理日志", query_config=None):
     """
     专门用于生成库存报表
     """
@@ -165,8 +165,9 @@ def generate_inventory_reports(log_prefix="库存表处理日志"):
         file_handler = FileHandler()
         data_validator = DataValidator()
         
-        # 读取查询配置文件
-        query_config = load_config()
+        # 如果没有传入配置，则读取查询配置文件
+        if query_config is None:
+            query_config = load_config()
         
         # 提取数据库配置和SQL模板
         db_config = query_config.get('db_config', {})
@@ -288,7 +289,7 @@ def generate_inventory_reports(log_prefix="库存表处理日志"):
                 print(f"  设备ID: {device_id}, 客户ID: {customer_id}")
                 
                 # 获取客户名称
-                customer_name = db_handler.get_customer_name_by_device_code(device_id, customer_query_template)
+                customer_name = db_handler.get_customer_name_by_device_code(device_code)
                 print(f"  客户名称: {customer_name}")
                 
                 # 生成查询语句
@@ -304,7 +305,7 @@ def generate_inventory_reports(log_prefix="库存表处理日志"):
                 
                 # 获取库存数据
                 print("  正在获取库存数据...")
-                data, columns, raw_data = db_handler.fetch_inventory_data(query)
+                data, columns, raw_data = db_handler.fetch_inventory_data(device_id, inventory_query_template, start_date, end_date)
                 
                 if not data:
                     print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
@@ -453,7 +454,7 @@ def generate_inventory_reports(log_prefix="库存表处理日志"):
         
         exit(1)
 
-def generate_customer_statement(log_prefix="对账单处理日志", devices_data=None):
+def generate_customer_statement(log_prefix="对账单处理日志", devices_data=None, query_config=None):
     """
     生成客户对账单的主函数
     """
@@ -512,7 +513,9 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
         
         # 加载数据库配置
         try:
-            query_config = load_config()
+            # 如果没有传入配置，则加载配置
+            if query_config is None:
+                query_config = load_config()
             db_config = query_config['db_config']
             inventory_query_template = query_config['sql_templates']['inventory_query']
             device_query_template = query_config['sql_templates']['device_id_query']
@@ -598,7 +601,7 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
                 print(f"  设备ID: {device_id}, 客户ID: {customer_id}")
                 
                 # 获取客户名称
-                customer_name = db_handler.get_customer_name_by_device_code(device_id, customer_query_template)
+                customer_name = db_handler.get_customer_name_by_device_code(device_code)
                 print(f"  客户名称: {customer_name}")
                 
                 # 生成查询语句
@@ -611,7 +614,7 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
                 
                 # 获取库存数据
                 print("  正在获取库存数据...")
-                data, columns, raw_data = db_handler.fetch_inventory_data(query)
+                data, columns, raw_data = db_handler.fetch_inventory_data(device_id, inventory_query_template, start_date, end_date)
                 
                 if not data:
                     print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
@@ -876,9 +879,12 @@ def main():
         elif mode == 'statement':
             generate_customer_statement()
         elif mode == 'both':
+            # 先加载配置文件，避免重复加载
+            query_config = load_config()
+            
             # 先执行库存报表功能，并获取设备数据
             print("开始执行库存报表生成功能...")
-            devices_data = generate_inventory_reports("库存表处理日志")
+            devices_data = generate_inventory_reports("库存表处理日志", query_config)
             
             # 添加分割线以区分两个任务
             print("\n" + "=" * 50)
@@ -886,13 +892,13 @@ def main():
             print("以下为客户对账单生成日志")
             print("=" * 50 + "\n")
             
-            # 再执行客户对账单功能，传递设备数据避免重复选择
+            # 再执行客户对账单功能，传递设备数据避免重复选择和配置对象避免重复加载
             print("开始执行客户对账单生成功能...")
             if devices_data:
-                generate_customer_statement("对账单处理日志", devices_data)
+                generate_customer_statement("对账单处理日志", devices_data, query_config)
             else:
                 # 如果没有获取到设备数据，则正常执行
-                generate_customer_statement("对账单处理日志")
+                generate_customer_statement("对账单处理日志", None, query_config)
             
     except Exception as e:
         print(f"主程序执行过程中发生异常: {e}")

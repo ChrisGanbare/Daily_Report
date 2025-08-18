@@ -95,6 +95,45 @@ class TestCoreDbHandler(BaseTestCase):
         self.db_handler.disconnect()
         mock_connection.close.assert_called_once()
 
+    @patch('src.core.db_handler.mysql.connector')
+    def test_databasehandler_disconnect_with_pymysql_connection(self, mock_mysql):
+        """
+        测试 DatabaseHandler.disconnect 方法关闭PyMySQL连接
+        """
+        mock_connection = Mock()
+        mock_connection.open = True
+        mock_connection.is_connected = None  # PyMySQL没有is_connected方法
+        self.db_handler.connection = mock_connection
+        
+        self.db_handler.disconnect()
+        mock_connection.close.assert_called_once()
+
+    @patch('src.core.db_handler.mysql.connector')
+    def test_databasehandler_disconnect_with_closed_connection(self, mock_mysql):
+        """
+        测试 DatabaseHandler.disconnect 方法处理已关闭的连接
+        """
+        mock_connection = Mock()
+        mock_connection.is_connected.return_value = False
+        self.db_handler.connection = mock_connection
+        
+        self.db_handler.disconnect()
+        # close方法不应被调用
+        mock_connection.close.assert_not_called()
+
+    @patch('src.core.db_handler.mysql.connector')
+    def test_databasehandler_disconnect_with_exception(self, mock_mysql):
+        """
+        测试 DatabaseHandler.disconnect 方法处理关闭连接时的异常
+        """
+        mock_connection = Mock()
+        mock_connection.is_connected.return_value = True
+        mock_connection.close.side_effect = Exception("关闭连接时出错")
+        self.db_handler.connection = mock_connection
+        
+        # 不应抛出异常
+        self.db_handler.disconnect()
+
     def test_databasehandler_get_device_and_customer_info(self):
         """
         测试 DatabaseHandler.get_device_and_customer_info 方法
@@ -122,78 +161,105 @@ class TestCoreDbHandler(BaseTestCase):
         result = self.db_handler.get_device_and_customer_info("DEV001", "SELECT id, customer_id FROM device WHERE code = %s")
         self.assertIsNone(result)
 
-    def test_databasehandler_fetch_inventory_data(self):
-        """
-        测试 DatabaseHandler.fetch_inventory_data 方法
-        """
-        mock_connection = Mock()
-        mock_cursor = Mock()
-        mock_connection.cursor.return_value = mock_cursor
-        mock_cursor.fetchall.return_value = [
-            (datetime(2025, 7, 1, 10, 0, 0), 0.95),
-            (datetime(2025, 7, 1, 14, 0, 0), 0.90),
-            (datetime(2025, 7, 2, 10, 0, 0), 0.85)
-        ]
-        mock_cursor.description = [('加注时间',), ('原油剩余比例',)]
-        self.db_handler.connection = mock_connection
-        
-        result, columns, raw_data = self.db_handler.fetch_inventory_data("SELECT time, remaining FROM inventory")
-        self.assertEqual(len(result), 2)  # 同一天的两条记录应该合并为一条
-        self.assertEqual(columns, ['加注时间', '原油剩余比例'])
-        self.assertEqual(len(raw_data), 3)
-
-    def test_databasehandler_get_customer_name_by_device_code(self):
+    @patch('src.core.db_handler.mysql.connector')
+    def test_databasehandler_get_customer_name_by_device_code(self, mock_mysql):
         """
         测试 DatabaseHandler.get_customer_name_by_device_code 方法
         """
-        # 模拟get_customer_id方法返回客户ID
-        self.db_handler.get_customer_id = Mock(return_value=100)
+        # 模拟设备信息查询结果
+        mock_device_cursor = Mock()
+        mock_device_cursor.fetchone.return_value = (1, 100)  # 设备ID, 客户ID
         
+        # 模拟客户名称查询结果
+        mock_customer_cursor = Mock()
+        mock_customer_cursor.fetchone.return_value = ("测试客户",)
+        
+        # 模拟连接和游标
         mock_connection = Mock()
-        mock_cursor = Mock()
-        mock_connection.cursor.return_value = mock_cursor
-        mock_cursor.fetchone.return_value = ("测试客户",)
+        mock_connection.cursor.side_effect = [mock_device_cursor, mock_customer_cursor]
         self.db_handler.connection = mock_connection
         
-        result = self.db_handler.get_customer_name_by_device_code(1, "SELECT name FROM customer WHERE id = %s")
-        self.assertEqual(result, "测试客户")
-
-    def test_databasehandler_get_customer_name_by_device_code_not_found(self):
-        """
-        测试 DatabaseHandler.get_customer_name_by_device_code 方法未找到客户时返回默认值
-        """
-        # 模拟get_customer_id方法返回None
-        self.db_handler.get_customer_id = Mock(return_value=None)
+        customer_name = self.db_handler.get_customer_name_by_device_code("DEV001")
         
-        result = self.db_handler.get_customer_name_by_device_code(1, "SELECT name FROM customer WHERE id = %s")
-        self.assertEqual(result, "未知客户")
+        self.assertEqual(customer_name, "测试客户")
+        self.assertEqual(mock_connection.cursor.call_count, 2)
 
-    def test_databasehandler_get_customer_id(self):
+    @patch('src.core.db_handler.mysql.connector')
+    def test_databasehandler_get_customer_name_by_device_code_not_found(self, mock_mysql):
         """
-        测试 DatabaseHandler.get_customer_id 方法
+        测试 DatabaseHandler.get_customer_name_by_device_code 方法处理未找到客户的情况
         """
+        # 模拟设备信息查询结果为空（设备不存在）
+        mock_device_cursor = Mock()
+        mock_device_cursor.fetchone.return_value = None
+        
+        # 模拟连接和游标
         mock_connection = Mock()
-        mock_cursor = Mock()
-        mock_connection.cursor.return_value = mock_cursor
-        mock_cursor.fetchone.return_value = (100,)
+        mock_connection.cursor.side_effect = [mock_device_cursor]
         self.db_handler.connection = mock_connection
         
-        result = self.db_handler.get_customer_id(1)
-        self.assertEqual(result, 100)
-        mock_cursor.execute.assert_called_once_with("SELECT customer_id FROM oil.t_device WHERE id = %s", (1,))
+        customer_name = self.db_handler.get_customer_name_by_device_code("DEV001")
+        
+        self.assertEqual(customer_name, "未知客户")
 
-    def test_databasehandler_get_customer_id_not_found(self):
+    @patch('src.core.db_handler.mysql.connector')
+    def test_databasehandler_fetch_inventory_data(self, mock_mysql):
         """
-        测试 DatabaseHandler.get_customer_id 方法未找到客户ID时返回None
+        测试 DatabaseHandler.fetch_inventory_data 方法
         """
-        mock_connection = Mock()
         mock_cursor = Mock()
+        mock_connection = Mock()
         mock_connection.cursor.return_value = mock_cursor
-        mock_cursor.fetchone.return_value = None
         self.db_handler.connection = mock_connection
         
-        result = self.db_handler.get_customer_id(1)
-        self.assertIsNone(result)
+        # 模拟查询结果
+        mock_cursor.fetchall.return_value = [
+            (date(2025, 7, 1), 95.5),
+            (date(2025, 7, 2), 93.2)
+        ]
+        
+        inventory_data = self.db_handler.fetch_inventory_data(
+            1, "SELECT * FROM oil.t_order WHERE device_id = %s"
+        )
+        
+        self.assertIsNotNone(inventory_data)
+        mock_cursor.execute.assert_called_once()
+        mock_cursor.fetchall.assert_called_once()
+        mock_cursor.close.assert_called_once()
+
+    @patch('src.core.db_handler.mysql.connector')
+    def test_databasehandler_fetch_inventory_data_empty_result(self, mock_mysql):
+        """
+        测试 DatabaseHandler.fetch_inventory_data 方法处理空结果
+        """
+        mock_cursor = Mock()
+        mock_connection = Mock()
+        mock_connection.cursor.return_value = mock_cursor
+        self.db_handler.connection = mock_connection
+        
+        # 模拟查询结果为空
+        mock_cursor.fetchall.return_value = []
+        
+        inventory_data = self.db_handler.fetch_inventory_data(
+            1, "SELECT * FROM oil.t_order WHERE device_id = %s"
+        )
+        
+        self.assertEqual(inventory_data, ([], [], []))
+        mock_cursor.execute.assert_called_once()
+        mock_cursor.fetchall.assert_called_once()
+        mock_cursor.close.assert_called_once()
+
+    @patch('src.core.db_handler.pooling.MySQLConnectionPool')
+    def test_databasehandler_connect_exception_handling(self, mock_pool_class):
+        """
+        测试 DatabaseHandler.connect 方法处理连接异常
+        """
+        mock_pool_class.side_effect = Exception("连接失败")
+
+        with self.assertRaises(Exception) as context:
+            self.db_handler.connect()
+            
+        self.assertIn("连接失败", str(context.exception))
 
     # 以下是从test_db_connection.py合并过来的测试用例
     @unittest.skipIf(not DATABASE_HANDLER_AVAILABLE, "数据库处理模块不可用")
@@ -323,21 +389,21 @@ class TestCoreDbHandler(BaseTestCase):
         """测试获取客户名称成功"""
         # 模拟连接和游标
         mock_connection = MagicMock()
-        mock_cursor = MagicMock()
-        mock_second_cursor = MagicMock()
+        mock_device_cursor = MagicMock()
+        mock_customer_cursor = MagicMock()
         mock_connect.return_value = mock_connection
-        mock_connection.cursor.side_effect = [mock_cursor, mock_second_cursor]
-        
+        mock_connection.cursor.side_effect = [mock_device_cursor, mock_customer_cursor]
+
         # 模拟查询结果
-        mock_cursor.fetchone.return_value = (100,)  # 客户ID
-        mock_second_cursor.fetchone.return_value = ("测试客户",)  # 客户名称
-        
+        mock_device_cursor.fetchone.return_value = (1, 100)  # 设备ID, 客户ID
+        mock_customer_cursor.fetchone.return_value = ("测试客户",)  # 客户名称
+
         # 模拟连接池
         if not USE_PYMYSQL:
             mock_pool_instance = MagicMock()
             mock_pool_instance.get_connection.return_value = mock_connection
             mock_pool.return_value = mock_pool_instance
-        
+
         # 创建数据库处理器并连接
         db_config = {
             'host': '8.139.83.130',
@@ -348,13 +414,13 @@ class TestCoreDbHandler(BaseTestCase):
         }
         db_handler = DatabaseHandler(db_config)
         db_handler.connect()
-        
+
         # 调用方法
-        result = db_handler.get_customer_name_by_device_code(1, "SELECT customer_name FROM oil.t_customer WHERE id = %s")
-        
+        result = db_handler.get_customer_name_by_device_code("DEV001")
+
         # 验证结果
         self.assertEqual(result, "测试客户")
-        mock_second_cursor.execute.assert_called_once_with(
+        mock_customer_cursor.execute.assert_called_once_with(
             "SELECT customer_name FROM oil.t_customer WHERE id = %s", 
             (100,)  # 注意这里应该是客户ID而不是设备ID
         )

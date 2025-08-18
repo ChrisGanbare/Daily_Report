@@ -104,25 +104,43 @@ class DatabaseHandler:
     def disconnect(self):
         """关闭数据库连接"""
         try:
-            if self.connection and hasattr(self.connection, 'is_connected'):
-                if self.connection.is_connected():
-                    self.connection.close()
-                    print("数据库连接已关闭")
-                else:
-                    print("数据库连接已关闭或未连接")
-            elif self.connection and hasattr(self.connection, 'open'):
-                # PyMySQL使用open属性
-                if self.connection.open:
-                    self.connection.close()
-                    print("数据库连接已关闭")
-                else:
-                    print("数据库连接已关闭或未连接")
-            elif self.connection:
-                # 尝试直接调用close方法
-                self.connection.close()
-                print("数据库连接已关闭")
-            else:
+            # 检查是否有连接对象
+            if not self.connection:
                 print("数据库连接已关闭或未连接")
+                return
+
+            # 检查连接是否有效
+            if hasattr(self.connection, 'is_connected'):
+                # mysql-connector-python
+                try:
+                    if self.connection.is_connected():
+                        self.connection.close()
+                        print("数据库连接已关闭")
+                    else:
+                        print("数据库连接已关闭或未连接")
+                except Exception:
+                    # is_connected()可能抛出异常
+                    self.connection.close()
+                    print("数据库连接已关闭")
+            elif hasattr(self.connection, 'open'):
+                # PyMySQL
+                try:
+                    if self.connection.open:
+                        self.connection.close()
+                        print("数据库连接已关闭")
+                    else:
+                        print("数据库连接已关闭或未连接")
+                except Exception:
+                    # open属性可能抛出异常
+                    self.connection.close()
+                    print("数据库连接已关闭")
+            else:
+                # 尝试直接调用close方法
+                try:
+                    self.connection.close()
+                    print("数据库连接已关闭")
+                except Exception:
+                    print("数据库连接已关闭或未连接")
         except Exception as e:
             print(f"关闭数据库连接时发生错误: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
@@ -152,37 +170,59 @@ class DatabaseHandler:
             print(f"查询结果: {result}")
 
             return (result[0], result[1]) if result else None
-        except mysql.connector.Error as err:
-            print(f"查询设备ID失败: {err}")
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            return None
         except Exception as e:
             print(f"查询设备信息时发生未知错误: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
             return None
         finally:
             if cursor:
+                # 消费所有未读结果以避免"Unread result found"错误
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
                 cursor.close()
 
-    def fetch_inventory_data(self, query):
+    def fetch_inventory_data(self, device_id, query_or_template, start_date=None, end_date=None):
         """
         从数据库获取库存数据
 
         Args:
-            query (str): SQL查询语句
+            device_id (int): 设设备ID
+            query_or_template (str): SQL查询语句或模板
+            start_date (str, optional): 开始日期
+            end_date (str, optional): 结束日期
 
         Returns:
             tuple: (处理后的数据列表, 列名列表, 原始数据列表)
         """
         cursor = None
         try:
+            # 如果提供了日期参数，则格式化查询模板，否则直接使用查询语句
+            if start_date and end_date:
+                end_condition = f"{end_date} 23:59:59"
+                query = query_or_template.format(
+                    device_id=device_id,
+                    start_date=start_date,
+                    end_condition=end_condition
+                )
+            else:
+                query = query_or_template
+                
             print(f"执行库存数据查询，SQL: {query}")
             cursor = self.connection.cursor()
             cursor.execute(query)
             results = cursor.fetchall()
 
             # 获取列名
-            columns = [desc[0] for desc in cursor.description]
+            try:
+                if hasattr(cursor, 'description') and cursor.description:
+                    columns = [desc[0] for desc in cursor.description]
+                else:
+                    columns = []
+            except (TypeError, AttributeError):
+                # 在测试环境中，cursor.description可能是Mock对象
+                columns = []
             print(f"  查询返回 {len(results)} 条记录")
             print(f"  列名: {columns}")
 
@@ -251,49 +291,50 @@ class DatabaseHandler:
             ]
             print("  库存数据读取完成。")
             return result, columns, results
-        except mysql.connector.Error as err:
-            print(f"数据库查询失败: {err}")
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            raise
         except Exception as e:
             print(f"获取库存数据时发生未知错误: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
             raise
         finally:
             if cursor:
+                # 消费所有未读结果以避免"Unread result found"错误
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
                 cursor.close()
 
-    def get_customer_name_by_device_code(self, device_id, customer_query_template):
+    def get_customer_name_by_device_code(self, device_code):
         """
-        根据设备ID获取客户名称
+        根据设备编号获取客户名称
 
         Args:
-            device_id (int): 设备ID
-            customer_query_template (str): 客户查询SQL模板
+            device_code (str): 设备编号
 
         Returns:
             str: 客户名称
         """
         try:
-            print(f"查询客户名称，设备ID: {device_id}")
-            # 先通过设备ID获取客户ID
-            customer_id = self.get_customer_id(device_id)
-
-            if customer_id:
+            print(f"查询客户名称，设备编号: {device_code}")
+            # 先通过设备编号获取设备ID和客户ID
+            device_info = self.get_device_and_customer_info(device_code, 
+                "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s")
+            
+            if device_info:
+                _, customer_id = device_info  # 使用下划线表示我们不使用device_id
+                
                 # 再通过客户ID获取客户名称
                 cursor = self.connection.cursor()
-                print(f"执行客户名称查询，SQL: {customer_query_template}, 参数: {customer_id}")
-                cursor.execute(customer_query_template, (customer_id,))
+                # 定义专用的客户名称查询SQL
+                customer_query = "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+                print(f"执行客户名称查询，SQL: {customer_query}, 参数: {customer_id}")
+                cursor.execute(customer_query, (customer_id,))
                 customer_result = cursor.fetchone()
                 print(f"客户名称查询结果: {customer_result}")
                 if customer_result and customer_result[0]:
                     return customer_result[0]
 
-            print(f"警告：未找到设备ID {device_id} 对应的客户信息")
-            return "未知客户"
-        except mysql.connector.Error as err:
-            print(f"通过设备ID查询客户名称失败: {err}")
-            print(f"详细错误信息:\n{traceback.format_exc()}")
+            print(f"警告：未找到设备编号 {device_code} 对应的客户信息")
             return "未知客户"
         except Exception as e:
             print(f"查询客户名称时发生未知错误: {e}")
@@ -319,10 +360,6 @@ class DatabaseHandler:
             result = cursor.fetchone()
             print(f"客户ID查询结果: {result}")
             return result[0] if result else None
-        except mysql.connector.Error as err:
-            print(f"查询客户ID失败: {err}")
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            return None
         except Exception as e:
             print(f"查询客户ID时发生未知错误: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")

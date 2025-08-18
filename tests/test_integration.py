@@ -57,18 +57,22 @@ class TestIntegration(BaseTestCase):
         mock_db_instance.get_customer_name_by_device_code.return_value = "测试客户"
         mock_db_instance.fetch_inventory_data.return_value = (
             [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)],
-            ["加注时间", "原油剩余比例"],
-            [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)]
+            ["加注时间", "原油剩余比例", "油品名称"],
+            [{"加注时间": date(2025, 7, 1), "原油剩余比例": 95.5, "油品名称": "切削液"},
+             {"加注时间": date(2025, 7, 2), "原油剩余比例": 93.2, "油品名称": "切削液"}]
         )
 
         # 模拟库存报告处理器
         mock_inventory_instance = mock_inventory_handler.return_value
-        mock_inventory_instance.generate_excel_with_chart.return_value = None
+        mock_inventory_instance.generate_inventory_report_with_chart.return_value = None
 
         # 执行主函数
-        test_args = ['ZR_Daily_Report.py', '--mode', 'inventory', '--csv', 'test_devices.csv']
+        test_args = ['ZR_Daily_Report.py', '--mode', 'inventory']
         with patch.object(sys, 'argv', test_args):
-            result = main()
+            with patch('src.utils.ui_utils.choose_file', return_value='test.csv'), \
+                 patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir), \
+                 patch('builtins.print'):  # 避免打印干扰
+                result = main()
 
         # 验证结果
         self.assertIsNone(result)  # main函数没有返回值
@@ -77,17 +81,23 @@ class TestIntegration(BaseTestCase):
         mock_db_instance.connect.assert_called_once()
         mock_db_instance.get_device_and_customer_info.assert_called()
         mock_db_instance.fetch_inventory_data.assert_called()
-        mock_inventory_instance.generate_excel_with_chart.assert_called()
+        mock_inventory_instance.generate_inventory_report_with_chart.assert_called()
 
     @patch('ZR_Daily_Report.load_config')
     def test_main_with_missing_config(self, mock_load_config):
         """测试配置文件缺失的情况"""
         mock_load_config.side_effect = FileNotFoundError("配置文件不存在")
 
-        test_args = ['ZR_Daily_Report.py', '--csv', 'test_devices.csv']
+        test_args = ['ZR_Daily_Report.py', '--mode', 'inventory']
         with patch.object(sys, 'argv', test_args):
-            with self.assertRaises(FileNotFoundError):
-                main()
+            with patch('src.utils.ui_utils.choose_file', return_value='test.csv'), \
+                 patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir), \
+                 patch('builtins.print'):
+                # 由于程序会调用exit(1)，我们需要捕获SystemExit异常
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+                # 验证退出码是1
+                self.assertEqual(cm.exception.code, 1)
 
     @patch('ZR_Daily_Report.load_config')
     @patch('ZR_Daily_Report.FileHandler')
@@ -116,10 +126,14 @@ class TestIntegration(BaseTestCase):
         # 执行主函数
         test_args = ['ZR_Daily_Report.py', '--mode', 'inventory']
         with patch.object(sys, 'argv', test_args):
-            result = main()
+            with patch('src.utils.ui_utils.choose_file', return_value='test.csv'), \
+                 patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir), \
+                 patch('builtins.print'):  # 避免打印干扰
+                result = main()
 
         # 验证结果
         self.assertIsNone(result)
+        mock_load_config.assert_called_once()
         mock_file_instance.read_devices_from_csv.assert_called_once()
 
     @patch('ZR_Daily_Report.load_config')
@@ -172,7 +186,10 @@ class TestIntegration(BaseTestCase):
         # 执行主函数
         test_args = ['ZR_Daily_Report.py', '--mode', 'statement']
         with patch.object(sys, 'argv', test_args):
-            result = main()
+            with patch('src.utils.ui_utils.choose_file', return_value='test.csv'), \
+                 patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir), \
+                 patch('builtins.print'):  # 避免打印干扰
+                result = main()
 
         # 验证结果
         self.assertIsNone(result)
@@ -222,13 +239,14 @@ class TestIntegration(BaseTestCase):
         mock_db_instance.get_customer_name_by_device_code.return_value = "测试客户"
         mock_db_instance.fetch_inventory_data.return_value = (
             [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)],
-            ["加注时间", "原油剩余比例"],
-            [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)]
+            ["加注时间", "原油剩余比例", "油品名称"],
+            [{"加注时间": date(2025, 7, 1), "原油剩余比例": 95.5, "油品名称": "切削液"},
+             {"加注时间": date(2025, 7, 2), "原油剩余比例": 93.2, "油品名称": "切削液"}]
         )
 
         # 模拟库存报告处理器
         mock_inventory_instance = mock_inventory_handler.return_value
-        mock_inventory_instance.generate_excel_with_chart.return_value = None
+        mock_inventory_instance.generate_inventory_report_with_chart.return_value = None
 
         # 模拟对账单处理器
         mock_statement_instance = mock_statement_handler.return_value
@@ -237,16 +255,21 @@ class TestIntegration(BaseTestCase):
         # 执行主函数
         test_args = ['ZR_Daily_Report.py', '--mode', 'both']
         with patch.object(sys, 'argv', test_args):
-            result = main()
+            with patch('src.utils.ui_utils.choose_file', return_value='test.csv'), \
+                 patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir), \
+                 patch('builtins.print'):  # 避免打印干扰
+                result = main()
 
         # 验证结果
         self.assertIsNone(result)
-        mock_load_config.assert_called_once()
+        # 在both模式下，load_config会被调用两次（库存报表和对账单各一次）
+        self.assertEqual(mock_load_config.call_count, 2)
         mock_file_instance.read_devices_from_csv.assert_called_once()
-        mock_db_instance.connect.assert_called_once()
+        mock_db_instance.connect.assert_called()
+        # 应该至少调用一次
         mock_db_instance.get_device_and_customer_info.assert_called()
         mock_db_instance.fetch_inventory_data.assert_called()
-        mock_inventory_instance.generate_excel_with_chart.assert_called()
+        mock_inventory_instance.generate_inventory_report_with_chart.assert_called()
         mock_statement_instance.generate_customer_statement_from_template.assert_called()
 
     @patch('ZR_Daily_Report.load_config')
@@ -286,17 +309,19 @@ class TestIntegration(BaseTestCase):
         mock_db_instance.get_customer_name_by_device_code.return_value = "测试客户"
         mock_db_instance.fetch_inventory_data.return_value = (
             [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)],
-            ["加注时间", "原油剩余比例"],
-            [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)]
+            ["加注时间", "原油剩余比例", "油品名称"],
+            [{"加注时间": date(2025, 7, 1), "原油剩余比例": 95.5, "油品名称": "切削液"},
+             {"加注时间": date(2025, 7, 2), "原油剩余比例": 93.2, "油品名称": "切削液"}]
         )
 
         # 执行generate_inventory_reports函数
         with patch('src.utils.ui_utils.choose_file', return_value='test.csv'), \
-             patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir):
+             patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir), \
+             patch('builtins.print'):  # 避免打印干扰
             result = generate_inventory_reports()
 
         # 验证结果
-        self.assertIsNone(result)  # generate_inventory_reports函数没有返回值
+        self.assertIsNotNone(result)  # generate_inventory_reports函数返回有效设备列表
         mock_load_config.assert_called_once()
         mock_file_instance.read_devices_from_csv.assert_called_once()
         mock_db_instance.connect.assert_called_once()
@@ -304,7 +329,8 @@ class TestIntegration(BaseTestCase):
     @patch('ZR_Daily_Report.load_config')
     @patch('ZR_Daily_Report.FileHandler')
     @patch('ZR_Daily_Report.DatabaseHandler')
-    def test_generate_customer_statement_function(self, mock_db_handler, mock_file_handler, mock_load_config):
+    @patch('tkinter.Tk')
+    def test_generate_customer_statement_function(self, mock_tk, mock_db_handler, mock_file_handler, mock_load_config):
         """测试generate_customer_statement函数独立执行"""
         # 模拟配置加载
         mock_load_config.return_value = {
@@ -342,9 +368,13 @@ class TestIntegration(BaseTestCase):
             [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)]
         )
 
+        # 模拟Tkinter
+        mock_root = MagicMock()
+        mock_tk.return_value = mock_root
+        mock_root.mainloop.return_value = None
+
         # 执行generate_customer_statement函数
-        with patch('src.utils.ui_utils.choose_file', return_value='test.csv'), \
-             patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir):
+        with patch('builtins.print'):  # 避免打印干扰
             result = generate_customer_statement()
 
         # 验证结果

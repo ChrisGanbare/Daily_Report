@@ -1,5 +1,6 @@
 import csv
 import os
+import time
 from datetime import timedelta
 from decimal import Decimal
 
@@ -70,6 +71,9 @@ class InventoryReportGenerator:
                 cleaned_data = [(start_date, 0), (end_date, 0)]
                 print(f"使用默认数据点: {cleaned_data}")
 
+            # 初始化工作簿
+            wb = Workbook()
+            
             # 处理不同导出格式
             if export_format.lower() == "csv":
                 with open(output_file_path.replace(".xlsx", ".csv"), "w", newline="") as f:
@@ -77,13 +81,24 @@ class InventoryReportGenerator:
                     writer.writerow(["日期", "库存百分比"])
                     writer.writerows(cleaned_data)
                 print(f"数据已导出为CSV格式：{output_file_path.replace('.xlsx', '.csv')}")
+                # 立即关闭工作簿
+                wb.close()
                 return
 
             # 补全数据
             data_dict = dict(cleaned_data)
             complete_data = []
             current_date = start_date
-            last_inventory = next(iter(cleaned_data))[1] if cleaned_data else 0
+
+            # 处理空数据情况，避免索引错误
+            if cleaned_data:
+                last_inventory = next(iter(cleaned_data))[1]
+            else:
+                last_inventory = 0
+                print("警告：没有有效的库存数据可供处理，将生成默认数据图表")
+                # 使用默认数据点，确保能生成图表
+                cleaned_data = [(start_date, 0), (end_date, 0)]
+                print(f"使用默认数据点: {cleaned_data}")
 
             while current_date <= end_date:
                 current_inventory = data_dict.get(current_date, last_inventory)
@@ -175,10 +190,18 @@ class InventoryReportGenerator:
                 )
                 print("请关闭相关文件后重试。")
                 raise
+            finally:
+                # 确保工作簿被关闭
+                if wb is not None:
+                    try:
+                        wb.close()
+                    except:
+                        pass
         except Exception as e:
             print("发生错误：")
             print(str(e))
             raise
+        # finally 块已移至try-save-block内部，统一管理关闭逻辑
 
     def _validate_inventory_value(self, value):
         """

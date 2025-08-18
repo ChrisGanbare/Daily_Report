@@ -53,35 +53,10 @@ DEV002,2025-07-01,2025-07-10
 
     def test_filehandler_read_devices_from_csv_with_empty_file(self):
         """
-        测试 FileHandler.read_devices_from_csv 方法读取空文件
+        测试 FileHandler.read_devices_from_csv 方法处理空CSV文件
         """
-        # 创建空的CSV文件
+        # 创建空的CSV文件用于测试
         with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
-            csv_file_path = f.name
-
-        try:
-            devices = self.file_handler.read_devices_from_csv(csv_file_path)
-            self.assertEqual(devices, [])
-        finally:
-            os.unlink(csv_file_path)
-
-    def test_filehandler_read_devices_from_csv_with_missing_file(self):
-        """
-        测试 FileHandler.read_devices_from_csv 方法处理文件不存在的情况
-        """
-        devices = self.file_handler.read_devices_from_csv("non_existent_file.csv")
-        self.assertEqual(devices, [])
-
-    def test_filehandler_read_devices_from_csv_with_invalid_data(self):
-        """
-        测试 FileHandler.read_devices_from_csv 方法处理无效数据
-        """
-        # 创建包含无效数据的CSV文件（缺少必要字段）
-        csv_content = """invalid_field1,invalid_field2
-data1,data2
-"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
-            f.write(csv_content)
             csv_file_path = f.name
 
         try:
@@ -94,7 +69,7 @@ data1,data2
         """
         测试 FileHandler.read_devices_from_csv 方法处理包含空行的CSV文件
         """
-        # 创建包含空行的CSV文件
+        # 创建包含空行的CSV文件用于测试
         csv_content = """device_code,start_date,end_date
 DEV001,2025-07-01,2025-07-10
 
@@ -114,13 +89,11 @@ DEV002,2025-07-01,2025-07-10
 
     def test_filehandler_read_devices_from_csv_with_missing_device_code(self):
         """
-        测试 FileHandler.read_devices_from_csv 方法处理缺少设备代码的行
+        测试 FileHandler.read_devices_from_csv 方法处理缺少device_code的CSV文件
         """
-        # 创建包含缺少设备代码的CSV文件
-        csv_content = """device_code,start_date,end_date
-DEV001,2025-07-01,2025-07-10
-,2025-07-01,2025-07-10
-DEV002,2025-07-01,2025-07-10
+        # 创建缺少device_code列的CSV文件用于测试
+        csv_content = """start_date,end_date
+2025-07-01,2025-07-10
 """
         with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
             f.write(csv_content)
@@ -128,13 +101,36 @@ DEV002,2025-07-01,2025-07-10
 
         try:
             devices = self.file_handler.read_devices_from_csv(csv_file_path)
-            # 应该跳过设备代码为空的行，只返回2个有效设备
-            self.assertEqual(len(devices), 2)
-            self.assertEqual(devices[0]['device_code'], 'DEV001')
-            self.assertEqual(devices[1]['device_code'], 'DEV002')
+            self.assertEqual(devices, [])
         finally:
             os.unlink(csv_file_path)
 
+    def test_filehandler_read_devices_from_csv_with_missing_file(self):
+        """
+        测试 FileHandler.read_devices_from_csv 方法处理文件不存在的情况
+        """
+        devices = self.file_handler.read_devices_from_csv("non_existent_file.csv")
+        self.assertEqual(devices, [])
+
+    def test_filehandler_read_devices_from_csv_with_invalid_data(self):
+        """
+        测试 FileHandler.read_devices_from_csv 方法处理无效数据
+        """
+        # 创建包含无效数据的CSV文件用于测试
+        csv_content = """device_code,start_date,end_date
+,2025-07-01,2025-07-10
+DEV002,,2025-07-10
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+            f.write(csv_content)
+            csv_file_path = f.name
+
+        try:
+            devices = self.file_handler.read_devices_from_csv(csv_file_path)
+            # 应该跳过无效数据行
+            self.assertEqual(len(devices), 0)
+        finally:
+            os.unlink(csv_file_path)
 
 if __name__ == "__main__":
     unittest.main()

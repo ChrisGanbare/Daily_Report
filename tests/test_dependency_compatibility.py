@@ -17,6 +17,7 @@
 import unittest
 import tempfile
 import os
+import time
 from datetime import date
 from openpyxl import load_workbook
 from openpyxl.chart import Reference
@@ -43,9 +44,34 @@ class DependencyCompatibilityTest(unittest.TestCase):
         self.end_date = date(2025, 7, 3)
         self.oil_name = "切削液"
 
+    def _remove_file_with_retry(self, file_path, max_retries=5, delay=0.1):
+        """
+        带重试机制的文件删除方法
+        
+        Args:
+            file_path (str): 要删除的文件路径
+            max_retries (int): 最大重试次数
+            delay (float): 重试间隔（秒）
+        """
+        for i in range(max_retries):
+            try:
+                if os.path.exists(file_path):
+                    os.unlink(file_path)
+                return True
+            except PermissionError:
+                if i < max_retries - 1:  # 不是最后一次尝试
+                    time.sleep(delay)
+                else:
+                    # 最后一次尝试仍然失败
+                    print(f"警告: 无法删除文件 {file_path}，文件可能仍在被使用")
+                    return False
+        return False
+
     def test_openpyxl_chart_generation(self):
         """测试openpyxl图表生成功能兼容性"""
         tmp_dir = tempfile.TemporaryDirectory()
+        tmp_file_path = None
+        wb = None
         try:
             tmp_file_path = os.path.join(tmp_dir.name, "compatibility_test_report.xlsx")
 
@@ -59,6 +85,9 @@ class DependencyCompatibilityTest(unittest.TestCase):
                 end_date=self.end_date,
                 oil_name=self.oil_name,
             )
+
+            # 添加延迟确保文件被系统完全释放
+            time.sleep(0.1)
 
             # 验证文件生成
             self.assertTrue(os.path.exists(tmp_file_path))
@@ -90,16 +119,29 @@ class DependencyCompatibilityTest(unittest.TestCase):
             expected_values_ref = "'库存数据'!$B$3:$B$5"
             expected_categories_ref = "'库存数据'!$A$3:$A$5"
             
-            self.assertEqual(str(series.val), expected_values_ref)
-            self.assertEqual(str(series.cat), expected_categories_ref)
+            # 正确获取引用字符串
+            self.assertEqual(str(series.val.numRef.f), expected_values_ref)
+            self.assertEqual(str(series.cat.numRef.f), expected_categories_ref)
 
-            wb.close()
         finally:
-            tmp_dir.cleanup()
+            # 确保工作簿被关闭
+            if wb is not None:
+                wb.close()
+            # 添加延迟确保文件被系统完全释放
+            time.sleep(0.1)
+            # 确保临时目录被清理
+            try:
+                tmp_dir.cleanup()
+            except:
+                # 如果清理失败，至少尝试关闭文件
+                if tmp_file_path and os.path.exists(tmp_file_path):
+                    self._remove_file_with_retry(tmp_file_path)
 
     def test_openpyxl_chart_axis_labels(self):
         """测试openpyxl图表坐标轴标签功能兼容性"""
         tmp_dir = tempfile.TemporaryDirectory()
+        tmp_file_path = None
+        wb = None
         try:
             tmp_file_path = os.path.join(tmp_dir.name, "axis_labels_test_report.xlsx")
 
@@ -113,6 +155,9 @@ class DependencyCompatibilityTest(unittest.TestCase):
                 end_date=self.end_date,
                 oil_name=self.oil_name,
             )
+
+            # 添加延迟确保文件被系统完全释放
+            time.sleep(0.1)
 
             # 加载工作簿验证图表坐标轴
             wb = load_workbook(tmp_file_path)
@@ -132,13 +177,25 @@ class DependencyCompatibilityTest(unittest.TestCase):
             self.assertTrue(hasattr(chart.x_axis, 'title'))
             self.assertTrue(hasattr(chart.y_axis, 'title'))
 
-            wb.close()
         finally:
-            tmp_dir.cleanup()
+            # 确保工作簿被关闭
+            if wb is not None:
+                wb.close()
+            # 添加延迟确保文件被系统完全释放
+            time.sleep(0.1)
+            # 确保临时目录被清理
+            try:
+                tmp_dir.cleanup()
+            except:
+                # 如果清理失败，至少尝试关闭文件
+                if tmp_file_path and os.path.exists(tmp_file_path):
+                    self._remove_file_with_retry(tmp_file_path)
 
     def test_openpyxl_chart_title_functionality(self):
         """测试openpyxl图表标题功能兼容性"""
         tmp_dir = tempfile.TemporaryDirectory()
+        tmp_file_path = None
+        wb = None
         try:
             tmp_file_path = os.path.join(tmp_dir.name, "chart_title_test_report.xlsx")
 
@@ -152,6 +209,9 @@ class DependencyCompatibilityTest(unittest.TestCase):
                 end_date=self.end_date,
                 oil_name=self.oil_name,
             )
+
+            # 添加延迟确保文件被系统完全释放
+            time.sleep(0.1)
 
             # 加载工作簿验证图表标题
             wb = load_workbook(tmp_file_path)
@@ -174,9 +234,19 @@ class DependencyCompatibilityTest(unittest.TestCase):
                 self.assertIn(self.device_code, title_text)
                 self.assertIn(self.oil_name, title_text)
 
-            wb.close()
         finally:
-            tmp_dir.cleanup()
+            # 确保工作簿被关闭
+            if wb is not None:
+                wb.close()
+            # 添加延迟确保文件被系统完全释放
+            time.sleep(0.1)
+            # 确保临时目录被清理
+            try:
+                tmp_dir.cleanup()
+            except:
+                # 如果清理失败，至少尝试关闭文件
+                if tmp_file_path and os.path.exists(tmp_file_path):
+                    self._remove_file_with_retry(tmp_file_path)
 
     def test_mysql_connector_basic_connection(self):
         """测试mysql-connector-python基本连接功能兼容性"""
@@ -203,8 +273,4 @@ class DependencyCompatibilityTest(unittest.TestCase):
         except ImportError:
             self.fail("无法导入pandas模块")
         except Exception as e:
-            self.fail(f"pandas基本功能测试失败: {e}")
-
-
-if __name__ == "__main__":
-    unittest.main()
+            self.fail(f"pandas基本功能测试失败: {e}")

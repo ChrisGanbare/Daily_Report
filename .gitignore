@@ -122,3 +122,32 @@ build/
 .coverage
 htmlcov/
 coverage.xml
+
+# 添加的忽略规则
+# 忽略编译后的Python文件
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+
+# 忽略测试生成的文件
+.coverage.*
+.pytest_cache/
+pytest_cache/
+.coverage
+
+# 忽略日志文件
+*.log
+
+# 忽略自动生成的文件
+MagicMock/
+
+# 忽略错误日志文件
+错误日志_*.txt
+
+# 忽略.continue目录
+.continue/
+
+# 忽略.coveragerc文件
+.coveragerc

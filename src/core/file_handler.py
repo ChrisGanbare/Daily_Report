@@ -86,12 +86,21 @@ class FileHandler:
                         if not device_code:
                             print(f"警告：跳过设备标识为空的行: {row}")
                             continue
+                            
+                        # 获取开始和结束日期
+                        start_date = row.get("start_date", "").strip()
+                        end_date = row.get("end_date", "").strip()
+                        
+                        # 确保关键字段都不为空
+                        if not start_date or not end_date:
+                            print(f"警告：跳过日期信息不完整的行: {row}")
+                            continue
 
                         devices.append(
                             {
                                 "device_code": device_code,
-                                "start_date": row["start_date"].strip(),
-                                "end_date": row["end_date"].strip(),
+                                "start_date": start_date,
+                                "end_date": end_date,
                             }
                         )
 

@@ -1,4 +1,5 @@
 import os
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -338,6 +339,7 @@ class CustomerStatementGenerator:
                 f"请确保文件 'statement_template.xlsx' 位于 '{template_dir}' 目录下"
             )
 
+        wb = None
         try:
             # 加载模板工作簿
             wb = load_workbook(template_path)
@@ -397,6 +399,15 @@ class CustomerStatementGenerator:
         except Exception as e:
             print(f"生成对账单时发生错误: {str(e)}")
             raise
+        finally:
+            # 确保工作簿被关闭
+            if wb is not None:
+                try:
+                    wb.close()
+                    # 添加短暂延迟确保文件被系统完全释放
+                    time.sleep(0.1)
+                except:
+                    pass
 
     def _prepare_date_range(self, start_date, end_date):
         """
