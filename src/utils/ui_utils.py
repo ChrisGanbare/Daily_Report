@@ -8,19 +8,17 @@ class FileDialogUtil:
     """
     统一的文件/目录选择对话框工具类
     确保所有对话框遵循用户的偏好设置
+    注意：对于系统原生对话框（如filedialog.askopenfilename），
+    无法通过Tkinter控制其窗口大小，该设置仅适用于自定义对话框
     """
 
-    def __init__(self, width: int = 400, height: int = 300, topmost: bool = True):
+    def __init__(self, topmost: bool = True):
         """
         初始化文件对话框工具
         
         Args:
-            width: 对话框窗口宽度
-            height: 对话框窗口高度
-            topmost: 是否置顶显示
+            topmost: 是否置顶显示（仅适用于自定义对话框）
         """
-        self.width = width
-        self.height = height
         self.topmost = topmost
 
     def _create_root(self) -> tk.Tk:
@@ -32,7 +30,6 @@ class FileDialogUtil:
         """
         root = tk.Tk()
         root.withdraw()  # 隐藏主窗口
-        root.geometry(f"{self.width}x{self.height}")
         root.attributes('-topmost', self.topmost)  # 设置窗口置顶
         return root
 
@@ -94,7 +91,7 @@ class FileDialogUtil:
 
 
 # 创建全局实例，确保所有地方使用统一的设置
-file_dialog_util = FileDialogUtil(width=400, height=300, topmost=True)
+file_dialog_util = FileDialogUtil(topmost=True)
 
 # 便捷函数，直接使用全局实例
 def choose_file(title: str = "选择文件", 
