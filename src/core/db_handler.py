@@ -2,24 +2,9 @@ import sys
 import traceback
 from datetime import date, datetime
 
-# 尝试导入mysql.connector，如果失败则使用PyMySQL
-try:
-    import mysql.connector
-    from mysql.connector import pooling
-
-    USE_PYMYSQL = False
-    print("使用 mysql-connector-python 作为数据库驱动")
-except ImportError:
-    try:
-        import pymysql
-
-        mysql_connector = pymysql
-        USE_PYMYSQL = True
-        print("使用 PyMySQL 作为数据库驱动")
-    except ImportError:
-        raise ImportError(
-            "无法导入数据库驱动，请安装 mysql-connector-python 或 PyMySQL"
-        )
+# 导入mysql.connector
+import mysql.connector
+from mysql.connector import pooling
 
 
 class DatabaseHandler:
@@ -36,9 +21,7 @@ class DatabaseHandler:
         self.connection = None
         self.connection_pool = None
         print(f"DatabaseHandler初始化，数据库配置: {db_config}")
-        print(
-            f"使用的数据库驱动: {'PyMySQL' if USE_PYMYSQL else 'mysql-connector-python'}"
-        )
+        print("使用的数据库驱动: mysql-connector-python")
 
     def connect(self):
         """
@@ -58,36 +41,22 @@ class DatabaseHandler:
 
             # 打印Python和数据库驱动版本信息
             print(f"Python版本: {sys.version}")
-            if not USE_PYMYSQL:
-                print(f"mysql-connector-python版本: {mysql.connector.__version__}")
-            else:
-                print(f"PyMySQL版本: {mysql.connector.__version__}")
+            print(f"mysql-connector-python版本: {mysql.connector.__version__}")
 
-            if not USE_PYMYSQL:
-                # 使用mysql-connector-python
-                # 尝试使用连接池方式连接
-                pool_config = self.db_config.copy()
-                pool_config["pool_name"] = "zr_daily_report_pool"
-                pool_config["pool_size"] = 1
-                pool_config["pool_reset_session"] = True
+            # 使用mysql-connector-python
+            # 尝试使用连接池方式连接
+            pool_config = self.db_config.copy()
+            pool_config["pool_name"] = "zr_daily_report_pool"
+            pool_config["pool_size"] = 1
+            pool_config["pool_reset_session"] = True
 
-                print("尝试创建连接池...")
-                self.connection_pool = pooling.MySQLConnectionPool(**pool_config)
-                print("连接池创建成功")
+            print("尝试创建连接池...")
+            self.connection_pool = pooling.MySQLConnectionPool(**pool_config)
+            print("连接池创建成功")
 
-                print("尝试从连接池获取连接...")
-                self.connection = self.connection_pool.get_connection()
-                print("数据库连接成功")
-            else:
-                # 使用PyMySQL
-                print("尝试直接连接...")
-                # PyMySQL不支持pool_reset_session参数
-                pymsql_config = self.db_config.copy()
-                if "pool_reset_session" in pymsql_config:
-                    del pymsql_config["pool_reset_session"]
-
-                self.connection = mysql.connector.connect(**pymsql_config)
-                print("数据库连接成功")
+            print("尝试从连接池获取连接...")
+            self.connection = self.connection_pool.get_connection()
+            print("数据库连接成功")
 
             return self.connection
 
@@ -128,18 +97,6 @@ class DatabaseHandler:
                         print("数据库连接已关闭或未连接")
                 except Exception:
                     # is_connected()可能抛出异常
-                    self.connection.close()
-                    print("数据库连接已关闭")
-            elif hasattr(self.connection, "open"):
-                # PyMySQL
-                try:
-                    if self.connection.open:
-                        self.connection.close()
-                        print("数据库连接已关闭")
-                    else:
-                        print("数据库连接已关闭或未连接")
-                except Exception:
-                    # open属性可能抛出异常
                     self.connection.close()
                     print("数据库连接已关闭")
             else:

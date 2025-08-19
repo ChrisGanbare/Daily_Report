@@ -19,19 +19,8 @@ from src.utils.data_validator import DataValidator
 from src.utils.config_handler import ConfigHandler
 from src.utils.ui_utils import choose_file, choose_directory  # 导入文件对话框工具类
 
-# 尝试导入mysql.connector，如果失败则使用PyMySQL
-try:
-    import mysql.connector
-    USE_PYMYSQL = False
-    print("使用 mysql-connector-python 作为数据库驱动")
-except ImportError:
-    try:
-        import pymysql
-        mysql_connector = pymysql
-        USE_PYMYSQL = True
-        print("使用 PyMySQL 作为数据库驱动")
-    except ImportError:
-        raise ImportError("无法导入数据库驱动，请安装 mysql-connector-python 或 PyMySQL")
+# 导入mysql.connector
+import mysql.connector
 
 
 def print_usage():
@@ -713,14 +702,6 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
                     log_messages.append(error_msg)
         
         # 记录程序结束时间
-        
-        # 初始化日期变量
-        start_date_obj = None
-        end_date_obj = None
-        
-        # 初始化日期变量
-        start_date_obj = None
-        end_date_obj = None
         end_time = datetime.datetime.now()
         duration = end_time - start_time
         log_messages.append("")

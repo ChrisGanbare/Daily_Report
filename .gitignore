@@ -100,54 +100,32 @@ data/
 config/.env
 config/query_config.json
 
-# 测试输出
-test_output/
-
-# HTML覆盖率报告
-htmlcov/
-
-# 数据文件目录
-
-# 明确忽略workspace.xml文件
-.idea/workspace.xml
-
-# 构建产物
-dist/
-build/
-
-# tox测试环境
-.tox/
-
-# 覆盖率数据
-.coverage
-htmlcov/
-coverage.xml
-
-# 添加的忽略规则
-# 忽略编译后的Python文件
-**/__pycache__/
-**/*.pyc
-**/*.pyo
-**/*.pyd
-**/.pytest_cache/
-
-# 忽略测试生成的文件
-.coverage.*
-.pytest_cache/
-pytest_cache/
-.coverage
-
-# 忽略日志文件
-*.log
-
-# 忽略自动生成的文件
-MagicMock/
-
-# 忽略错误日志文件
+# 错误日志文件
 错误日志_*.txt
 
-# 忽略.continue目录
-.continue/
-
-# 忽略.coveragerc文件
+# Coverage reports
+coverage_html_report/
 .coveragerc
+
+# Test results
+test-reports/
+junit-*.xml
+
+# Pytest cache
+pytest_cache/
+
+# MyPy cache
+.mypy_cache/
+
+# Tox test environments
+.tox/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.swp
+
+# Package files
+*.tar.gz
+*.zip
