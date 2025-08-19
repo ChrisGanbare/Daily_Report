@@ -1,21 +1,25 @@
-from datetime import date, datetime
-import traceback
 import sys
+import traceback
+from datetime import date, datetime
 
 # 尝试导入mysql.connector，如果失败则使用PyMySQL
 try:
     import mysql.connector
     from mysql.connector import pooling
+
     USE_PYMYSQL = False
     print("使用 mysql-connector-python 作为数据库驱动")
 except ImportError:
     try:
         import pymysql
+
         mysql_connector = pymysql
         USE_PYMYSQL = True
         print("使用 PyMySQL 作为数据库驱动")
     except ImportError:
-        raise ImportError("无法导入数据库驱动，请安装 mysql-connector-python 或 PyMySQL")
+        raise ImportError(
+            "无法导入数据库驱动，请安装 mysql-connector-python 或 PyMySQL"
+        )
 
 
 class DatabaseHandler:
@@ -32,7 +36,9 @@ class DatabaseHandler:
         self.connection = None
         self.connection_pool = None
         print(f"DatabaseHandler初始化，数据库配置: {db_config}")
-        print(f"使用的数据库驱动: {'PyMySQL' if USE_PYMYSQL else 'mysql-connector-python'}")
+        print(
+            f"使用的数据库驱动: {'PyMySQL' if USE_PYMYSQL else 'mysql-connector-python'}"
+        )
 
     def connect(self):
         """
@@ -45,28 +51,30 @@ class DatabaseHandler:
             Exception: 数据库连接失败时抛出异常
         """
         try:
-            print(f"尝试连接数据库，配置信息: host={self.db_config.get('host')}, "
-                  f"user={self.db_config.get('user')}, database={self.db_config.get('database')}")
-            
+            print(
+                f"尝试连接数据库，配置信息: host={self.db_config.get('host')}, "
+                f"user={self.db_config.get('user')}, database={self.db_config.get('database')}"
+            )
+
             # 打印Python和数据库驱动版本信息
             print(f"Python版本: {sys.version}")
             if not USE_PYMYSQL:
                 print(f"mysql-connector-python版本: {mysql.connector.__version__}")
             else:
                 print(f"PyMySQL版本: {mysql.connector.__version__}")
-            
+
             if not USE_PYMYSQL:
                 # 使用mysql-connector-python
                 # 尝试使用连接池方式连接
                 pool_config = self.db_config.copy()
-                pool_config['pool_name'] = 'zr_daily_report_pool'
-                pool_config['pool_size'] = 1
-                pool_config['pool_reset_session'] = True
-                
+                pool_config["pool_name"] = "zr_daily_report_pool"
+                pool_config["pool_size"] = 1
+                pool_config["pool_reset_session"] = True
+
                 print("尝试创建连接池...")
                 self.connection_pool = pooling.MySQLConnectionPool(**pool_config)
                 print("连接池创建成功")
-                
+
                 print("尝试从连接池获取连接...")
                 self.connection = self.connection_pool.get_connection()
                 print("数据库连接成功")
@@ -75,18 +83,18 @@ class DatabaseHandler:
                 print("尝试直接连接...")
                 # PyMySQL不支持pool_reset_session参数
                 pymsql_config = self.db_config.copy()
-                if 'pool_reset_session' in pymsql_config:
-                    del pymsql_config['pool_reset_session']
-                    
+                if "pool_reset_session" in pymsql_config:
+                    del pymsql_config["pool_reset_session"]
+
                 self.connection = mysql.connector.connect(**pymsql_config)
                 print("数据库连接成功")
-            
+
             return self.connection
-            
+
         except mysql.connector.Error as err:
             print(f"数据库连接失败 (数据库错误): {err}")
             print(f"错误类型: {type(err)}")
-            if hasattr(err, 'errno'):
+            if hasattr(err, "errno"):
                 print(f"错误代码: {err.errno}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
             raise
@@ -110,7 +118,7 @@ class DatabaseHandler:
                 return
 
             # 检查连接是否有效
-            if hasattr(self.connection, 'is_connected'):
+            if hasattr(self.connection, "is_connected"):
                 # mysql-connector-python
                 try:
                     if self.connection.is_connected():
@@ -122,7 +130,7 @@ class DatabaseHandler:
                     # is_connected()可能抛出异常
                     self.connection.close()
                     print("数据库连接已关闭")
-            elif hasattr(self.connection, 'open'):
+            elif hasattr(self.connection, "open"):
                 # PyMySQL
                 try:
                     if self.connection.open:
@@ -145,9 +153,7 @@ class DatabaseHandler:
             print(f"关闭数据库连接时发生错误: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
 
-    def get_device_and_customer_info(
-        self, device_code, device_query_template
-    ):
+    def get_device_and_customer_info(self, device_code, device_query_template):
         """
         根据设备编号查询设备ID和客户ID，使用device_code查询
 
@@ -183,7 +189,9 @@ class DatabaseHandler:
                     pass
                 cursor.close()
 
-    def fetch_inventory_data(self, device_id, query_or_template, start_date=None, end_date=None):
+    def fetch_inventory_data(
+        self, device_id, query_or_template, start_date=None, end_date=None
+    ):
         """
         从数据库获取库存数据
 
@@ -204,11 +212,11 @@ class DatabaseHandler:
                 query = query_or_template.format(
                     device_id=device_id,
                     start_date=start_date,
-                    end_condition=end_condition
+                    end_condition=end_condition,
                 )
             else:
                 query = query_or_template
-                
+
             print(f"执行库存数据查询，SQL: {query}")
             cursor = self.connection.cursor()
             cursor.execute(query)
@@ -216,7 +224,7 @@ class DatabaseHandler:
 
             # 获取列名
             try:
-                if hasattr(cursor, 'description') and cursor.description:
+                if hasattr(cursor, "description") and cursor.description:
                     columns = [desc[0] for desc in cursor.description]
                 else:
                     columns = []
@@ -237,9 +245,11 @@ class DatabaseHandler:
                         if row_dict.get("原油剩余比例") is not None
                         else 0
                     )
-                    
+
                     if i < 5:  # 只打印前5条记录用于调试
-                        print(f"    记录 {i+1}: 加注时间={order_time}, 原油剩余比例={oil_remaining}")
+                        print(
+                            f"    记录 {i+1}: 加注时间={order_time}, 原油剩余比例={oil_remaining}"
+                        )
 
                     if isinstance(order_time, datetime):
                         order_date = order_time.date()
@@ -277,7 +287,9 @@ class DatabaseHandler:
                     elif order_time is None:
                         print(f"警告：记录 {i+1} 中加注时间为空")
                     else:
-                        print(f"警告：记录 {i+1} 中加注时间类型未知: {type(order_time)}")
+                        print(
+                            f"警告：记录 {i+1} 中加注时间类型未知: {type(order_time)}"
+                        )
 
                 except Exception as row_e:
                     print(f"处理记录 {i+1} 时发生错误: {row_e}")
@@ -317,16 +329,20 @@ class DatabaseHandler:
         try:
             print(f"查询客户名称，设备编号: {device_code}")
             # 先通过设备编号获取设备ID和客户ID
-            device_info = self.get_device_and_customer_info(device_code, 
-                "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s")
-            
+            device_info = self.get_device_and_customer_info(
+                device_code,
+                "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s",
+            )
+
             if device_info:
                 _, customer_id = device_info  # 使用下划线表示我们不使用device_id
-                
+
                 # 再通过客户ID获取客户名称
                 cursor = self.connection.cursor()
                 # 定义专用的客户名称查询SQL
-                customer_query = "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+                customer_query = (
+                    "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+                )
                 print(f"执行客户名称查询，SQL: {customer_query}, 参数: {customer_id}")
                 cursor.execute(customer_query, (customer_id,))
                 customer_result = cursor.fetchone()

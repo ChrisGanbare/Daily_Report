@@ -380,12 +380,21 @@ class CustomerStatementGenerator:
                 if sheet._charts:
                     for chart in sheet._charts:
                         # 清理可能导致警告的图表外部数据引用
-                        if hasattr(chart, "externalData") and chart.externalData is not None:
+                        if (
+                            hasattr(chart, "externalData")
+                            and chart.externalData is not None
+                        ):
                             # 如果externalData的id为None，将其设置为空字符串以避免警告
-                            if hasattr(chart.externalData, "id") and chart.externalData.id is None:
+                            if (
+                                hasattr(chart.externalData, "id")
+                                and chart.externalData.id is None
+                            ):
                                 chart.externalData.id = ""
                             # 如果externalData没有id属性或者id为空列表，设置为空字符串
-                            elif hasattr(chart.externalData, "id") and not chart.externalData.id:
+                            elif (
+                                hasattr(chart.externalData, "id")
+                                and not chart.externalData.id
+                            ):
                                 chart.externalData.id = ""
 
             try:
@@ -478,11 +487,11 @@ class CustomerStatementGenerator:
                 device_code = device_data["device_code"]
                 oil_name = device_data["oil_name"]
                 oil_key = (device_code, oil_name)  # 使用设备ID和油品名称组合作为唯一键
-                
+
                 # 只有当这个设备油品组合还没有添加时才添加
                 if oil_key not in oil_columns:
                     oil_columns.append(oil_key)
-                
+
                 for date, value in device_data["data"]:
                     # 确保日期是date对象
                     if isinstance(date, str):
@@ -515,7 +524,9 @@ class CustomerStatementGenerator:
             # 从第5行开始清除表头
             # 从第6行开始清除数据
             self._clear_old_data(ws, 5, 1, 3)  # 清除表头（第5行）
-            self._clear_old_data(ws, 6, len(date_list), 3)  # 清除数据（第6行到第6+日期数量-1行）
+            self._clear_old_data(
+                ws, 6, len(date_list), 3
+            )  # 清除数据（第6行到第6+日期数量-1行）
 
             # 为每个设备的油品写入数据
             print(f"设备油品组合: {oil_columns}")
@@ -573,11 +584,11 @@ class CustomerStatementGenerator:
                 device_code = device_data["device_code"]
                 oil_name = device_data["oil_name"]
                 oil_key = (device_code, oil_name)  # 使用设备ID和油品名称组合作为唯一键
-                
+
                 # 只有当这个设备油品组合还没有添加时才添加
                 if oil_key not in oil_columns:
                     oil_columns.append(oil_key)
-                
+
                 for date, value in device_data["data"]:
                     # 确保日期是date对象
                     if isinstance(date, str):
@@ -598,16 +609,18 @@ class CustomerStatementGenerator:
             # 写入数据
             current_row = 6
             sorted_months = sorted(monthly_stats.keys())
-            
+
             for month in sorted_months:
                 # 写入月份到B列
                 month_cell = ws.cell(row=current_row, column=2)
                 if month_cell.coordinate not in ws.merged_cells:
                     month_cell.value = month
-                    
+
                 # 写入各设备油品数据
                 month_data = monthly_stats[month]
-                for col_index, (device_code, oil_name) in enumerate(oil_columns, start=2):
+                for col_index, (device_code, oil_name) in enumerate(
+                    oil_columns, start=2
+                ):
                     oil_key = (device_code, oil_name)
                     value = month_data.get(oil_key, 0)
                     data_cell = ws.cell(row=current_row, column=col_index)

@@ -14,16 +14,18 @@
 4. 记录测试结果，便于版本升级时参考
 """
 
-import unittest
-import tempfile
 import os
-import time
-from datetime import date
-from openpyxl import load_workbook
-from openpyxl.chart import Reference
 
 # 添加项目根目录到sys.path，确保能正确导入模块
 import sys
+import tempfile
+import time
+import unittest
+from datetime import date
+
+from openpyxl import load_workbook
+from openpyxl.chart import Reference
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.core.inventory_handler import InventoryReportGenerator
@@ -47,7 +49,7 @@ class DependencyCompatibilityTest(unittest.TestCase):
     def _remove_file_with_retry(self, file_path, max_retries=5, delay=0.1):
         """
         带重试机制的文件删除方法
-        
+
         Args:
             file_path (str): 要删除的文件路径
             max_retries (int): 最大重试次数
@@ -114,11 +116,11 @@ class DependencyCompatibilityTest(unittest.TestCase):
             # 验证数据系列
             self.assertEqual(len(chart.series), 1)
             series = chart.series[0]
-            
+
             # 验证数据范围引用正确
             expected_values_ref = "'库存数据'!$B$3:$B$5"
             expected_categories_ref = "'库存数据'!$A$3:$A$5"
-            
+
             # 正确获取引用字符串
             self.assertEqual(str(series.val.numRef.f), expected_values_ref)
             self.assertEqual(str(series.cat.numRef.f), expected_categories_ref)
@@ -166,16 +168,16 @@ class DependencyCompatibilityTest(unittest.TestCase):
 
             # 验证图表存在
             self.assertIsNotNone(chart)
-            
+
             # 验证X轴和Y轴存在
             self.assertIsNotNone(chart.x_axis)
             self.assertIsNotNone(chart.y_axis)
-            
+
             # 验证坐标轴标题
             # 注意：在openpyxl的新版本中，坐标轴标题可能通过Title对象设置
             # 我们主要验证坐标轴对象存在且不为空
-            self.assertTrue(hasattr(chart.x_axis, 'title'))
-            self.assertTrue(hasattr(chart.y_axis, 'title'))
+            self.assertTrue(hasattr(chart.x_axis, "title"))
+            self.assertTrue(hasattr(chart.y_axis, "title"))
 
         finally:
             # 确保工作簿被关闭
@@ -220,15 +222,15 @@ class DependencyCompatibilityTest(unittest.TestCase):
 
             # 验证图表存在
             self.assertIsNotNone(chart)
-            
+
             # 验证图表标题存在
             self.assertIsNotNone(chart.title)
-            
+
             # 验证图表标题有内容
-            self.assertTrue(hasattr(chart.title, 'tx'))
-            
+            self.assertTrue(hasattr(chart.title, "tx"))
+
             # 如果标题有str属性，则验证其内容
-            if hasattr(chart.title, 'tx') and hasattr(chart.title.tx, 'str'):
+            if hasattr(chart.title, "tx") and hasattr(chart.title.tx, "str"):
                 # 标题应该包含设备编号和油品名称
                 title_text = chart.title.tx.str
                 self.assertIn(self.device_code, title_text)
@@ -254,7 +256,8 @@ class DependencyCompatibilityTest(unittest.TestCase):
         # 这里仅验证模块是否可以正常导入
         try:
             import mysql.connector
-            self.assertTrue(hasattr(mysql.connector, 'connect'))
+
+            self.assertTrue(hasattr(mysql.connector, "connect"))
         except ImportError:
             self.fail("无法导入mysql.connector模块")
 
@@ -262,15 +265,15 @@ class DependencyCompatibilityTest(unittest.TestCase):
         """测试pandas基本功能兼容性"""
         try:
             import pandas as pd
+
             # 创建简单数据框测试基本功能
-            df = pd.DataFrame({
-                'date': [date(2025, 7, 1), date(2025, 7, 2)],
-                'value': [100.0, 95.0]
-            })
+            df = pd.DataFrame(
+                {"date": [date(2025, 7, 1), date(2025, 7, 2)], "value": [100.0, 95.0]}
+            )
             self.assertEqual(len(df), 2)
-            self.assertIn('date', df.columns)
-            self.assertIn('value', df.columns)
+            self.assertIn("date", df.columns)
+            self.assertIn("value", df.columns)
         except ImportError:
             self.fail("无法导入pandas模块")
         except Exception as e:
-            self.fail(f"pandas基本功能测试失败: {e}")
+            self.fail(f"pandas基本功能测试失败: {e}")

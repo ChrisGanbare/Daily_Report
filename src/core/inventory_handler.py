@@ -7,11 +7,11 @@ from decimal import Decimal
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.chart import LineChart, Reference
+from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.marker import Marker
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.chart.label import DataLabelList
 
 
 class InventoryReportGenerator:
@@ -73,14 +73,18 @@ class InventoryReportGenerator:
 
             # 初始化工作簿
             wb = Workbook()
-            
+
             # 处理不同导出格式
             if export_format.lower() == "csv":
-                with open(output_file_path.replace(".xlsx", ".csv"), "w", newline="") as f:
+                with open(
+                    output_file_path.replace(".xlsx", ".csv"), "w", newline=""
+                ) as f:
                     writer = csv.writer(f)
                     writer.writerow(["日期", "库存百分比"])
                     writer.writerows(cleaned_data)
-                print(f"数据已导出为CSV格式：{output_file_path.replace('.xlsx', '.csv')}")
+                print(
+                    f"数据已导出为CSV格式：{output_file_path.replace('.xlsx', '.csv')}"
+                )
                 # 立即关闭工作簿
                 wb.close()
                 return
@@ -128,8 +132,8 @@ class InventoryReportGenerator:
                 ws.append(row)
 
             # 调整列宽
-            ws.column_dimensions['A'].width = 12  # 日期列宽度
-            ws.column_dimensions['B'].width = 12  # 库存百分比列宽度
+            ws.column_dimensions["A"].width = 12  # 日期列宽度
+            ws.column_dimensions["B"].width = 12  # 库存百分比列宽度
 
             # 创建图表
             chart = LineChart()
@@ -137,10 +141,8 @@ class InventoryReportGenerator:
             chart.style = 13
             chart.y_axis.title = "库存百分比"
             chart.x_axis.title = "日期"
-            
+
             # 设置图表显示数据标签
-
-
 
             # 添加这部分配置来调整x轴日期显示
             chart.x_axis.tickLblSkip = 3  # 每隔3个标签显示一个

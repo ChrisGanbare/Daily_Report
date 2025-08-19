@@ -64,9 +64,7 @@ class FileHandler:
                     has_device_code = "device_code" in fieldnames
 
                     if not has_device_code:
-                        print(
-                            "警告：CSV文件缺少设备标识字段，应包含'device_code'"
-                        )
+                        print("警告：CSV文件缺少设备标识字段，应包含'device_code'")
                         continue
 
                     # 读取设备信息
@@ -86,11 +84,11 @@ class FileHandler:
                         if not device_code:
                             print(f"警告：跳过设备标识为空的行: {row}")
                             continue
-                            
+
                         # 获取开始和结束日期
                         start_date = row.get("start_date", "").strip()
                         end_date = row.get("end_date", "").strip()
-                        
+
                         # 确保关键字段都不为空
                         if not start_date or not end_date:
                             print(f"警告：跳过日期信息不完整的行: {row}")

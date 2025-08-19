@@ -14,17 +14,17 @@ from tests.base_test import BaseTestCase
 def get_date_range(start_date, end_date):
     """
     生成从开始日期到结束日期的日期列表（包含边界）
-    
+
     Args:
         start_date (date): 开始日期
         end_date (date): 结束日期
-        
+
     Returns:
         list[date]: 日期列表
     """
     if start_date > end_date:
         start_date, end_date = end_date, start_date
-    
+
     date_list = []
     current_date = start_date
     while current_date <= end_date:
@@ -36,10 +36,10 @@ def get_date_range(start_date, end_date):
 def format_date(date_obj):
     """
     格式化日期对象为字符串
-    
+
     Args:
         date_obj (datetime/date): 日期对象
-        
+
     Returns:
         str: 格式化后的日期字符串
     """
@@ -55,11 +55,11 @@ class TestUtilsDateUtils(BaseTestCase):
     """
     utils.date_utils 模块的单元测试
     """
-    
+
     def setUp(self):
         """测试前准备"""
         super().setUp()
-        
+
     def test_parse_date_with_valid_string(self):
         """
         测试 parse_date 函数处理有效的日期字符串
@@ -78,10 +78,7 @@ class TestUtilsDateUtils(BaseTestCase):
         """
         测试 validate_csv_data 函数处理有效的CSV数据
         """
-        row = {
-            "start_date": "2025-07-01",
-            "end_date": "2025-07-31"
-        }
+        row = {"start_date": "2025-07-01", "end_date": "2025-07-31"}
         result = validate_csv_data(row)
         self.assertTrue(result)
 
@@ -89,10 +86,7 @@ class TestUtilsDateUtils(BaseTestCase):
         """
         测试 validate_csv_data 函数处理无效的开始日期
         """
-        row = {
-            "start_date": "invalid-date",
-            "end_date": "2025-07-31"
-        }
+        row = {"start_date": "invalid-date", "end_date": "2025-07-31"}
         result = validate_csv_data(row)
         self.assertFalse(result)
 
@@ -100,10 +94,7 @@ class TestUtilsDateUtils(BaseTestCase):
         """
         测试 validate_csv_data 函数处理无效的结束日期
         """
-        row = {
-            "start_date": "2025-07-01",
-            "end_date": "invalid-date"
-        }
+        row = {"start_date": "2025-07-01", "end_date": "invalid-date"}
         result = validate_csv_data(row)
         self.assertFalse(result)
 
@@ -111,10 +102,7 @@ class TestUtilsDateUtils(BaseTestCase):
         """
         测试 validate_csv_data 函数处理开始日期晚于结束日期的情况
         """
-        row = {
-            "start_date": "2025-07-31",
-            "end_date": "2025-07-01"
-        }
+        row = {"start_date": "2025-07-31", "end_date": "2025-07-01"}
         result = validate_csv_data(row)
         self.assertFalse(result)
 

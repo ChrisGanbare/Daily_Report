@@ -1,8 +1,8 @@
+import csv
 import os
 import sys
 import tempfile
 import unittest
-import csv
 from datetime import date
 from unittest.mock import Mock, patch
 
@@ -17,12 +17,12 @@ class TestCoreFileHandler(BaseTestCase):
     """
     core.file_handler 模块的单元测试
     """
-    
+
     def setUp(self):
         """测试前准备"""
         super().setUp()
         self.file_handler = FileHandler()
-        
+
     def test_filehandler_initialization(self):
         """
         测试 FileHandler 类的初始化
@@ -39,15 +39,15 @@ class TestCoreFileHandler(BaseTestCase):
 DEV001,2025-07-01,2025-07-10
 DEV002,2025-07-01,2025-07-10
 """
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             f.write(csv_content)
             csv_file_path = f.name
 
         try:
             devices = self.file_handler.read_devices_from_csv(csv_file_path)
             self.assertEqual(len(devices), 2)
-            self.assertEqual(devices[0]['device_code'], 'DEV001')
-            self.assertEqual(devices[1]['device_code'], 'DEV002')
+            self.assertEqual(devices[0]["device_code"], "DEV001")
+            self.assertEqual(devices[1]["device_code"], "DEV002")
         finally:
             os.unlink(csv_file_path)
 
@@ -56,7 +56,7 @@ DEV002,2025-07-01,2025-07-10
         测试 FileHandler.read_devices_from_csv 方法处理空CSV文件
         """
         # 创建空的CSV文件用于测试
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             csv_file_path = f.name
 
         try:
@@ -75,15 +75,15 @@ DEV001,2025-07-01,2025-07-10
 
 DEV002,2025-07-01,2025-07-10
 """
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             f.write(csv_content)
             csv_file_path = f.name
 
         try:
             devices = self.file_handler.read_devices_from_csv(csv_file_path)
             self.assertEqual(len(devices), 2)
-            self.assertEqual(devices[0]['device_code'], 'DEV001')
-            self.assertEqual(devices[1]['device_code'], 'DEV002')
+            self.assertEqual(devices[0]["device_code"], "DEV001")
+            self.assertEqual(devices[1]["device_code"], "DEV002")
         finally:
             os.unlink(csv_file_path)
 
@@ -95,7 +95,7 @@ DEV002,2025-07-01,2025-07-10
         csv_content = """start_date,end_date
 2025-07-01,2025-07-10
 """
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             f.write(csv_content)
             csv_file_path = f.name
 
@@ -121,7 +121,7 @@ DEV002,2025-07-01,2025-07-10
 ,2025-07-01,2025-07-10
 DEV002,,2025-07-10
 """
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             f.write(csv_content)
             csv_file_path = f.name
 
@@ -131,6 +131,7 @@ DEV002,,2025-07-10
             self.assertEqual(len(devices), 0)
         finally:
             os.unlink(csv_file_path)
+
 
 if __name__ == "__main__":
     unittest.main()

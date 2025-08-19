@@ -3,13 +3,13 @@
 提供内存缓存和Redis缓存支持，提高数据库查询性能
 """
 
+import asyncio
 import hashlib
 import json
 import threading
 import time
-import asyncio
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Callable, Dict, Optional
 
 
 class MemoryCache:

@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from openpyxl import load_workbook
+
 from src.core.inventory_handler import InventoryReportGenerator
 from tests.base_test import BaseTestCase
 
@@ -18,7 +19,7 @@ class TestCoreInventoryHandler(BaseTestCase):
     """
     core.inventory_handler 模块的单元测试
     """
-    
+
     def setUp(self):
         """测试前准备"""
         super().setUp()
@@ -28,7 +29,7 @@ class TestCoreInventoryHandler(BaseTestCase):
             (date(2025, 7, 2), 95.0),
             (date(2025, 7, 3), 90.0),
         ]
-        
+
     def test_inventoryreportgenerator_initialization(self):
         """
         测试 InventoryReportGenerator 类的初始化
@@ -65,7 +66,7 @@ class TestCoreInventoryHandler(BaseTestCase):
     def _remove_file_with_retry(self, file_path, max_retries=5, delay=0.1):
         """
         带重试机制的文件删除方法
-        
+
         Args:
             file_path (str): 要删除的文件路径
             max_retries (int): 最大重试次数
@@ -89,10 +90,10 @@ class TestCoreInventoryHandler(BaseTestCase):
         """
         测试 InventoryReportGenerator.generate_inventory_report_with_chart 方法生成XLSX文件
         """
-        f = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+        f = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
         output_file_path = f.name
         f.close()
-        
+
         wb = None
         try:
             self.inventory_handler.generate_inventory_report_with_chart(
@@ -101,27 +102,27 @@ class TestCoreInventoryHandler(BaseTestCase):
                 device_code="TEST001",
                 start_date=date(2025, 7, 1),
                 end_date=date(2025, 7, 3),
-                oil_name="切削液"
+                oil_name="切削液",
             )
-            
+
             # 添加延迟确保文件被系统完全释放
             time.sleep(0.1)
-            
+
             # 验证文件已创建
             self.assertTrue(os.path.exists(output_file_path))
-            
+
             # 验证文件不为空
             self.assertGreater(os.path.getsize(output_file_path), 0)
-            
+
             # 验证Excel文件内容
             try:
                 wb = load_workbook(output_file_path)
                 ws = wb.active
-                
+
                 # 验证标题
                 self.assertIn("TEST001", ws["A1"].value)
                 self.assertIn("切削液", ws["A1"].value)
-                
+
                 # 验证数据 (注意openpyxl读取时会将date转换为datetime)
                 self.assertEqual(ws["A3"].value.date(), date(2025, 7, 1))
                 self.assertEqual(ws["B3"].value, 100.0)
@@ -129,7 +130,7 @@ class TestCoreInventoryHandler(BaseTestCase):
                 self.assertEqual(ws["B4"].value, 95.0)
                 self.assertEqual(ws["A5"].value.date(), date(2025, 7, 3))
                 self.assertEqual(ws["B5"].value, 90.0)
-                
+
                 # 验证图表存在
                 self.assertGreaterEqual(len(ws._charts), 1)
             finally:
@@ -143,10 +144,10 @@ class TestCoreInventoryHandler(BaseTestCase):
         """
         测试 InventoryReportGenerator.generate_inventory_report_with_chart 方法生成CSV文件
         """
-        f = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+        f = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
         output_file_path = f.name
         f.close()
-        
+
         try:
             self.inventory_handler.generate_inventory_report_with_chart(
                 inventory_data=self.test_data,
@@ -155,21 +156,21 @@ class TestCoreInventoryHandler(BaseTestCase):
                 start_date=date(2025, 7, 1),
                 end_date=date(2025, 7, 3),
                 oil_name="切削液",
-                export_format="csv"
+                export_format="csv",
             )
-            
+
             # 添加延迟确保文件被系统完全释放
             time.sleep(0.1)
-            
+
             # CSV文件应该保存为.csv扩展名
-            csv_file_path = output_file_path.replace('.xlsx', '.csv')
-            
+            csv_file_path = output_file_path.replace(".xlsx", ".csv")
+
             # 验证文件已创建
             self.assertTrue(os.path.exists(csv_file_path))
-            
+
             # 验证文件不为空
             self.assertGreater(os.path.getsize(csv_file_path), 0)
-            
+
             # 清理CSV文件
             if os.path.exists(csv_file_path):
                 self._remove_file_with_retry(csv_file_path)
@@ -185,33 +186,33 @@ class TestCoreInventoryHandler(BaseTestCase):
         test_data = [
             (date(2025, 7, 1), 105.0),  # 有效数据
             (date(2025, 7, 2), "invalid"),  # 无效数据
-            (date(2025, 7, 3), -5.0)  # 无效数据
+            (date(2025, 7, 3), -5.0),  # 无效数据
         ]
-        
-        f = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+
+        f = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
         xlsx_file_path = f.name
         f.close()
-        
+
         wb = None
         try:
             self.inventory_handler.generate_inventory_report_with_chart(
                 test_data, xlsx_file_path, "DEV001", date(2025, 7, 1), date(2025, 7, 3)
             )
-            
+
             # 添加延迟确保文件被系统完全释放
             time.sleep(0.1)
-            
+
             # 验证文件已创建
             self.assertTrue(os.path.exists(xlsx_file_path))
-            
+
             # 验证Excel文件内容
             try:
                 wb = load_workbook(xlsx_file_path)
                 ws = wb.active
-                
+
                 # 验证标题
                 self.assertIn("DEV001", ws["A1"].value)
-                
+
                 # 验证有效数据存在 (注意openpyxl读取时会将date转换为datetime)
                 self.assertEqual(ws["A3"].value.date(), date(2025, 7, 1))
                 self.assertEqual(ws["B3"].value, 105.0)
@@ -226,31 +227,31 @@ class TestCoreInventoryHandler(BaseTestCase):
         测试 InventoryReportGenerator.generate_inventory_report_with_chart 方法处理空数据
         """
         test_data = []
-        
-        f = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+
+        f = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
         xlsx_file_path = f.name
         f.close()
-        
+
         wb = None
         try:
             self.inventory_handler.generate_inventory_report_with_chart(
                 test_data, xlsx_file_path, "DEV001", date(2025, 7, 1), date(2025, 7, 2)
             )
-            
+
             # 添加延迟确保文件被系统完全释放
             time.sleep(0.1)
-            
+
             # 验证文件已创建
             self.assertTrue(os.path.exists(xlsx_file_path))
-            
+
             # 验证Excel文件内容
             try:
                 wb = load_workbook(xlsx_file_path)
                 ws = wb.active
-                
+
                 # 验证标题
                 self.assertIn("DEV001", ws["A1"].value)
-                
+
                 # 验证默认数据存在 (注意openpyxl读取时会将date转换为datetime)
                 self.assertEqual(ws["A3"].value.date(), date(2025, 7, 1))
                 self.assertEqual(ws["A4"].value.date(), date(2025, 7, 2))
@@ -260,33 +261,36 @@ class TestCoreInventoryHandler(BaseTestCase):
         finally:
             self._remove_file_with_retry(xlsx_file_path)
 
-    def test_inventoryreportgenerator_generate_inventory_report_with_chart_csv(self):
+    def test_inventoryreportgenerator_generate_inventory_report_with_chart_csv_format(
+        self,
+    ):
         """
         测试 InventoryReportGenerator.generate_inventory_report_with_chart 方法生成CSV格式报告
         """
-        test_data = [
-            (date(2025, 7, 1), 100.0),
-            (date(2025, 7, 2), 95.0)
-        ]
-        
-        f = tempfile.NamedTemporaryFile(suffix='.csv', delete=False)
+        test_data = [(date(2025, 7, 1), 100.0), (date(22025, 7, 2), 95.0)]
+
+        f = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
         csv_file_path = f.name
         f.close()
-        
+
         try:
             self.inventory_handler.generate_inventory_report_with_chart(
-                test_data, csv_file_path, "DEV001", date(2025, 7, 1), date(2025, 7, 2), 
-                export_format="csv"
+                test_data,
+                csv_file_path,
+                "DEV001",
+                date(2025, 7, 1),
+                date(2025, 7, 2),
+                export_format="csv",
             )
-            
+
             # 添加延迟确保文件被系统完全释放
             time.sleep(0.1)
-            
+
             # 验证文件已创建
             self.assertTrue(os.path.exists(csv_file_path))
-            
+
             # 验证CSV内容
-            with open(csv_file_path, 'r') as f:
+            with open(csv_file_path, "r") as f:
                 content = f.read()
                 self.assertIn("日期", content)
                 self.assertIn("库存百分比", content)  # 修正列标题检查

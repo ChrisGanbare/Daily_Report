@@ -117,8 +117,8 @@ service_provider = ServiceProvider()
 
 def register_services():
     """注册所有服务到依赖注入容器"""
-    from .cache_handler import CacheHandler
     from ..utils.config_handler import ConfigHandler
+    from .cache_handler import CacheHandler
     from .db_handler import DatabaseHandler
 
     # 注册配置服务
