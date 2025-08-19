@@ -114,6 +114,7 @@ class TestCoreDbHandler(BaseTestCase):
 
         # 模拟查询结果
         mock_cursor.fetchone.return_value = (1, 100)
+        mock_cursor.fetchall.return_value = [(1, 100)]
 
         # 模拟连接池
         mock_pool_instance = MagicMock()
@@ -132,14 +133,14 @@ class TestCoreDbHandler(BaseTestCase):
         db_handler.connect()
 
         # 调用方法
-        result = db_handler.get_device_and_customer_info(
+        result = db_handler.get_latest_device_id_and_customer_id(
             "TEST001", "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s"
         )
 
         # 验证结果
         self.assertEqual(result, (1, 100))
         mock_cursor.execute.assert_called_once_with(
-            "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s",
+            "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s ORDER BY create_time DESC, id DESC",
             ("TEST001",),
         )
 
@@ -156,7 +157,8 @@ class TestCoreDbHandler(BaseTestCase):
         mock_connection.cursor.side_effect = [mock_device_cursor, mock_customer_cursor]
 
         # 模拟查询结果
-        mock_device_cursor.fetchone.return_value = (1, 100)  # 设备ID, 客户ID
+        mock_device_cursor.fetchone.return_value = None
+        mock_device_cursor.fetchall.return_value = [(1, 100)]  # 设备ID, 客户ID
         mock_customer_cursor.fetchone.return_value = ("测试客户",)  # 客户名称
 
         # 模拟连接池
