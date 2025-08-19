@@ -266,7 +266,7 @@ def generate_inventory_reports(log_prefix="库存表处理日志", query_config=
             
             try:
                 # 获取设备ID和客户ID
-                device_info = db_handler.get_device_and_customer_info(device_code, device_query_template)
+                device_info = db_handler.get_latest_device_id_and_customer_id(device_code, device_query_template)
                 if not device_info:
                     error_msg = f"  无法找到设备 {device_code} 的信息"
                     print(error_msg)

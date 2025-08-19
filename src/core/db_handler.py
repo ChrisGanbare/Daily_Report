@@ -110,9 +110,10 @@ class DatabaseHandler:
             print(f"关闭数据库连接时发生错误: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
 
-    def get_device_and_customer_info(self, device_code, device_query_template):
+    def get_latest_device_id_and_customer_id(self, device_code, device_query_template):
         """
         根据设备编号查询设备ID和客户ID，使用device_code查询
+        如果有多条记录，则选择create_time最新且device_id最大的记录
 
         Args:
             device_code (str): 设备编号
@@ -125,14 +126,40 @@ class DatabaseHandler:
         try:
             cursor = self.connection.cursor()
             print(f"执行设备信息查询，设备编号: {device_code}")
-            print(f"查询SQL模板: {device_query_template}")
+            
+            # 修改查询语句，获取所有匹配的记录并按create_time降序、id降序排列
+            # 假设原查询模板类似于: SELECT id, customer_id FROM oil.t_device WHERE device_code = %s
+            # 我们需要添加ORDER BY子句来排序
+            if "ORDER BY" not in device_query_template.upper():
+                # 在WHERE条件后添加排序条件
+                if "WHERE" in device_query_template.upper():
+                    ordered_query = device_query_template.replace(
+                        "WHERE device_code = %s", 
+                        "WHERE device_code = %s ORDER BY create_time DESC, id DESC"
+                    )
+                else:
+                    # 如果没有WHERE子句，直接添加ORDER BY
+                    ordered_query = device_query_template + " ORDER BY create_time DESC, id DESC"
+            else:
+                # 如果已经有ORDER BY子句，使用原始查询
+                ordered_query = device_query_template
+                
+            print(f"查询SQL: {ordered_query}")
 
             # 使用device_code查询
-            cursor.execute(device_query_template, (device_code,))
-            result = cursor.fetchone()
-            print(f"查询结果: {result}")
-
-            return (result[0], result[1]) if result else None
+            cursor.execute(ordered_query, (device_code,))
+            results = cursor.fetchall()
+            
+            if results:
+                # 选择第一条记录（根据排序规则，这是create_time最新且device_id最大的记录）
+                result = results[0]
+                print(f"查询结果: {results}")
+                print(f"选中的记录: {result}")
+                return (result[0], result[1]) if len(result) >= 2 else None
+            else:
+                print("未找到匹配的设备记录")
+                return None
+                
         except Exception as e:
             print(f"查询设备信息时发生未知错误: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
@@ -145,6 +172,52 @@ class DatabaseHandler:
                 except:
                     pass
                 cursor.close()
+
+    # 为了保持向后兼容性，保留旧方法名的引用
+    def get_latest_device_and_customer_info(self, device_code, device_query_template):
+        """
+        已废弃：请使用 get_latest_device_id_and_customer_id
+        
+        根据设备编号查询设备ID和客户ID，使用device_code查询
+        如果有多条记录，则选择create_time最新且device_id最大的记录
+
+        Args:
+            device_code (str): 设备编号
+            device_query_template (str): 查询SQL模板（device_code）
+
+        Returns:
+            tuple or None: (设备ID, 客户ID)或None（未找到时）
+        """
+        import warnings
+        warnings.warn(
+            "get_latest_device_and_customer_info is deprecated, use get_latest_device_id_and_customer_id instead",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.get_latest_device_id_and_customer_id(device_code, device_query_template)
+        
+    # 为了保持向后兼容性，保留旧方法名的引用
+    def get_device_and_customer_info(self, device_code, device_query_template):
+        """
+        已废弃：请使用 get_latest_device_id_and_customer_id
+        
+        根据设备编号查询设备ID和客户ID，使用device_code查询
+        如果有多条记录，则选择create_time最新且device_id最大的记录
+
+        Args:
+            device_code (str): 设备编号
+            device_query_template (str): 查询SQL模板（device_code）
+
+        Returns:
+            tuple or None: (设备ID, 客户ID)或None（未找到时）
+        """
+        import warnings
+        warnings.warn(
+            "get_device_and_customer_info is deprecated, use get_latest_device_id_and_customer_id instead",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.get_latest_device_id_and_customer_id(device_code, device_query_template)
 
     def fetch_inventory_data(
         self, device_id, query_or_template, start_date=None, end_date=None
@@ -286,7 +359,7 @@ class DatabaseHandler:
         try:
             print(f"查询客户名称，设备编号: {device_code}")
             # 先通过设备编号获取设备ID和客户ID
-            device_info = self.get_device_and_customer_info(
+            device_info = self.get_latest_device_id_and_customer_id(
                 device_code,
                 "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s",
             )
