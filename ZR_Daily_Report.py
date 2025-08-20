@@ -187,7 +187,7 @@ def generate_inventory_reports(log_prefix="库存表处理日志", query_config=
         # 读取设备信息
         devices = file_handler.read_devices_from_csv(csv_file)
         if not devices:
-            print("未能读取设备信息，请检查文件格式。")
+            print("未能读取设备信息。")
             return None
         
         # 验证设备信息
