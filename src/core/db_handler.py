@@ -4,6 +4,8 @@ from datetime import date, datetime
 
 # 导入mysql.connector
 import mysql.connector
+import logging
+from typing import List, Tuple, Optional
 from mysql.connector import pooling
 
 
