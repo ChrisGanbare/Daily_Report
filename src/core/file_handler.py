@@ -1,5 +1,9 @@
 import csv
 import os
+import sys
+import re
+from datetime import datetime
+from src.utils.date_utils import parse_date, validate_csv_data, validate_date_span
 
 
 class FileHandler:
@@ -22,6 +26,7 @@ class FileHandler:
         """
         devices = []
         encodings = ['utf-8', 'utf-8-sig', 'gbk', 'gb2312']
+        max_devices = 300  # 最大支持设备数量
 
         print(f"正在尝试读取设备信息文件: {csv_file}")
 
@@ -41,6 +46,8 @@ class FileHandler:
         no_header_warning_printed = False
         incomplete_row_warning_printed = False
         empty_device_warning_printed = False
+        date_format_error_printed = False
+        invalid_device_code_warning_printed = False
         
         # 标记是否成功读取到设备信息
         success = False
@@ -76,13 +83,11 @@ class FileHandler:
                     required_fields = {'start_date', 'end_date', 'device_code'}
                     fieldnames = set(reader.fieldnames)
 
-                    # 检查是否存在设备标识字段
-                    has_device_code = 'device_code' in fieldnames
-
-                    if not has_device_code:
-                        # 只在第一次打印缺少设备标识字段的警告
+                    # 检查是否所有必需字段都存在
+                    missing_fields = required_fields - fieldnames
+                    if missing_fields:
                         if not device_field_warning_printed:
-                            print("警告：CSV文件缺少设备标识字段，应包含'device_code'")
+                            print(f"错误：CSV文件缺少必要字段: {', '.join(missing_fields)}")
                             device_field_warning_printed = True
                             data_issue_found = True
                         continue
@@ -99,11 +104,7 @@ class FileHandler:
                             continue
 
                         # 获取设备标识
-                        device_code = (
-                            row.get('device_code', '').strip()
-                            if has_device_code
-                            else ''
-                        )
+                        device_code = row.get('device_code', '').strip()
 
                         # 确保设备标识不为空
                         if not device_code:
@@ -113,28 +114,65 @@ class FileHandler:
                                 data_issue_found = True
                             continue
 
+                        # 验证设备编码只能包含英文字母和阿拉伯数字
+                        if not re.match(r'^[A-Za-z0-9]+$', device_code):
+                            print(f"错误：设备编码只能包含英文字母和阿拉伯数字，第{reader.line_num}行: {device_code}")
+                            sys.exit(1)
+
+                        # 验证设备编码必须以英文字母开头
+                        if not re.match(r'^[A-Za-z]', device_code):
+                            print(f"错误：设备编码必须以英文字母开头，第{reader.line_num}行: {device_code}")
+                            sys.exit(1)
+
                         # 获取开始和结束日期
                         start_date = row.get('start_date', '').strip()
                         end_date = row.get('end_date', '').strip()
 
                         # 确保关键字段都不为空
                         if not start_date or not end_date:
-                            if not incomplete_row_warning_printed:
-                                print(f"警告：跳过日期信息不完整的行: {row}")
-                                incomplete_row_warning_printed = True
-                                data_issue_found = True
-                            continue
+                            print(f"错误：日期信息不完整，第{reader.line_num}行: {row}")
+                            sys.exit(1)  # 遇到日期为空时退出程序
 
+                        # 使用date_utils.py中的方法验证日期格式和逻辑关系
+                        try:
+                            # 验证日期格式和逻辑关系
+                            if not validate_csv_data(row):
+                                print(f"错误：日期验证失败，第{reader.line_num}行: {row}")
+                                sys.exit(1)
+                        except Exception as e:
+                            print(f"错误：日期验证异常，第{reader.line_num}行: {row}，异常信息: {str(e)}")
+                            sys.exit(1)
+                            
+                        # 验证日期跨度是否超过2个月
+                        if not validate_date_span(row):
+                            print(f"错误：日期跨度超过2个月，第{reader.line_num}行: {row}")
+                            sys.exit(1)
+
+                        # 检查设备编码是否重复，但允许相同设备编码具有不同日期范围的情况
+                        duplicate_found = False
+                        for existing_device in current_devices:
+                            if existing_device['device_code'] == device_code:
+                                # 如果设备编码相同，检查日期范围是否也相同
+                                if existing_device['start_date'] == start_date and existing_device['end_date'] == end_date:
+                                    print(f"错误：发现重复的设备编码且日期范围相同，第{reader.line_num}行: {row}")
+                                    print(f"     与之前第{current_devices.index(existing_device)+2}行的设备重复")
+                                    sys.exit(1)
+                                # 设备编码相同但日期范围不同，这是允许的
+                                duplicate_found = True
+                                break
+                        
                         current_devices.append({
                             'device_code': device_code,
                             'start_date': start_date,
                             'end_date': end_date,
                         })
-
-                    # 检查是否有设备数据行
-                    if row_count == 0:
-                        print(f"错误：设备信息文件为空: {csv_file}")
-                        return []  # 直接返回空列表，避免继续执行下面的逻辑
+                        
+                        # 检查设备数量是否超过限制
+                        if len(current_devices) > max_devices:
+                            print(f"错误：设备数量超过最大限制 ({max_devices}台)")
+                            print(f"当前设备数量: {len(current_devices)}台")
+                            print("请减少设备数量或分批处理")
+                            sys.exit(1)
         
                     if current_devices:
                         print(
