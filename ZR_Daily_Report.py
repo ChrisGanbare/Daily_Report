@@ -15,7 +15,7 @@ from src.core.db_handler import DatabaseHandler
 from src.core.inventory_handler import InventoryReportGenerator
 from src.core.statement_handler import CustomerStatementGenerator
 from src.core.file_handler import FileHandler
-from src.utils.data_validator import DataValidator
+from src.utils.date_utils import validate_csv_data
 from src.utils.config_handler import ConfigHandler
 from src.utils.ui_utils import choose_file, choose_directory  # 导入文件对话框工具类
 
@@ -152,7 +152,6 @@ def generate_inventory_reports(log_prefix="库存表处理日志", query_config=
     try:
         # 初始化处理器
         file_handler = FileHandler()
-        data_validator = DataValidator()
         
         # 如果没有传入配置，则读取查询配置文件
         if query_config is None:
@@ -193,7 +192,7 @@ def generate_inventory_reports(log_prefix="库存表处理日志", query_config=
         # 验证设备信息
         valid_devices = []
         for device in devices:
-            if data_validator.validate_csv_data(device):
+            if validate_csv_data(device):
                 valid_devices.append(device)
             else:
                 print(f"设备信息验证失败: {device}")
@@ -481,8 +480,7 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
             try:
                 file_handler = FileHandler()
                 devices = file_handler.read_devices_from_csv(csv_file)
-                data_validator = DataValidator()
-                valid_devices = [d for d in devices if data_validator.validate_csv_data(d)]
+                valid_devices = [d for d in devices if validate_csv_data(d)]
                 log_messages.append(f"总共读取设备数量: {len(devices)}")
                 log_messages.append(f"有效设备数量: {len(valid_devices)}")
             except Exception as e:

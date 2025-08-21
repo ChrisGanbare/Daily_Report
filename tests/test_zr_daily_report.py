@@ -33,7 +33,6 @@ class TestZRDailyReport(BaseTestCase):
 
             # 测试工具模块导入
             from src.utils.config_handler import ConfigHandler  # noqa: F401
-            from src.utils.data_validator import DataValidator  # noqa: F401
             from src.utils.date_utils import parse_date  # noqa: F401
 
         except ImportError as e:

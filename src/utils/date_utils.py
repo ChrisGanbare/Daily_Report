@@ -59,3 +59,44 @@ def validate_csv_data(row):
         return False
 
     return True
+
+def validate_date_span(row):
+    """
+    验证CSV数据行中的日期字段跨度是否在2个月以内
+
+    Args:
+        row (dict): CSV数据行，应包含'start_date'和'end_date'字段
+
+    Returns:
+        bool: 验证通过返回True，否则返回False
+    """
+    try:
+        start_date = parse_date(row["start_date"])
+        end_date = parse_date(row["end_date"])
+    except ValueError as e:
+        print(f"Date format error in row: {row}. Error: {e}")
+        return False
+
+    # 验证日期跨度是否超过2个月
+    # 通过将开始日期加2个月后与结束日期比较来实现
+    # 需要考虑跨年和月末等情况
+    if start_date.year == end_date.year:
+        month_diff = end_date.month - start_date.month
+    else:
+        month_diff = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
+    
+    # 考虑到日期的具体天数，如果结束日期的天数小于开始日期的天数，
+    # 实际月份跨度会比计算的月份数少一天到一个月不等
+    # 因此，如果月份差为2时，还需要进一步检查具体的日期
+    if month_diff > 2:
+        print(
+            f"Date span error in row: {row}. The date range from {row['start_date']} to {row['end_date']} exceeds 2 months."
+        )
+        return False
+    elif month_diff == 2 and end_date.day >= start_date.day:
+        print(
+            f"Date span error in row: {row}. The date range from {row['start_date']} to {row['end_date']} exceeds 2 months."
+        )
+        return False
+    
+    return True
