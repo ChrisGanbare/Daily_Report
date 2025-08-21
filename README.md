@@ -30,11 +30,6 @@ Web框架依赖：
 - jinja2 == 3.1.2 (模板引擎)
 - python-multipart == 0.0.6 (文件上传支持)
 
-异步处理依赖：
-- aiohttp >= 3.8.0 (异步HTTP客户端)
-- aiomysql == 0.2.0 (异步MySQL客户端)
-- asyncio-mqtt == 0.16.1 (MQTT支持)
-
 缓存支持依赖：
 - redis == 5.0.1
 - aioredis == 2.0.1

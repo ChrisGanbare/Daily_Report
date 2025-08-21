@@ -12,7 +12,6 @@ def run_flake8():
     """运行flake8检查，排除指定模块"""
     exclude_paths = [
         "src/api/*",
-        "src/core/async_processor.py",
         "src/core/cache_handler.py", 
         "src/core/dependency_injection.py",
         "src/monitoring/progress_monitor.py",

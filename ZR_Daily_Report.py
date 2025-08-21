@@ -176,7 +176,7 @@ def generate_inventory_reports(log_prefix="库存表处理日志", query_config=
         csv_file = choose_file(
             title="选择设备信息CSV文件",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            initialdir=os.path.dirname(__file__)  # 返回首页路径
+            initialdir=os.path.join(os.path.expanduser("~"), "Desktop")  # 修改为桌面路径
         )
         
         if not csv_file:
@@ -238,7 +238,7 @@ def generate_inventory_reports(log_prefix="库存表处理日志", query_config=
             exit(1)
 
         # 显示目录选择对话框，让用户选择输出目录
-        output_dir = choose_directory(title="选择库存报表输出目录", initialdir=os.path.dirname(__file__))
+        output_dir = choose_directory(title="选择库存报表输出目录", initialdir=os.path.join(os.path.expanduser("~"), "Desktop"))
         if not output_dir:
             print("未选择输出目录，程序退出。")
             connection.close()
@@ -467,7 +467,7 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
             csv_file = choose_file(
                 title="选择设备信息CSV文件",
                 filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-                initialdir=os.path.dirname(__file__)  # 返回首页路径
+                initialdir=os.path.join(os.path.expanduser("~"), "Desktop")  # 修改为桌面路径
             )
             
             if not csv_file:
@@ -548,7 +548,7 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
             exit(1)
 
         # 显示目录选择对话框，让用户选择输出目录
-        output_dir = choose_directory(title="选择客户对账单输出目录", initialdir=os.path.dirname(__file__))
+        output_dir = choose_directory(title="选择客户对账单输出目录", initialdir=os.path.join(os.path.expanduser("~"), "Desktop"))
         if not output_dir:
             print("未选择输出目录，程序退出。")
             connection.close()

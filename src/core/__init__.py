@@ -3,7 +3,6 @@
 导出核心功能模块
 """
 
-from .async_processor import AsyncDatabaseHandler
 from .cache_handler import CacheHandler
 from .db_handler import DatabaseHandler
 from .dependency_injection import ServiceProvider
