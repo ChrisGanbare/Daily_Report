@@ -1,5 +1,6 @@
 import sys
 import traceback
+import time
 from datetime import date, datetime
 
 # 导入mysql.connector
@@ -49,7 +50,7 @@ class DatabaseHandler:
             # 尝试使用连接池方式连接
             pool_config = self.db_config.copy()
             pool_config["pool_name"] = "zr_daily_report_pool"
-            pool_config["pool_size"] = 1
+            pool_config["pool_size"] = 5  # 增加连接池大小
             pool_config["pool_reset_session"] = True
 
             print("尝试创建连接池...")
@@ -79,6 +80,46 @@ class DatabaseHandler:
             print(f"错误类型: {type(e)}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
             raise
+
+    def _ensure_connection(self):
+        """
+        确保数据库连接有效，如果连接无效则尝试重新连接
+        """
+        max_retries = 3
+        retry_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                # 检查连接是否存在
+                if self.connection is None:
+                    print("连接不存在，从连接池获取新连接...")
+                    self.connection = self.connection_pool.get_connection()
+                    return True
+                
+                # 检查连接是否有效
+                if hasattr(self.connection, 'is_connected') and self.connection.is_connected():
+                    return True
+                else:
+                    print("连接已断开，尝试重新连接...")
+                    # 关闭旧连接
+                    try:
+                        self.connection.close()
+                    except:
+                        pass
+                    
+                    # 获取新连接
+                    self.connection = self.connection_pool.get_connection()
+                    return True
+                    
+            except Exception as e:
+                print(f"连接检查失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # 指数退避
+                else:
+                    raise
+        
+        return False
 
     def disconnect(self):
         """关闭数据库连接"""
@@ -126,6 +167,9 @@ class DatabaseHandler:
         """
         cursor = None
         try:
+            # 确保连接有效
+            self._ensure_connection()
+            
             cursor = self.connection.cursor()
             print(f"执行设备信息查询，设备编号: {device_code}")
             
@@ -238,6 +282,9 @@ class DatabaseHandler:
         """
         cursor = None
         try:
+            # 确保连接有效
+            self._ensure_connection()
+            
             # 如果提供了日期参数，则格式化查询模板，否则直接使用查询语句
             if start_date and end_date:
                 end_condition = f"{end_date} 23:59:59"
@@ -370,6 +417,9 @@ class DatabaseHandler:
                 _, customer_id = device_info  # 使用下划线表示我们不使用device_id
 
                 # 再通过客户ID获取客户名称
+                # 确保连接有效
+                self._ensure_connection()
+                
                 cursor = self.connection.cursor()
                 # 定义专用的客户名称查询SQL
                 customer_query = (
@@ -401,6 +451,9 @@ class DatabaseHandler:
         """
         cursor = None
         try:
+            # 确保连接有效
+            self._ensure_connection()
+            
             cursor = self.connection.cursor()
             query = "SELECT customer_id FROM oil.t_device WHERE id = %s"
             print(f"执行客户ID查询，SQL: {query}, 参数: {device_id}")
