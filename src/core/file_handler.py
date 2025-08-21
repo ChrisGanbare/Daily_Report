@@ -17,7 +17,7 @@ class FileHandler:
     def __init__(self):
         """初始化文件处理器"""
         self.encodings = ['utf-8', 'utf-8-sig', 'gbk', 'gb2312']
-        self.max_devices = 300  # 最大支持设备数量
+        self.max_devices = 200  # 最大支持设备数量
         self.required_fields = {'start_date', 'end_date', 'device_code'}
 
     def read_devices_from_csv(self, csv_file):
@@ -300,7 +300,7 @@ class FileHandler:
         return True
 
     def _validate_dates(self, row, line_num):
-        """验证日期"""
+        """验证日期格式和逻辑关系"""
         try:
             # 验证日期格式和逻辑关系
             if not validate_csv_data(row):
