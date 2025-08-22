@@ -576,7 +576,7 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
             
             try:
                 # 获取设备ID和客户ID
-                device_info = db_handler.get_device_and_customer_info(device_code, device_query_template)
+                device_info = db_handler.get_latest_device_id_and_customer_id(device_code, device_query_template)
                 if not device_info:
                     error_msg = f"  无法找到设备 {device_code} 的信息"
                     print(error_msg)
@@ -678,11 +678,14 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
                     formatted_start_date = start_date_obj.strftime('%Y-%m-%d')
                     formatted_end_date = end_date_obj.strftime('%Y-%m-%d')
                 
-                # 生成对账单文件名: 客户名称xxxx年xx月对账单
-                statement_file = os.path.join(
-                    output_dir,
-                    f"{customer_name}{start_date_obj.strftime('%Y年%m月')}对账单.xlsx"
-                )
+                # 生成对账单文件名
+                # 如果是跨月情况，使用结束日期的年月命名
+                if start_date_obj.month != end_date_obj.month:
+                    statement_filename = f"{customer_name}{end_date_obj.strftime('%Y年%m月')}对账单.xlsx"
+                else:
+                    statement_filename = f"{customer_name}{start_date_obj.strftime('%Y年%m月')}对账单.xlsx"
+                
+                statement_file = os.path.join(output_dir, statement_filename)
                 
                 # 生成对账单
                 statement_generator = CustomerStatementGenerator()
@@ -873,10 +876,11 @@ def main():
             
             # 再执行客户对账单功能，传递设备数据避免重复选择和配置对象避免重复加载
             print("开始执行客户对账单生成功能...")
-            if devices_data:
+            # 确保只有当devices_data不是None且不为空列表时才传递设备数据
+            if devices_data is not None and len(devices_data) > 0:
                 generate_customer_statement("对账单处理日志", devices_data, query_config)
             else:
-                # 如果没有获取到设备数据，则正常执行
+                # 如果没有获取到设备数据，则正常执行（会显示文件选择对话框）
                 generate_customer_statement("对账单处理日志", None, query_config)
             
     except Exception as e:

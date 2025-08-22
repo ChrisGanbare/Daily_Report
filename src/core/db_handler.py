@@ -219,51 +219,49 @@ class DatabaseHandler:
                     pass
                 cursor.close()
 
-    # 为了保持向后兼容性，保留旧方法名的引用
-    def get_latest_device_and_customer_info(self, device_code, device_query_template):
+    def get_customer_name_by_device_code(self, device_code):
         """
-        已废弃：请使用 get_latest_device_id_and_customer_id
-        
-        根据设备编号查询设备ID和客户ID，使用device_code查询
-        如果有多条记录，则选择create_time最新且device_id最大的记录
+        根据设备编号获取客户名称
 
         Args:
-            device_code (str): 设备编号
-            device_query_template (str): 查询SQL模板（device_code）
+            device_code (str): 设设备编号
 
         Returns:
-            tuple or None: (设备ID, 客户ID)或None（未找到时）
+            str: 客户名称
         """
-        import warnings
-        warnings.warn(
-            "get_latest_device_and_customer_info is deprecated, use get_latest_device_id_and_customer_id instead",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.get_latest_device_id_and_customer_id(device_code, device_query_template)
-        
-    # 为了保持向后兼容性，保留旧方法名的引用
-    def get_device_and_customer_info(self, device_code, device_query_template):
-        """
-        已废弃：请使用 get_latest_device_id_and_customer_id
-        
-        根据设备编号查询设备ID和客户ID，使用device_code查询
-        如果有多条记录，则选择create_time最新且device_id最大的记录
+        try:
+            print(f"查询客户名称，设备编号: {device_code}")
+            # 先通过设备编号获取设备ID和客户ID
+            device_info = self.get_latest_device_id_and_customer_id(
+                device_code,
+                "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s",
+            )
 
-        Args:
-            device_code (str): 设备编号
-            device_query_template (str): 查询SQL模板（device_code）
+            if device_info:
+                _, customer_id = device_info  # 使用下划线表示我们不使用device_id
 
-        Returns:
-            tuple or None: (设备ID, 客户ID)或None（未找到时）
-        """
-        import warnings
-        warnings.warn(
-            "get_device_and_customer_info is deprecated, use get_latest_device_id_and_customer_id instead",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.get_latest_device_id_and_customer_id(device_code, device_query_template)
+                # 再通过客户ID获取客户名称
+                # 确保连接有效
+                self._ensure_connection()
+                
+                cursor = self.connection.cursor()
+                # 定义专用的客户名称查询SQL
+                customer_query = (
+                    "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+                )
+                print(f"执行客户名称查询，SQL: {customer_query}, 参数: {customer_id}")
+                cursor.execute(customer_query, (customer_id,))
+                customer_result = cursor.fetchone()
+                print(f"客户名称查询结果: {customer_result}")
+                if customer_result and customer_result[0]:
+                    return customer_result[0]
+
+            print(f"警告：未找到设备编号 {device_code} 对应的客户信息")
+            return "未知客户"
+        except Exception as e:
+            print(f"查询客户名称时发生未知错误: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            return "未知客户"
 
     def fetch_inventory_data(
         self, device_id, query_or_template, start_date=None, end_date=None
@@ -394,50 +392,6 @@ class DatabaseHandler:
                 except:
                     pass
                 cursor.close()
-
-    def get_customer_name_by_device_code(self, device_code):
-        """
-        根据设备编号获取客户名称
-
-        Args:
-            device_code (str): 设备编号
-
-        Returns:
-            str: 客户名称
-        """
-        try:
-            print(f"查询客户名称，设备编号: {device_code}")
-            # 先通过设备编号获取设备ID和客户ID
-            device_info = self.get_latest_device_id_and_customer_id(
-                device_code,
-                "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s",
-            )
-
-            if device_info:
-                _, customer_id = device_info  # 使用下划线表示我们不使用device_id
-
-                # 再通过客户ID获取客户名称
-                # 确保连接有效
-                self._ensure_connection()
-                
-                cursor = self.connection.cursor()
-                # 定义专用的客户名称查询SQL
-                customer_query = (
-                    "SELECT customer_name FROM oil.t_customer WHERE id = %s"
-                )
-                print(f"执行客户名称查询，SQL: {customer_query}, 参数: {customer_id}")
-                cursor.execute(customer_query, (customer_id,))
-                customer_result = cursor.fetchone()
-                print(f"客户名称查询结果: {customer_result}")
-                if customer_result and customer_result[0]:
-                    return customer_result[0]
-
-            print(f"警告：未找到设备编号 {device_code} 对应的客户信息")
-            return "未知客户"
-        except Exception as e:
-            print(f"查询客户名称时发生未知错误: {e}")
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            return "未知客户"
 
     def get_customer_id(self, device_id):
         """

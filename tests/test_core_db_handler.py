@@ -104,7 +104,7 @@ class TestCoreDbHandler(BaseTestCase):
     @unittest.skipIf(not DATABASE_HANDLER_AVAILABLE, "数据库处理模块不可用")
     @patch('src.core.db_handler.pooling.MySQLConnectionPool')
     @patch('src.core.db_handler.mysql.connector.connect')
-    def test_get_device_and_customer_info_success(self, mock_connect, mock_pool):
+    def test_get_latest_device_id_and_customer_id_success(self, mock_connect, mock_pool):
         """测试获取设备和客户信息成功"""
         # 模拟连接和游标
         mock_connection = MagicMock()
@@ -221,6 +221,51 @@ class TestCoreDbHandler(BaseTestCase):
         # 检查连接池
         self.assertIsNotNone(db_handler.connection_pool)
 
+    @patch('ZR_Daily_Report.load_config')
+    @patch('ZR_Daily_Report.InventoryData')
+    @patch('ZR_Daily_Report.ExcelWithChart')
+    @patch('ZR_Daily_Report.CustomerStatementFromTemplate')
+    @patch('ZR_Daily_Report.DatabaseHandler')
+    def test_main_functionality(self, mock_db, mock_statement, mock_inventory, mock_excel, mock_config):
+        """测试主功能"""
+        mock_config.return_value = {
+            "db_config": {
+                "host": "8.139.83.130",
+                "port": 3306,
+                "user": "query_zr",
+                "password": "ZRYLPass220609!",
+                "database": "oil",
+            },
+            "device_code": "TEST001",
+            "output_dir": "/tmp",
+            "template_dir": "/tmp",
+            "start_date": "2023-01-01",
+            "end_date": "2023-01-31",
+        }
+        mock_db_instance = mock_db.return_value
+        mock_inventory_instance = mock_inventory.return_value
+        mock_statement_instance = mock_statement.return_value
+        mock_excel_instance = mock_excel.return_value
+
+        mock_db_instance.get_latest_device_id_and_customer_id.return_value = (1, 100)
+        mock_db_instance.get_customer_name_by_device_code.return_value = "测试客户"
+        mock_db_instance.fetch_inventory_data.return_value = (
+            [],
+            [],
+            []
+        )
+
+        # 模拟库存报告处理器
+        mock_inventory_instance.generate_excel_with_chart.return_value = "inventory_report.xlsx"
+
+        # 模拟客户报表处理器
+        mock_statement_instance.generate_customer_statement_from_template.return_value = "customer_statement.xlsx"
+
+        # 模拟Excel图表处理器
+        mock_excel_instance.generate_excel_with_chart.return_value = "chart.xlsx"
+
+        # 调用主函数
+        ZR_Daily_Report.main()
 
 if __name__ == "__main__":
     unittest.main()

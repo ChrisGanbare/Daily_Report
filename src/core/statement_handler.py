@@ -64,7 +64,7 @@ class CustomerStatementGenerator:
             # 获取工作表引用
             daily_usage_ws = wb["每日用量明细"]
             monthly_usage_ws = wb["每月用量对比"]
-            statement_ws = wb["中润对账单"]
+            homepage_ws = wb["中润对账单"]
 
             # 更新每日用量明细工作表中的图表
             if daily_usage_ws._charts:
@@ -89,10 +89,10 @@ class CustomerStatementGenerator:
                         # 保留原图表，不抛出异常
 
             # 更新中润对账单工作表中的图表
-            if statement_ws._charts:
-                for i, chart in enumerate(statement_ws._charts):
+            if homepage_ws._charts:
+                for i, chart in enumerate(homepage_ws._charts):
                     try:
-                        self._update_chart_in_statement(
+                        self._update_chart_in_homepage(
                             chart, daily_usage_ws, monthly_usage_ws
                         )
                     except Exception as e:
@@ -172,7 +172,7 @@ class CustomerStatementGenerator:
                     oil_names.append(cell_value)
         return oil_names
 
-    def _update_chart_in_statement(self, chart, daily_usage_ws, monthly_usage_ws):
+    def _update_chart_in_homepage(self, chart, daily_usage_ws, monthly_usage_ws):
         """
         更新对账单工作表中的图表
 
@@ -359,7 +359,7 @@ class CustomerStatementGenerator:
                 )
 
             # 更新各工作表
-            # 先更新每日用量明细和每月用量对比工作表
+            # 先更新每日用量明细和每月用量对比工作表（数据工作表）
             self._update_daily_usage_sheet(
                 wb["每日用量明细"], all_devices_data, start_date, end_date
             )
@@ -367,9 +367,9 @@ class CustomerStatementGenerator:
                 wb["每月用量对比"], all_devices_data, start_date, end_date
             )
 
-            # 最后更新中润对账单工作表
-            self._update_statement_sheet(
-                wb["中润对账单"], all_devices_data, customer_name, start_date, end_date
+            # 最后更新中润对账单工作表（主页工作表）- 只更新最基本的信息
+            self._update_homepage_sheet_minimal(
+                wb["中润对账单"], customer_name, start_date, end_date
             )
 
             # 更新图表数据源引用
@@ -467,26 +467,30 @@ class CustomerStatementGenerator:
         """
         try:
             start_date, end_date = self._prepare_date_range(start_date, end_date)
+            
+            # 检查日期跨度是否超过31天
+            date_span = (end_date - start_date).days + 1
+            if date_span > 31:
+                raise ValueError(f"日期跨度不能超过31天，当前跨度为{date_span}天")
 
             # 在G3单元格写入开始日期，格式：2025/7/1
-            ws["G3"] = start_date.strftime("%Y/%m/%d").replace("/0", "/").lstrip("0")
+            self._write_cell_safe(
+                ws, 3, 7, f"{start_date.year}/{start_date.month}/{start_date.day}"
+            )
+            # 在G4单元格写入结束日期
+            self._write_cell_safe(
+                ws, 4, 7, f"{end_date.year}/{end_date.month}/{end_date.day}"
+            )
 
-            # 在G4单元格写入结束日期，格式：2025/7/31
-            ws["G4"] = end_date.strftime("%Y/%m/%d").replace("/0", "/").lstrip("0")
-
-            # 在A6单元格写入年月，格式：2025年7月
-            ws["A6"] = start_date.strftime("%Y年%m月").replace("年0", "年")
-
-            # 收集每日用量数据，统一使用 float
-            # 修改数据结构，使用(设备ID, 油品名称)作为键，确保不同设备的相同油品创建独立列
+            # 收集所有设备的油品信息，使用(device_code, oil_name)作为复合键
+            # 确保每个设备的每种油品只出现一次
             daily_usage = defaultdict(lambda: defaultdict(float))
-            oil_columns = []  # 存储(设备ID, 油品名称)元组的列表，保持顺序
+            oil_columns = []  # 保持油品列的顺序
 
-            # 为每个设备的每种油品创建独立列
             for device_data in all_devices_data:
                 device_code = device_data["device_code"]
                 oil_name = device_data["oil_name"]
-                oil_key = (device_code, oil_name)  # 使用设备ID和油品名称组合作为唯一键
+                oil_key = (device_code, oil_name)
 
                 # 只有当这个设备油品组合还没有添加时才添加
                 if oil_key not in oil_columns:
@@ -510,10 +514,11 @@ class CustomerStatementGenerator:
             while current_date <= end_date:
                 date_list.append(current_date)
                 # 日期格式调整为：7.1
-                ws.cell(
-                    row=row_index,
-                    column=2,
-                    value=f"{current_date.month}.{current_date.day}",
+                self._write_cell_safe(
+                    ws,
+                    row_index,
+                    2,
+                    f"{current_date.month}.{current_date.day}",
                 )
                 current_date += timedelta(days=1)
                 row_index += 1
@@ -536,17 +541,13 @@ class CustomerStatementGenerator:
                 print(f"  写入设备 {device_code} 的油品 {oil_name} 到第{col_index}列")
                 # 写入油品名称到第5行，保持油品名称与数据库读取的数据一致
                 oil_key = (device_code, oil_name)
-                oil_name_cell = ws.cell(row=5, column=col_index)
-                if oil_name_cell.coordinate not in ws.merged_cells:
-                    oil_name_cell.value = oil_name
+                self._write_cell_safe(ws, 5, col_index, oil_name)
 
                 # 写入每日用量数据
                 for row_index, date in enumerate(date_list, start=6):
                     usage = daily_usage[date].get(oil_key, 0)
                     cell_value = round(usage, 2)
-                    data_cell = ws.cell(row=row_index, column=col_index)
-                    if data_cell.coordinate not in ws.merged_cells:
-                        data_cell.value = cell_value
+                    self._write_cell_safe(ws, row_index, col_index, cell_value)
 
         except Exception as e:
             print(f"更新每日用量明细工作表时出错: {e}")
@@ -632,27 +633,18 @@ class CustomerStatementGenerator:
             print(f"更新每月用量对比工作表时出错: {e}")
             raise
 
-    def _collect_oil_types(self, all_devices_data):
+    def _update_homepage_sheet_minimal(self, ws, customer_name, start_date, end_date):
         """
-        收集所有油品类型
-
+        最小化更新中润对账单工作表（主页），只更新最基本的信息
+        
         Args:
-            all_devices_data: 所有设备的数据
-
-        Returns:
-            list: 排序后的油品类型列表
+            ws: 工作表对象
+            customer_name: 客户名称
+            start_date: 开始日期
+            end_date: 结束日期
         """
-        oil_types = set()
-        for device_data in all_devices_data:
-            oil_types.add(device_data["oil_name"])
-        return sorted(list(oil_types))
-
-    def _update_statement_sheet(
-        self, ws, all_devices_data, customer_name, start_date, end_date
-    ):
-        """更新对账单工作表"""
         try:
-            # 更新标题和日期
+            # 只更新客户名称和统计日期等最基本的信息
             self._write_cell_safe(ws, 5, 1, f"客户名称：{customer_name}")
             self._write_cell_safe(
                 ws,
@@ -660,11 +652,9 @@ class CustomerStatementGenerator:
                 5,
                 f"统计日期：{start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}",
             )
-
-            # 收集所有油品类型
-            sorted_oil_types = self._collect_oil_types(all_devices_data)
-            print(f"排序后的油品: {sorted_oil_types}")
+            
+            # 不再进行其他操作，最大程度保护模板中的样式和元素
 
         except Exception as e:
-            print(f"更新对账单工作表时出错: {e}")
+            print(f"最小化更新中润对账单工作表时出错: {e}")
             raise

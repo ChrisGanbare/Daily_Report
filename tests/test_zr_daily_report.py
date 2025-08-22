@@ -98,3 +98,93 @@ class TestZRDailyReport(BaseTestCase):
         # 验证调用了库存报表和客户对账单生成函数
         mock_generate_inventory.assert_called_once()
         mock_generate_statement.assert_called_once()
+
+    @patch("ZR_Daily_Report.load_config")
+    @patch("ZR_Daily_Report.generate_inventory_reports")
+    @patch("ZR_Daily_Report.generate_customer_statement")
+    def test_main_function_with_both_mode_device_data_passed(
+        self, mock_generate_statement, mock_generate_inventory, mock_load_config
+    ):
+        """测试主程序在both模式下正确传递设备数据"""
+        from ZR_Daily_Report import main
+
+        # 模拟配置加载
+        mock_load_config.return_value = {
+            "db_config": {
+                "host": "localhost",
+                "port": 3306,
+                "user": "test_user",
+                "password": "test_password",
+                "database": "test_db"
+            },
+            "sql_templates": {
+                "device_id_query": "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s",
+                "inventory_query": "SELECT * FROM oil.t_order WHERE device_id = {device_id}",
+                "customer_query": "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+            }
+        }
+
+        # 模拟库存报表函数返回设备数据
+        mock_generate_inventory.return_value = [
+            {
+                "device_code": "DEV001",
+                "start_date": "2025-07-01",
+                "end_date": "2025-07-31"
+            }
+        ]
+
+        # 模拟命令行参数
+        with patch("sys.argv", ["ZR_Daily_Report.py", "--mode", "both"]):
+            main()
+
+        # 验证调用了库存报表和客户对账单生成函数
+        mock_generate_inventory.assert_called_once_with("库存表处理日志", mock_load_config.return_value)
+        
+        # 验证客户对账单函数被调用时传入了设备数据和配置
+        mock_generate_statement.assert_called_once_with(
+            "对账单处理日志", 
+            mock_generate_inventory.return_value,  # 确保传递了设备数据
+            mock_load_config.return_value
+        )
+
+    @patch("ZR_Daily_Report.load_config")
+    @patch("ZR_Daily_Report.generate_inventory_reports")
+    @patch("ZR_Daily_Report.generate_customer_statement")
+    def test_main_function_with_both_mode_empty_device_data(
+        self, mock_generate_statement, mock_generate_inventory, mock_load_config
+    ):
+        """测试主程序在both模式下处理空设备数据的情况"""
+        from ZR_Daily_Report import main
+
+        # 模拟配置加载
+        mock_load_config.return_value = {
+            "db_config": {
+                "host": "localhost",
+                "port": 3306,
+                "user": "test_user",
+                "password": "test_password",
+                "database": "test_db"
+            },
+            "sql_templates": {
+                "device_id_query": "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s",
+                "inventory_query": "SELECT * FROM oil.t_order WHERE device_id = {device_id}",
+                "customer_query": "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+            }
+        }
+
+        # 模拟库存报表函数返回空设备数据
+        mock_generate_inventory.return_value = []
+
+        # 模拟命令行参数
+        with patch("sys.argv", ["ZR_Daily_Report.py", "--mode", "both"]):
+            main()
+
+        # 验证调用了库存报表和客户对账单生成函数
+        mock_generate_inventory.assert_called_once_with("库存表处理日志", mock_load_config.return_value)
+        
+        # 验证客户对账单函数被调用时传入了None（因为设备数据为空列表）
+        mock_generate_statement.assert_called_once_with(
+            "对账单处理日志", 
+            None,  # 空列表应该传入None
+            mock_load_config.return_value
+        )
