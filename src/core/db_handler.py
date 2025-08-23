@@ -263,20 +263,18 @@ class DatabaseHandler:
             print(f"详细错误信息:\n{traceback.format_exc()}")
             return "未知客户"
 
-    def fetch_inventory_data(
-        self, device_id, query_or_template, start_date=None, end_date=None
-    ):
+    def _execute_query(self, device_id, query_or_template, start_date=None, end_date=None):
         """
-        从数据库获取库存数据
+        执行数据库查询的公共方法
 
         Args:
-            device_id (int): 设设备ID
+            device_id (int): 设备ID
             query_or_template (str): SQL查询语句或模板
             start_date (str, optional): 开始日期
             end_date (str, optional): 结束日期
 
         Returns:
-            tuple: (处理后的数据列表, 列名列表, 原始数据列表)
+            tuple: (查询结果列表, 列名列表)
         """
         cursor = None
         try:
@@ -294,7 +292,6 @@ class DatabaseHandler:
             else:
                 query = query_or_template
 
-            print(f"执行库存数据查询，SQL: {query}")
             cursor = self.connection.cursor()
             cursor.execute(query)
             results = cursor.fetchall()
@@ -308,6 +305,32 @@ class DatabaseHandler:
             except (TypeError, AttributeError):
                 # 在测试环境中，cursor.description可能是Mock对象
                 columns = []
+            
+            return results, columns
+        except Exception as e:
+            print(f"执行数据库查询时发生未知错误: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            raise
+
+    def fetch_inventory_data(
+        self, device_id, query_or_template, start_date=None, end_date=None
+    ):
+        """
+        从数据库获取库存数据
+
+        Args:
+            device_id (int): 设备ID
+            query_or_template (str): SQL查询语句或模板
+            start_date (str, optional): 开始日期
+            end_date (str, optional): 结束日期
+
+        Returns:
+            tuple: (处理后的数据列表, 列名列表, 原始数据列表)
+        """
+        try:
+            print(f"执行库存数据查询，SQL: {query_or_template}")
+            results, columns = self._execute_query(device_id, query_or_template, start_date, end_date)
+            
             print(f"  查询返回 {len(results)} 条记录")
             print(f"  列名: {columns}")
 
@@ -323,9 +346,10 @@ class DatabaseHandler:
                         else 0
                     )
 
+                    oil_name = row_dict.get("油品名称", "未知油品")
                     if i < 5:  # 只打印前5条记录用于调试
                         print(
-                            f"    记录 {i+1}: 加注时间={order_time}, 原油剩余比例={oil_remaining}"
+                            f"    记录 {i+1}: 加注时间={order_time}, 油品名称={oil_name}, 原油剩余比例={oil_remaining}"
                         )
 
                     if isinstance(order_time, datetime):
@@ -384,6 +408,112 @@ class DatabaseHandler:
             print(f"获取库存数据时发生未知错误: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
             raise
+
+    def fetch_daily_usage_data(
+        self, device_id, query_or_template, start_date=None, end_date=None
+    ):
+        """
+        从数据库获取每日用量数据，用于对账单生成
+
+        Args:
+            device_id (int): 设备ID
+            query_or_template (str): SQL查询语句或模板
+            start_date (str, optional): 开始日期
+            end_date (str, optional): 结束日期
+
+        Returns:
+            tuple: (处理后的数据列表, 列名列表, 原始数据列表)
+        """
+        cursor = None  # 初始化cursor为None
+        try:
+            print(f"执行每日用量数据查询，SQL: {query_or_template}")
+            results, columns = self._execute_query(device_id, query_or_template, start_date, end_date)
+            
+            print(f"  查询返回 {len(results)} 条记录")
+            print(f"  列名: {columns}")
+
+            # 处理数据
+            data = {}
+            for i, row in enumerate(results):
+                try:
+                    row_dict = dict(zip(columns, row))
+                    order_time = row_dict.get("加注时间")
+                    oil_remaining = (
+                        row_dict.get("原油剩余比例", 0)
+                        if row_dict.get("原油剩余比例") is not None
+                        else 0
+                    )
+                    
+                    # 获取油加注值
+                    oil_val = (
+                        row_dict.get("油加注값", 0)
+                        if row_dict.get("油加注값") is not None
+                        else 0
+                    )
+
+                    if i < 5:  # 只打印前5条记录用于调试
+                        print(
+                            f"    记录 {i+1}: 加注时间={order_time}, 油品名称={row_dict.get('油品名称', '未知油品')}, 油加注값={oil_val},原油剩余比例={oil_remaining}"
+                        )
+
+                    if isinstance(order_time, datetime):
+                        order_date = order_time.date()
+                        if order_date not in data:
+                            data[order_date] = {
+                                "datetime": order_time,
+                                "oil_remaining": float(oil_remaining),
+                                "oil_val": float(oil_val),  # 存储正确的油加注값
+                            }
+                        else:
+                            # 累加同一天的油加注值
+                            data[order_date]["oil_val"] += float(oil_val)
+                    elif isinstance(order_time, str):
+                        # 处理字符串格式的日期
+                        parsed_datetime = None
+                        # 尝试多种日期格式
+                        for fmt in ["%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"]:
+                            try:
+                                parsed_datetime = datetime.strptime(order_time, fmt)
+                                break
+                            except ValueError:
+                                continue
+
+                        if parsed_datetime:
+                            order_date = parsed_datetime.date()
+                            if order_date not in data:
+                                data[order_date] = {
+                                    "datetime": parsed_datetime,
+                                    "oil_remaining": float(oil_remaining),
+                                    "oil_val": float(oil_val),  # 存储正确的油加注값
+                                }
+                            else:
+                                # 累加同一天的油加注값
+                                data[order_date]["oil_val"] += float(oil_val)
+                        else:
+                            print(f"警告：无法解析日期字符串 {order_time}")
+                    elif order_time is None:
+                        print(f"警告：记录 {i+1} 中加注时间为空")
+                    else:
+                        print(
+                            f"警告：记录 {i+1} 中加注时间类型未知: {type(order_time)}"
+                        )
+
+                except Exception as row_e:
+                    print(f"处理记录 {i+1} 时发生错误: {row_e}")
+                    print(f"详细错误信息:\n{traceback.format_exc()}")
+                    continue
+
+            # 转换为对账单需要的格式，使用正确的油加注值字段
+            result = [
+                (date, float(record["oil_val"]))  # 使用正确的油加注값字段
+                for date, record in sorted(data.items())
+            ]
+            print("  每日用量数据读取完成。")
+            return result, columns, results
+        except Exception as e:
+            print(f"获取每日用量数据时发生未知错误: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            raise
         finally:
             if cursor:
                 # 消费所有未读结果以避免"Unread result found"错误
@@ -392,6 +522,107 @@ class DatabaseHandler:
                 except:
                     pass
                 cursor.close()
+
+    def fetch_monthly_usage_data(
+        self, device_id, query_or_template, start_date=None, end_date=None
+    ):
+        """
+        从数据库获取每月用量数据，用于对账单生成
+
+        Args:
+            device_id (int): 设设备ID
+            query_or_template (str): SQL查询语句或模板
+            start_date (str, optional): 开始日期
+            end_date (str, optional): 结束日期
+
+        Returns:
+            tuple: (处理后的数据列表, 列名列表, 原始数据列表)
+        """
+        try:
+            print(f"执行每月用量数据查询，SQL: {query_or_template}")
+            results, columns = self._execute_query(device_id, query_or_template, start_date, end_date)
+            
+            print(f"  查询返回 {len(results)} 条记录")
+            print(f"  列名: {columns}")
+
+            # 处理数据
+            data = {}
+            for i, row in enumerate(results):
+                try:
+                    row_dict = dict(zip(columns, row))
+                    order_time = row_dict.get("加注时间")
+                    oil_remaining = (
+                        row_dict.get("原油剩余比例", 0)
+                        if row_dict.get("原油剩余比例") is not None
+                        else 0
+                    )
+                    
+                    # 获取油加注值
+                    oil_val = (
+                        row_dict.get("油加注값", 0)
+                        if row_dict.get("油加注값") is not None
+                        else 0
+                    )
+
+                    if i < 5:  # 只打印前5条记录用于调试
+                        print(
+                            f"    记录 {i+1}: 加注时间={order_time}, 油品名称={row_dict.get('油品名称', '未知油品')}, 油加注값={oil_val},原油剩余比例={oil_remaining}"
+                        )
+
+                    if isinstance(order_time, datetime):
+                        # 获取订单的月份作为key
+                        order_month = order_time.strftime("%Y-%m")
+                        if order_month not in data or order_time > data[order_month]["datetime"]:
+                            data[order_month] = {
+                                "datetime": order_time,
+                                "oil_remaining": float(oil_remaining),
+                                "oil_val": float(oil_val),  # 存储正确的油加注값
+                            }
+                    elif isinstance(order_time, str):
+                        # 处理字符串格式的日期
+                        parsed_datetime = None
+                        # 尝试多种日期格式
+                        for fmt in ["%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"]:
+                            try:
+                                parsed_datetime = datetime.strptime(order_time, fmt)
+                                break
+                            except ValueError:
+                                continue
+
+                        if parsed_datetime:
+                            # 获取订单的月份作为key
+                            order_month = parsed_datetime.strftime("%Y-%m")
+                            if order_month not in data or parsed_datetime > data[order_month]["datetime"]:
+                                data[order_month] = {
+                                    "datetime": parsed_datetime,
+                                    "oil_remaining": float(oil_remaining),
+                                    "oil_val": float(oil_val),  # 存储正确的油加注값
+                                }
+                        else:
+                            print(f"警告：无法解析日期字符串 {order_time}")
+                    elif order_time is None:
+                        print(f"警告：记录 {i+1} 中加注时间为空")
+                    else:
+                        print(
+                            f"警告：记录 {i+1} 中加注时间类型未知: {type(order_time)}"
+                        )
+
+                except Exception as row_e:
+                    print(f"处理记录 {i+1} 时发生错误: {row_e}")
+                    print(f"详细错误信息:\n{traceback.format_exc()}")
+                    continue
+
+            # 转换为对账单需要的格式，使用正确的油加注值字段
+            result = [
+                (month, float(record["oil_val"]))  # 使用正确的油加注값字段
+                for month, record in sorted(data.items())
+            ]
+            print("  每月用量数据读取完成。")
+            return result, columns, results
+        except Exception as e:
+            print(f"获取每月用量数据时发生未知错误: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            raise
 
     def get_customer_id(self, device_id):
         """

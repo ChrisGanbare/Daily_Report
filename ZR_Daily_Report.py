@@ -603,6 +603,14 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
                 print("  正在获取库存数据...")
                 data, columns, raw_data = db_handler.fetch_inventory_data(device_id, inventory_query_template, start_date, end_date)
                 
+                # 获取对账单每日用量数据
+                print("  正在获取对账单每日用量数据...")
+                daily_usage_data, _, _ = db_handler.fetch_daily_usage_data(device_id, inventory_query_template, start_date, end_date)
+                
+                # 获取对账单每月用量数据
+                print("  正在获取对账单每月用量数据...")
+                monthly_usage_data, _, _ = db_handler.fetch_monthly_usage_data(device_id, inventory_query_template, start_date, end_date)
+                
                 if not data:
                     print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
                     log_messages.append(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
@@ -638,6 +646,8 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
                     'device_code': device_code,
                     'oil_name': oil_name,  # 从数据库查询结果中获取油品名称
                     'data': data,
+                    'daily_usage_data': daily_usage_data,  # 对账单每日用量数据
+                    'monthly_usage_data': monthly_usage_data,  # 对账单每月用量数据
                     'raw_data': raw_data,
                     'columns': columns,
                     'customer_name': customer_name,

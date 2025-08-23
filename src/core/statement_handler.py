@@ -496,7 +496,12 @@ class CustomerStatementGenerator:
                 if oil_key not in oil_columns:
                     oil_columns.append(oil_key)
 
-                for date, value in device_data["data"]:
+                # 使用正确的数据源（对账单应该使用油加注值，而不是原油剩余比例）
+                data_source = device_data.get("daily_usage_data", None)
+                if data_source is None:
+                    data_source = device_data["data"]
+                
+                for date, value in data_source:
                     # 确保日期是date对象
                     if isinstance(date, str):
                         date_obj = datetime.strptime(date, "%Y-%m-%d").date()
@@ -505,6 +510,10 @@ class CustomerStatementGenerator:
                     # 将数值统一转换为 float 类型
                     value = float(value) if value is not None else 0.0
                     daily_usage[date_obj][oil_key] += value
+                    
+                    # 添加调试信息，帮助追踪特定设备的数据
+                    if device_code == "MO24111301600002" and date_obj == datetime(2025, 7, 1).date():
+                        print(f"设备 {device_code} 在 {date_obj} 的数据: 原始值={value}, 累计值={daily_usage[date_obj][oil_key]}")
 
             # 写入日期列 (B列)
             current_date = start_date
@@ -548,6 +557,10 @@ class CustomerStatementGenerator:
                     usage = daily_usage[date].get(oil_key, 0)
                     cell_value = round(usage, 2)
                     self._write_cell_safe(ws, row_index, col_index, cell_value)
+                    
+                    # 添加调试信息，帮助追踪特定设备的数据写入
+                    if device_code == "MO24111301600002" and date == datetime(2025, 7, 31).date():
+                        print(f"写入设备 {device_code} 在 {date} 的数据: 值={cell_value}")
 
         except Exception as e:
             print(f"更新每日用量明细工作表时出错: {e}")
@@ -590,7 +603,8 @@ class CustomerStatementGenerator:
                 if oil_key not in oil_columns:
                     oil_columns.append(oil_key)
 
-                for date, value in device_data["data"]:
+                # 使用正确的数据源（对账单应该使用油加注值，而不是原油剩余比例）
+                for date, value in device_data.get("monthly_usage_data", device_data["data"]):
                     # 确保日期是date对象
                     if isinstance(date, str):
                         date_obj = datetime.strptime(date, "%Y-%m-%d").date()
