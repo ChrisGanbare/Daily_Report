@@ -608,9 +608,35 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
                     log_messages.append(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
                 
                 # 保存设备数据供后续使用
+                # 检查是否存在油品名称列
+                if not raw_data or '油品名称' not in columns:
+                    error_msg = f"  错误：设备 {device_code} 的数据中未找到油品名称列，请检查数据库查询结果"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
+                
+                # 获取第一条记录的油品名称作为该设备的油品名称
+                # 注意：这里假设一个设备只使用一种油品，这是业务上的合理假设
+                first_row = raw_data[0]
+                if isinstance(first_row, dict):
+                    oil_name = first_row.get('油品名称')
+                else:
+                    # 如果是元组或列表形式，根据列名索引获取油品名称
+                    oil_name_index = columns.index('油品名称')
+                    oil_name = first_row[oil_name_index] if oil_name_index < len(first_row) else None
+                
+                # 检查油品名称是否有效
+                if not oil_name:
+                    error_msg = f"  错误：设备 {device_code} 的数据中油品名称为空，请检查数据库数据完整性"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
+                
                 device_data = {
                     'device_code': device_code,
-                    'oil_name': raw_data[0]['油品名称'] if raw_data and '油品名称' in raw_data[0] else '切削液',  # 从数据库查询结果中获取油品名称
+                    'oil_name': oil_name,  # 从数据库查询结果中获取油品名称
                     'data': data,
                     'raw_data': raw_data,
                     'columns': columns,

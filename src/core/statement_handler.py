@@ -477,9 +477,9 @@ class CustomerStatementGenerator:
             self._write_cell_safe(
                 ws, 3, 7, f"{start_date.year}/{start_date.month}/{start_date.day}"
             )
-            # 在G4单元格写入结束日期
+            # 在H3单元格写入结束日期
             self._write_cell_safe(
-                ws, 4, 7, f"{end_date.year}/{end_date.month}/{end_date.day}"
+                ws, 3, 8, f"{end_date.year}/{end_date.month}/{end_date.day}"
             )
 
             # 收集所有设备的油品信息，使用(device_code, oil_name)作为复合键
@@ -539,9 +539,9 @@ class CustomerStatementGenerator:
                 oil_columns, start=3
             ):  # 从第3列开始(C列)
                 print(f"  写入设备 {device_code} 的油品 {oil_name} 到第{col_index}列")
-                # 写入油品名称到第5行，保持油品名称与数据库读取的数据一致
+                # 写入油品名称到第5行，格式为：设备编码\n油品名称
                 oil_key = (device_code, oil_name)
-                self._write_cell_safe(ws, 5, col_index, oil_name)
+                self._write_cell_safe(ws, 5, col_index, f"{device_code}\n{oil_name}")
 
                 # 写入每日用量数据
                 for row_index, date in enumerate(date_list, start=6):
