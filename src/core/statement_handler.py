@@ -582,11 +582,14 @@ class CustomerStatementGenerator:
             start_date, end_date = self._prepare_date_range(start_date, end_date)
 
             # 构建显示日期范围的字符串
-            ws.cell(
-                row=3,
-                column=2,
-                value=f"({start_date.strftime('%Y.%m.%d')}-{end_date.strftime('%Y.%m.%d')})",
-            )
+            # 在A1单元格写入截止日期信息
+            cell = ws.cell(row=1, column=1)
+            cell.value = f"截止日期：{end_date.strftime('%Y年%m月%d日')}"
+            # 设置对齐方式为靠右居中
+            from openpyxl.styles import Alignment
+            cell.alignment = Alignment(horizontal='right', vertical='center')
+            # 合并A1到I1单元格
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
 
             # 收集月度数据
             # 修改数据结构，使用(设备ID, 油品名称)作为键，确保不同设备的相同油品创建独立列
@@ -607,40 +610,60 @@ class CustomerStatementGenerator:
                 for date, value in device_data.get("monthly_usage_data", device_data["data"]):
                     # 确保日期是date对象
                     if isinstance(date, str):
-                        date_obj = datetime.strptime(date, "%Y-%m-%d").date()
+                        # 处理不同格式的日期字符串
+                        # monthly_usage_data中的日期格式是"MM"（例如"7月"）
+                        # 而data中的日期可能是完整日期格式
+                        try:
+                            # 首先尝试解析"MM"格式
+                            date_obj = datetime.strptime(date, "%m")
+                        except ValueError:
+                            # 如果失败，再尝试解析完整日期格式"%Y-%m-%d"
+                            date_obj = datetime.strptime(date, "%Y-%m-%d").date()
                     else:
                         date_obj = date
+
+                    # 格式化月份为"YYYY-MM"用于键值
                     month = date_obj.strftime("%Y-%m")
                     # 将数值统一转换为 float 类型
                     value = float(value) if value is not None else 0.0
                     monthly_stats[month][oil_key] += value
 
-            # 写入表头，从第2列（B列之后）开始
-            for col_index, (device_code, oil_name) in enumerate(oil_columns, start=2):
-                header_cell = ws.cell(row=3, column=col_index)
-                if header_cell.coordinate not in ws.merged_cells:
-                    header_cell.value = oil_name
-
-            # 写入数据
-            current_row = 6
+            # 按照新要求写入数据
+            # A列从A7开始写入设备编码
+            # B列从B7开始写入油品名称
+            # C列从C6开始写入月份（格式如：7月），从C7开始写入该行设备该月用量之和
+            current_row = 7
+            
+            # 获取所有月份并排序
             sorted_months = sorted(monthly_stats.keys())
-
-            for month in sorted_months:
-                # 写入月份到B列
-                month_cell = ws.cell(row=current_row, column=2)
-                if month_cell.coordinate not in ws.merged_cells:
-                    month_cell.value = month
-
-                # 写入各设备油品数据
-                month_data = monthly_stats[month]
-                for col_index, (device_code, oil_name) in enumerate(
-                    oil_columns, start=2
-                ):
-                    oil_key = (device_code, oil_name)
+            
+            # 写入月份标题到C6单元格开始
+            for i, month in enumerate(sorted_months):
+                # 从C6开始写入月份，格式化为"7月"这样的形式
+                month_cell = ws.cell(row=6, column=3+i)
+                # 从"2023-07"格式提取月份并添加"月"字
+                month_name = str(int(month.split("-")[1])) + "月"
+                month_cell.value = month_name
+            
+            # 为每个设备和油品组合写入数据
+            for device_code, oil_name in oil_columns:
+                oil_key = (device_code, oil_name)
+                
+                # A列写入设备编码
+                device_cell = ws.cell(row=current_row, column=1)
+                device_cell.value = device_code
+                
+                # B列写入油品名称
+                oil_cell = ws.cell(row=current_row, column=2)
+                oil_cell.value = oil_name
+                
+                # 从C列开始写入各月份的用量数据
+                for i, month in enumerate(sorted_months):
+                    month_data = monthly_stats[month]
                     value = month_data.get(oil_key, 0)
-                    data_cell = ws.cell(row=current_row, column=col_index)
-                    if data_cell.coordinate not in ws.merged_cells:
-                        data_cell.value = round(float(value), 2)
+                    data_cell = ws.cell(row=current_row, column=3+i)
+                    data_cell.value = round(float(value), 2)
+                    
                 current_row += 1
 
         except Exception as e:

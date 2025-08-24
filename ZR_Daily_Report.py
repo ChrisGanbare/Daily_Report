@@ -914,6 +914,7 @@ def main():
             print("开始执行客户对账单生成功能...")
             # 确保只有当devices_data不是None且不为空列表时才传递设备数据
             if devices_data is not None and len(devices_data) > 0:
+                # 在both模式下，复用之前已经获取的设备数据和数据库连接，避免重复查询
                 generate_customer_statement("对账单处理日志", devices_data, query_config)
             else:
                 # 如果没有获取到设备数据，则正常执行（会显示文件选择对话框）

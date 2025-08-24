@@ -11,7 +11,7 @@ from mysql.connector import pooling
 
 
 class DatabaseHandler:
-    """数据库处理类，负责所有数据库相关操作"""
+    """处理数据库连接和查询操作"""
 
     def __init__(self, db_config):
         """
@@ -23,7 +23,9 @@ class DatabaseHandler:
         self.db_config = db_config
         self.connection = None
         self.connection_pool = None
-        print(f"DatabaseHandler初始化，数据库配置: {db_config}")
+        # 添加缓存字典，用于存储设备的查询结果
+        self._query_cache = {}
+        print(f"DatabaseHandler初始化，数据库信息: {db_config}")
         print("使用的数据库驱动: mysql-connector-python")
 
     def connect(self):
@@ -120,6 +122,29 @@ class DatabaseHandler:
                     raise
         
         return False
+
+    def _cache_query_results(self, device_id, query_or_template, start_date=None, end_date=None):
+        """
+        执行一次数据库查询并缓存结果，供后续方法使用
+
+        Args:
+            device_id (int): 设备ID
+            query_or_template (str): SQL查询语句或模板
+            start_date (str, optional): 开始日期
+            end_date (str, optional): 结束日期
+
+        Returns:
+            tuple: (查询结果列表, 列名列表)
+        """
+        cache_key = (device_id, query_or_template, start_date, end_date)
+        if cache_key in self._query_cache:
+            print("使用缓存的查询结果")
+            return self._query_cache[cache_key]
+        
+        print("执行数据库查询并缓存结果")
+        results, columns = self._execute_query(device_id, query_or_template, start_date, end_date)
+        self._query_cache[cache_key] = (results, columns)
+        return results, columns
 
     def disconnect(self):
         """关闭数据库连接"""
@@ -263,6 +288,13 @@ class DatabaseHandler:
             print(f"详细错误信息:\n{traceback.format_exc()}")
             return "未知客户"
 
+    def clear_query_cache(self):
+        """
+        清除查询缓存
+        """
+        self._query_cache.clear()
+        print("查询缓存已清除")
+
     def _execute_query(self, device_id, query_or_template, start_date=None, end_date=None):
         """
         执行数据库查询的公共方法
@@ -329,7 +361,7 @@ class DatabaseHandler:
         """
         try:
             print(f"执行库存数据查询，SQL: {query_or_template}")
-            results, columns = self._execute_query(device_id, query_or_template, start_date, end_date)
+            results, columns = self._cache_query_results(device_id, query_or_template, start_date, end_date)
             
             print(f"  查询返回 {len(results)} 条记录")
             print(f"  列名: {columns}")
@@ -427,7 +459,7 @@ class DatabaseHandler:
         cursor = None  # 初始化cursor为None
         try:
             print(f"执行每日用量数据查询，SQL: {query_or_template}")
-            results, columns = self._execute_query(device_id, query_or_template, start_date, end_date)
+            results, columns = self._cache_query_results(device_id, query_or_template, start_date, end_date)
             
             print(f"  查询返回 {len(results)} 条记录")
             print(f"  列名: {columns}")
@@ -446,14 +478,14 @@ class DatabaseHandler:
                     
                     # 获取油加注值
                     oil_val = (
-                        row_dict.get("油加注값", 0)
-                        if row_dict.get("油加注값") is not None
+                        row_dict.get("油加注值", 0)
+                        if row_dict.get("油加注值") is not None
                         else 0
                     )
 
                     if i < 5:  # 只打印前5条记录用于调试
                         print(
-                            f"    记录 {i+1}: 加注时间={order_time}, 油品名称={row_dict.get('油品名称', '未知油品')}, 油加注값={oil_val},原油剩余比例={oil_remaining}"
+                            f"    记录 {i+1}: 加注时间={order_time}, 油品名称={row_dict.get('油品名称', '未知油品')}, 油加注值={oil_val},原油剩余比例={oil_remaining}"
                         )
 
                     if isinstance(order_time, datetime):
@@ -462,7 +494,7 @@ class DatabaseHandler:
                             data[order_date] = {
                                 "datetime": order_time,
                                 "oil_remaining": float(oil_remaining),
-                                "oil_val": float(oil_val),  # 存储正确的油加注값
+                                "oil_val": float(oil_val),  # 存储正确的油加注值
                             }
                         else:
                             # 累加同一天的油加注值
@@ -484,10 +516,10 @@ class DatabaseHandler:
                                 data[order_date] = {
                                     "datetime": parsed_datetime,
                                     "oil_remaining": float(oil_remaining),
-                                    "oil_val": float(oil_val),  # 存储正确的油加注값
+                                    "oil_val": float(oil_val),  # 存储正确的油加注值
                                 }
                             else:
-                                # 累加同一天的油加注값
+                                # 累加同一天的油加注值
                                 data[order_date]["oil_val"] += float(oil_val)
                         else:
                             print(f"警告：无法解析日期字符串 {order_time}")
@@ -505,7 +537,7 @@ class DatabaseHandler:
 
             # 转换为对账单需要的格式，使用正确的油加注值字段
             result = [
-                (date, float(record["oil_val"]))  # 使用正确的油加注값字段
+                (date, float(record["oil_val"]))  # 使用正确的油加注值字段
                 for date, record in sorted(data.items())
             ]
             print("  每日用量数据读取完成。")
@@ -540,7 +572,7 @@ class DatabaseHandler:
         """
         try:
             print(f"执行每月用量数据查询，SQL: {query_or_template}")
-            results, columns = self._execute_query(device_id, query_or_template, start_date, end_date)
+            results, columns = self._cache_query_results(device_id, query_or_template, start_date, end_date)
             
             print(f"  查询返回 {len(results)} 条记录")
             print(f"  列名: {columns}")
@@ -551,32 +583,58 @@ class DatabaseHandler:
                 try:
                     row_dict = dict(zip(columns, row))
                     order_time = row_dict.get("加注时间")
-                    oil_remaining = (
-                        row_dict.get("原油剩余比例", 0)
-                        if row_dict.get("原油剩余比例") is not None
-                        else 0
-                    )
+                    
                     
                     # 获取油加注值
                     oil_val = (
-                        row_dict.get("油加注값", 0)
-                        if row_dict.get("油加注값") is not None
+                        row_dict.get("油加注值", 0)
+                        if row_dict.get("油加注值") is not None
                         else 0
                     )
 
                     if i < 5:  # 只打印前5条记录用于调试
                         print(
-                            f"    记录 {i+1}: 加注时间={order_time}, 油品名称={row_dict.get('油品名称', '未知油品')}, 油加注값={oil_val},原油剩余比例={oil_remaining}"
+                            f"    记录 {i+1}: 加注时间={order_time}, 油品名称={row_dict.get('油品名称', '未知油品')}, 油加注值={oil_val},原油剩余比例={oil_remaining}"
                         )
 
                     if isinstance(order_time, datetime):
-                        # 获取订单的月份作为key
-                        order_month = order_time.strftime("%Y-%m")
+                        # 根据对账周期确定月份key
+                        # 如果是跨月对账周期，使用结束日期的年月作为所有记录的月份
+                        if start_date and end_date:
+                            # 解析对账周期的开始和结束日期
+                            start_date_obj = None
+                            end_date_obj = None
+                            
+                            # 尝试多种日期格式解析对账周期日期
+                            for fmt in ["%Y-%m-%d", "%Y/%m/%d"]:
+                                try:
+                                    if isinstance(start_date, str):
+                                        start_date_obj = datetime.strptime(start_date, fmt).date()
+                                    else:
+                                        start_date_obj = start_date
+                                    
+                                    if isinstance(end_date, str):
+                                        end_date_obj = datetime.strptime(end_date, fmt).date()
+                                    else:
+                                        end_date_obj = end_date
+                                    break
+                                except ValueError:
+                                    continue
+                            
+                            # 如果跨月，使用结束日期的年月作为key
+                            if start_date_obj and end_date_obj and start_date_obj.month != end_date_obj.month:
+                                order_month = end_date_obj.strftime("%Y-%m")
+                            else:
+                                # 否则使用订单日期的年月
+                                order_month = order_time.strftime("%Y-%m")
+                        else:
+                            # 如果没有提供对账周期，则使用订单日期的年月
+                            order_month = order_time.strftime("%Y-%m")
+                            
                         if order_month not in data or order_time > data[order_month]["datetime"]:
                             data[order_month] = {
                                 "datetime": order_time,
-                                "oil_remaining": float(oil_remaining),
-                                "oil_val": float(oil_val),  # 存储正确的油加注값
+                                "oil_val": float(oil_val),  # 存储正确的油加注值
                             }
                     elif isinstance(order_time, str):
                         # 处理字符串格式的日期
@@ -590,13 +648,43 @@ class DatabaseHandler:
                                 continue
 
                         if parsed_datetime:
-                            # 获取订单的月份作为key
-                            order_month = parsed_datetime.strftime("%Y-%m")
+                            # 根据对账周期确定月份key
+                            # 如果是跨月对账周期，使用结束日期的年月作为所有记录的月份
+                            if start_date and end_date:
+                                # 解析对账周期的开始和结束日期
+                                start_date_obj = None
+                                end_date_obj = None
+                                
+                                # 尝试多种日期格式解析对账周期日期
+                                for fmt in ["%Y-%m-%d", "%Y/%m/%d"]:
+                                    try:
+                                        if isinstance(start_date, str):
+                                            start_date_obj = datetime.strptime(start_date, fmt).date()
+                                        else:
+                                            start_date_obj = start_date
+                                        
+                                        if isinstance(end_date, str):
+                                            end_date_obj = datetime.strptime(end_date, fmt).date()
+                                        else:
+                                            end_date_obj = end_date
+                                        break
+                                    except ValueError:
+                                        continue
+                                
+                                # 如果跨月，使用结束日期的年月作为key
+                                if start_date_obj and end_date_obj and start_date_obj.month != end_date_obj.month:
+                                    order_month = end_date_obj.strftime("%Y-%m")
+                                else:
+                                    # 否则使用订单日期的年月
+                                    order_month = parsed_datetime.strftime("%Y-%m")
+                            else:
+                                # 如果没有提供对账周期，则使用订单日期的年月
+                                order_month = parsed_datetime.strftime("%Y-%m")
+                            
                             if order_month not in data or parsed_datetime > data[order_month]["datetime"]:
                                 data[order_month] = {
                                     "datetime": parsed_datetime,
-                                    "oil_remaining": float(oil_remaining),
-                                    "oil_val": float(oil_val),  # 存储正确的油加注값
+                                    "oil_val": float(oil_val),  # 存储正确的油加注值
                                 }
                         else:
                             print(f"警告：无法解析日期字符串 {order_time}")
@@ -614,7 +702,7 @@ class DatabaseHandler:
 
             # 转换为对账单需要的格式，使用正确的油加注值字段
             result = [
-                (month, float(record["oil_val"]))  # 使用正确的油加注값字段
+                (month, float(record["oil_val"]))  # 使用正确的油加注值字段
                 for month, record in sorted(data.items())
             ]
             print("  每月用量数据读取完成。")
