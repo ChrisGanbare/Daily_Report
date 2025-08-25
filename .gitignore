@@ -129,3 +129,9 @@ pytest_cache/
 # Package files
 *.tar.gz
 *.zip
+
+# Batch files exception - allow tracking of specific batch files
+!important.bat
+!zr_daily_report_portable/install.bat
+!zr_daily_report_portable/run_report.bat
+!run_report.bat
