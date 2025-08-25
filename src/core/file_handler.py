@@ -11,6 +11,11 @@ class FileReadError(Exception):
     pass
 
 
+class StructuralError(FileReadError):
+    """与编码无关的结构性错误（如列顺序、字段缺失等）"""
+    pass
+
+
 class FileHandler:
     """文件处理类，负责所有文件相关操作"""
 
@@ -60,6 +65,13 @@ class FileHandler:
                         state['final_message_printed'] = True
                         print(f"成功使用 {encoding} 编码读取设备信息文件，共读取 {len(devices)} 条设备信息")
                         break
+            except StructuralError as e:
+                # 结构性错误（如列顺序错误）与编码无关，不需要尝试其他编码
+                if not state['device_field_warning_printed']:
+                    print(str(e))
+                    state['device_field_warning_printed'] = True
+                    state['data_issue_found'] = True
+                raise FileReadError(str(e)) from e
             except FileReadError as e:
                 # 重新抛出我们自定义的异常
                 raise e
@@ -84,7 +96,7 @@ class FileHandler:
             # 文件内容为空的情况
             error_msg = "错误：设备信息文件为空\n未能读取设备信息，请修改文件错误后再尝试。"
             raise FileReadError(error_msg)
-            
+        
         return devices if state['success'] else []
 
     def _validate_file(self, csv_file):
@@ -144,16 +156,20 @@ class FileHandler:
                     return None
 
                 # 验证列标题是否包含必要字段
-                fieldnames = set(reader.fieldnames)
-                missing_fields = self.required_fields - fieldnames
+                fieldnames = list(reader.fieldnames)
+                missing_fields = self.required_fields - set(fieldnames)
                 if missing_fields:
-                    if not state['device_field_warning_printed']:
-                        print(f"错误：CSV文件缺少必要字段: {', '.join(missing_fields)}")
-                        state['device_field_warning_printed'] = True
-                        state['data_issue_found'] = True
-                    return None
+                    # 这是一个结构性错误，与编码无关，抛出StructuralError
+                    error_msg = f"错误：CSV文件缺少必要字段: {', '.join(missing_fields)}"
+                    raise StructuralError(error_msg)
 
-                print(f"CSV列标题: {', '.join(reader.fieldnames)}")
+                # 验证列顺序是否正确（device_code, start_date, end_date必须连续排列在A-C列）
+                is_valid, error_msg = self._validate_column_order(fieldnames)
+                if not is_valid:
+                    # 这是一个结构性错误，与编码无关，抛出StructuralError
+                    raise StructuralError(error_msg)
+
+                print(f"CSV列标题: {', '.join(fieldnames)}")
 
                 # 读取设备信息
                 devices = self._read_device_rows(reader, state)
@@ -306,6 +322,7 @@ class FileHandler:
             if not validate_csv_data(row):
                 error_msg = f"错误：日期验证失败，第{line_num}行: {row}"
                 print(error_msg)
+                print("提示：请检查日期格式（支持 YYYY-MM-DD 或 YYYY/M/D）及日期逻辑关系")
                 raise FileReadError(error_msg)
         except FileReadError:
             # 重新抛出FileReadError异常
@@ -358,6 +375,44 @@ class FileHandler:
                 # 设备编码相同但日期范围不同，这是允许的
                 
         return True
+
+    def _validate_column_order(self, fieldnames):
+        """
+        验证CSV列标题顺序
+        要求device_code, start_date, end_date必须连续排列在前三列
+        
+        Args:
+            fieldnames (list): CSV文件的列标题列表
+            
+        Returns:
+            tuple: (bool, str) 验证结果和错误信息
+        """
+        # 检查是否有足够的列
+        if len(fieldnames) < 3:
+            error_msg = f"错误：CSV文件列数不足，至少需要3列，当前列数: {len(fieldnames)}"
+            return False, error_msg
+            
+        # 检查前三列是否为所需的字段且顺序正确
+        required_columns = ['device_code', 'start_date', 'end_date']
+        for i, required_col in enumerate(required_columns):
+            if fieldnames[i] != required_col:
+                error_msg = (
+                    f"错误：第{i+1}列应为'{required_col}'，实际为'{fieldnames[i]}'\n"
+                    "请确保CSV文件的前三列按以下顺序排列:\n"
+                    "  A列: device_code\n"
+                    "  B列: start_date\n" 
+                    "  C列: end_date"
+                )
+                return False, error_msg
+                
+        # 检查是否有重复的必需字段
+        required_set = set(required_columns)
+        actual_required_cols = [col for col in fieldnames if col in required_set]
+        if len(actual_required_cols) != len(required_columns):
+            error_msg = "错误：CSV文件中包含重复的必需字段"
+            return False, error_msg
+            
+        return True, ""
 
     def _print_final_message(self, state):
         """输出最终处理结果信息"""
