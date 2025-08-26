@@ -137,6 +137,7 @@ def create_requirements_file(target_dir):
     """
     requirements_content = """openpyxl>=3.1.0
 mysql-connector-python>=8.0.0,<9.0.0
+cryptography==43.0.1
 """
     
     with open(target_dir / "requirements.txt", "w", encoding="utf-8") as f:
@@ -249,6 +250,142 @@ read -p "按Enter键退出"
     
     # 给予执行权限
     os.chmod(sh_path, 0o755)
+    
+    # 创建安装脚本
+    install_bat_content = """@echo off
+REM ZR Daily Report 安装脚本
+
+@chcp 65001 >nul
+
+echo ================================
+echo ZR Daily Report 环境安装
+echo ================================
+
+REM 检查Python是否已安装
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo 错误：未检测到Python，请先安装Python 3.8或更高版本
+    echo 下载地址：https://www.python.org/downloads/
+    pause
+    exit /b 1
+)
+
+REM 获取Python版本
+for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
+echo 检测到Python版本: %PYTHON_VERSION%
+
+REM 创建虚拟环境
+echo.
+echo 正在创建虚拟环境...
+python -m venv venv
+if %errorlevel% neq 0 (
+    echo 错误：创建虚拟环境失败
+    pause
+    exit /b 1
+)
+
+REM 激活虚拟环境
+echo.
+echo 正在激活虚拟环境...
+call "venv\\Scripts\\activate.bat"
+if %errorlevel% neq 0 (
+    echo 错误：激活虚拟环境失败
+    pause
+    exit /b 1
+)
+
+REM 升级pip（使用阿里云镜像源）
+echo.
+echo 正在升级pip...
+python -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/
+if %errorlevel% neq 0 (
+    echo 警告：使用阿里云镜像源升级pip失败，尝试使用默认源...
+    python -m pip install --upgrade pip
+    if %errorlevel% neq 0 (
+        echo 错误：升级pip失败
+        pause
+        exit /b 1
+    )
+)
+
+REM 重新安装pip以解决路径问题（使用阿里云镜像源）
+echo.
+echo 正在重新安装pip以解决路径问题...
+python -m pip install --force-reinstall pip -i https://mirrors.aliyun.com/pypi/simple/
+if %errorlevel% neq 0 (
+    echo 警告：使用阿里云镜像源重新安装pip失败，尝试使用默认源...
+    python -m pip install --force-reinstall pip
+    if %errorlevel% neq 0 (
+        echo 错误：重新安装pip失败
+        pause
+        exit /b 1
+    )
+)
+
+REM 安装项目依赖（使用阿里云镜像源）
+echo.
+echo 正在安装项目依赖...
+python -m pip install -r "zr_daily_report\\requirements.txt" -i https://mirrors.aliyun.com/pypi/simple/
+if %errorlevel% neq 0 (
+    echo 警告：使用阿里云镜像源安装依赖失败，尝试使用默认源...
+    python -m pip install -r "zr_daily_report\\requirements.txt"
+    if %errorlevel% neq 0 (
+        echo 错误：安装项目依赖失败
+        pause
+        exit /b 1
+    )
+)
+
+echo.
+echo 安装完成！
+echo.
+echo 请使用以下方式运行程序：
+echo 1. 双击 run_report.bat
+echo 2. 或在命令行中执行：python ZR_Daily_Report.py
+echo.
+echo 按任意键退出...
+pause >nul
+"""
+    
+    with open(package_dir / "install.bat", "w", encoding="utf-8") as f:
+        f.write(install_bat_content)
+    
+    # 创建README.txt文件
+    readme_content = """# ZR Daily Report 可移植包
+
+这是一个完整的可移植包，包含了运行ZR Daily Report所需的所有文件。
+
+## 安装步骤
+
+1. 在目标计算机上确保已安装Python 3.8或更高版本
+2. 双击运行 `install.bat` 脚本
+3. 按照提示完成环境安装
+
+## 运行程序
+
+安装完成后，可以通过以下方式运行程序：
+- 双击 `run_report.bat` 运行程序
+- 或在命令行中执行 `python ZR_Daily_Report.py`
+
+## 项目结构
+- `zr_daily_report/` - 项目主目录
+- `venv/` - 虚拟环境目录（安装后创建）
+- `install.bat` - 安装脚本
+- `run_report.bat` - 启动脚本
+- `run_report.ps1` - PowerShell启动脚本
+
+## 系统要求
+- Windows 7/8/10/11
+- Python 3.8或更高版本
+- 至少100MB可用磁盘空间
+
+## 注意事项
+- 请勿修改目录结构
+- 如需重新安装，请删除 `venv` 目录并重新运行 `install.bat`
+"""
+    
+    with open(package_dir / "README.txt", "w", encoding="utf-8") as f:
+        f.write(readme_content)
 
 
 def create_zip_package(package_dir, zip_path):
