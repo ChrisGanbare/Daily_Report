@@ -89,7 +89,16 @@ def _save_error_log(log_messages, error_details, log_filename_prefix):
         log_filename_prefix (str): 日志文件名前缀
     """
     error_time = datetime.datetime.now()
-    error_log_file = os.path.join(os.getcwd(), f"{log_filename_prefix}_{error_time.strftime('%Y%m%d_%H%M%S')}.txt")
+    # 创建统一的错误日志目录
+    error_log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+    if not os.path.exists(error_log_dir):
+        os.makedirs(error_log_dir)
+    
+    # 使用指定的命名格式，包含error_log_前缀
+    error_log_file = os.path.join(
+        error_log_dir, 
+        f"error_log_{log_filename_prefix}_{error_time.strftime('%Y%m%d_%H%M%S')}.txt"
+    )
     try:
         with open(error_log_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(log_messages))
@@ -400,15 +409,26 @@ def generate_inventory_reports(log_prefix="库存表处理日志", query_config=
             log_messages.append("")
             log_messages.append(f"失败设备列表: {', '.join(failed_devices)}")
         
-        # 生成日志文件
-        log_file = os.path.join(output_dir, f"{log_prefix}_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
+        # 保存日志文件
+        end_time = datetime.datetime.now()
+        log_messages.append(f"程序结束执行时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        log_messages.append(f"程序总执行时间: {end_time - start_time}")
+        log_messages.append("")  # 添加空行分隔
+
+        log_file = os.path.join(output_dir, f"程序执行日志_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
         try:
             with open(log_file, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(log_messages))
-            print(f"\n日志文件已保存到: {log_file}")
+                for message in log_messages:
+                    f.write(message + '\n')
+            log_save_msg = f"程序执行日志已保存至: {os.path.basename(log_file)}"
+            print(log_save_msg)
+            log_messages.append(log_save_msg)
+            log_messages.append("")  # 添加空行分隔
         except Exception as e:
-            print(f"保存日志文件失败: {e}")
-            print(f"详细错误信息:\n{traceback.format_exc()}")
+            log_error_msg = f"保存日志文件时出错: {e}"
+            print(log_error_msg)
+            log_messages.append(log_error_msg)
+            log_messages.append("")  # 添加空行分隔
         
         print("\n库存报表生成功能执行完毕！")
         try:
