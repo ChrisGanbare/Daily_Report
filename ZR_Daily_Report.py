@@ -19,10 +19,12 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 # 导入项目模块
 from src.cli.argument_parser import parse_arguments, print_usage
-from src.cli.mode_selector import show_mode_selection_dialog
+from src.ui.mode_selector import show_mode_selection_dialog
+from src.ui.filedialog_selector import choose_file, choose_directory
 from src.core.report_controller import (
     generate_inventory_reports,
     generate_customer_statement,
+    generate_both_reports,
     _load_config
 )
 
@@ -58,25 +60,8 @@ def main():
         elif mode == 'statement':
             generate_customer_statement()
         elif mode == 'both':
-            # 先加载配置文件，避免重复加载
-            query_config = _load_config()
-            
-            # 先执行库存报表功能，并获取设备数据
-            devices_data = generate_inventory_reports("库存表处理日志", query_config)
-            
-            # 如果库存报表生成被取消或失败，直接退出程序
-            if devices_data is None:
-                # generate_inventory_reports函数已经打印了退出信息，这里不需要重复打印
-                return
-
-            # 再执行客户对账单功能，传递设备数据避免重复选择和配置对象避免重复加载
-            # 确保只有当devices_data不是None且不为空列表时才传递设备数据
-            if devices_data is not None and len(devices_data) > 0:
-                # 在both模式下，复用之前已经获取的设备数据和数据库连接，避免重复查询
-                generate_customer_statement("对账单处理日志", devices_data, query_config)
-            else:
-                # 如果没有获取到设备数据，则正常执行（会显示文件选择对话框）
-                generate_customer_statement("对账单处理日志", None, query_config)
+            # 使用优化的综合报表生成功能
+            generate_both_reports()
             
     except Exception as e:
         print(f"主程序执行过程中发生异常: {e}")

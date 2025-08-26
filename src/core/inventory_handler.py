@@ -13,13 +13,39 @@ from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Font, PatternFill
 
+from .base_report import BaseReportGenerator
 
-class InventoryReportGenerator:
+
+class InventoryReportGenerator(BaseReportGenerator):
     """库存报表生成器，专门负责生成设备库存报表和图表"""
 
     def __init__(self):
         """初始化库存报表生成器"""
-        pass
+        super().__init__()
+
+    def generate_report(self, inventory_data, output_file_path, **kwargs):
+        """
+        生成库存报表的实现方法
+        
+        Args:
+            inventory_data (list): 库存数据列表
+            output_file_path (str): 输出文件路径
+            **kwargs: 其他参数
+            
+        Returns:
+            bool: 报表生成是否成功
+        """
+        device_code = kwargs.get('device_code')
+        start_date = kwargs.get('start_date')
+        end_date = kwargs.get('end_date')
+        oil_name = kwargs.get('oil_name')
+        chart_style = kwargs.get('chart_style')
+        export_format = kwargs.get('export_format', 'xlsx')
+        
+        return self.generate_inventory_report_with_chart(
+            inventory_data, output_file_path, device_code, start_date, end_date,
+            oil_name, chart_style, export_format
+        )
 
     def generate_inventory_report_with_chart(
         self,
