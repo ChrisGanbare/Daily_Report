@@ -1,5 +1,5 @@
 @echo off
-REM This is a universal startup script that can continue to be used after project migration
+REM This is a universal startup script for the portable version
 REM Get the directory where the current script is located (i.e. the project root directory)
 set PROJECT_DIR=%~dp0
 
@@ -26,20 +26,16 @@ call .venv\Scripts\activate.bat
 
 REM Check if requirements are installed
 echo Checking and installing dependencies...
-pip install -e .[test,dev] --upgrade
+pip install openpyxl mysql-connector-python pandas cryptography
 if %ERRORLEVEL% NEQ 0 (
-    echo Failed to install dependencies. Trying alternative installation...
-    pip install openpyxl mysql-connector-python pandas cryptography
-    if %ERRORLEVEL% NEQ 0 (
-        echo Failed to install dependencies. Please check your Python and pip installation.
-        pause
-        exit /b 1
-    )
+    echo Failed to install dependencies. Please check your Python and pip installation.
+    pause
+    exit /b 1
 )
 
 REM Run the main program and pass all arguments
 echo Running ZR Daily Report program...
-python ZR_Daily_Report.py %*
+python zr_daily_report\ZR_Daily_Report.py %*
 
 REM Keep the window open to view the output
 if %ERRORLEVEL% NEQ 0 (

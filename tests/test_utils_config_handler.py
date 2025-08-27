@@ -57,9 +57,7 @@ class TestUtilsConfigHandler(BaseTestCase):
         default_handler = ConfigHandler()
         # 验证配置目录是否正确设置
         expected_path = os.path.join(
-            os.path.dirname(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            ),
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "config",
         )
         self.assertEqual(default_handler.config_dir, expected_path)
@@ -92,12 +90,17 @@ class TestUtilsConfigHandler(BaseTestCase):
         self.assertEqual(loaded_config["db_config"]["user"], "test_user")
         self.assertIn("sql_templates", loaded_config)
 
-    def test_load_encrypted_config_file_not_found(self):
+    @patch("src.utils.config_handler.os.path.exists")
+    @patch("src.utils.config_handler.open")
+    def test_load_encrypted_config_file_not_found(self, mock_open, mock_exists):
         """
         测试 load_encrypted_config 方法处理配置文件不存在的情况
         """
+        # 配置模拟返回值
+        mock_exists.side_effect = lambda path: not path.endswith("query_config_encrypted.json")
+        
         with self.assertRaises(FileNotFoundError):
-            self.config_handler.load_encrypted_config("non_existent_config.json")
+            self.config_handler.load_encrypted_config()
 
     @patch("src.utils.config_handler.os.path.exists")
     @patch("src.utils.config_handler.open")
@@ -107,10 +110,6 @@ class TestUtilsConfigHandler(BaseTestCase):
         """
         # 配置模拟返回值
         mock_exists.side_effect = lambda path: not path.endswith(".env")
-        mock_file = Mock()
-        mock_file.__enter__ = Mock(return_value=mock_file)
-        mock_file.read = Mock(return_value="{}")
-        mock_open.return_value = mock_file
 
         with self.assertRaises(FileNotFoundError) as context:
             self.config_handler.load_encrypted_config()
@@ -129,10 +128,12 @@ class TestUtilsConfigHandler(BaseTestCase):
         # 创建模拟文件对象，支持上下文管理器协议
         mock_key_file = Mock()
         mock_key_file.__enter__ = Mock(return_value=mock_key_file)
+        mock_key_file.__exit__ = Mock(return_value=None)
         mock_key_file.read = Mock(return_value=b"test_key")
 
         mock_config_file = Mock()
         mock_config_file.__enter__ = Mock(return_value=mock_config_file)
+        mock_config_file.__exit__ = Mock(return_value=None)
         mock_config_file.read = Mock(return_value=b"encrypted_data")
 
         mock_open.side_effect = [mock_key_file, mock_config_file]
@@ -162,10 +163,12 @@ class TestUtilsConfigHandler(BaseTestCase):
         # 创建模拟文件对象，支持上下文管理器协议
         mock_key_file = Mock()
         mock_key_file.__enter__ = Mock(return_value=mock_key_file)
+        mock_key_file.__exit__ = Mock(return_value=None)
         mock_key_file.read = Mock(return_value=b"test_key")
 
         mock_config_file = Mock()
         mock_config_file.__enter__ = Mock(return_value=mock_config_file)
+        mock_config_file.__exit__ = Mock(return_value=None)
         mock_config_file.read = Mock(return_value=b"encrypted_data")
 
         mock_open.side_effect = [mock_key_file, mock_config_file]
@@ -226,37 +229,38 @@ class TestUtilsConfigHandler(BaseTestCase):
         finally:
             os.unlink(config_file_path)
 
-    def test_decrypt_config_data_decryption_error(self):
+    @patch("src.utils.config_handler.os.path.exists")
+    @patch("src.utils.config_handler.open")
+    def test_decrypt_config_data_decryption_error(self, mock_open, mock_exists):
         """
         测试 decrypt_config_data 方法处理解密错误的情况
         """
         # 配置模拟返回值
-        with patch("src.utils.config_handler.os.path.exists") as mock_exists, patch(
-            "src.utils.config_handler.open"
-        ) as mock_open:
-            mock_exists.return_value = True
+        mock_exists.return_value = True
 
-            # 创建模拟文件对象，支持上下文管理器协议
-            mock_key_file = Mock()
-            mock_key_file.__enter__ = Mock(return_value=mock_key_file)
-            mock_key_file.read = Mock(return_value=b"test_key")
+        # 创建模拟文件对象，支持上下文管理器协议
+        mock_key_file = Mock()
+        mock_key_file.__enter__ = Mock(return_value=mock_key_file)
+        mock_key_file.__exit__ = Mock(return_value=None)
+        mock_key_file.read = Mock(return_value=b"test_key")
 
-            mock_config_file = Mock()
-            mock_config_file.__enter__ = Mock(return_value=mock_config_file)
-            mock_config_file.read = Mock(return_value=b"encrypted_data")
+        mock_config_file = Mock()
+        mock_config_file.__enter__ = Mock(return_value=mock_config_file)
+        mock_config_file.__exit__ = Mock(return_value=None)
+        mock_config_file.read = Mock(return_value=b"encrypted_data")
 
-            mock_open.side_effect = [mock_key_file, mock_config_file]
+        mock_open.side_effect = [mock_key_file, mock_config_file]
 
-            # 模拟Fernet解密引发异常
-            with patch("src.utils.config_handler.Fernet") as mock_fernet:
-                mock_fernet_instance = Mock()
-                mock_fernet_instance.decrypt.side_effect = Exception("解密失败")
-                mock_fernet.return_value = mock_fernet_instance
+        # 模拟Fernet解密引发异常
+        with patch("src.utils.config_handler.Fernet") as mock_fernet:
+            mock_fernet_instance = Mock()
+            mock_fernet_instance.decrypt.side_effect = Exception("解密失败")
+            mock_fernet.return_value = mock_fernet_instance
 
-                with self.assertRaises(Exception) as context:
-                    self.config_handler.load_encrypted_config()
+            with self.assertRaises(Exception) as context:
+                self.config_handler.load_encrypted_config()
 
-                self.assertIn("解密失败", str(context.exception))
+            self.assertIn("解密失败", str(context.exception))
 
 
 if __name__ == "__main__":

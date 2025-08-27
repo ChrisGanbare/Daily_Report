@@ -267,7 +267,7 @@ class TestCoreInventoryHandler(BaseTestCase):
         """
         测试 InventoryReportGenerator.generate_inventory_report_with_chart 方法生成CSV格式报告
         """
-        test_data = [(date(2025, 7, 1), 100.0), (date(22025, 7, 2), 95.0)]
+        test_data = [(date(2025, 7, 1), 100.0), (date(2025, 7, 2), 95.0)]
 
         f = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
         csv_file_path = f.name

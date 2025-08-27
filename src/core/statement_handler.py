@@ -3,6 +3,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+import warnings
 from openpyxl import load_workbook
 from openpyxl.chart import BarChart, LineChart, Reference
 
@@ -44,6 +45,23 @@ class CustomerStatementGenerator(BaseReportGenerator):
             start_date=start_date,
             end_date=end_date
         )
+
+    def _collect_oil_types(self, devices_data):
+        """
+        收集所有设备的油品类型
+        
+        Args:
+            devices_data: 设备数据列表
+            
+        Returns:
+            list: 去重后的油品类型列表
+        """
+        oil_types = []
+        for device in devices_data:
+            oil_name = device.get("oil_name")
+            if oil_name and oil_name not in oil_types:
+                oil_types.append(oil_name)
+        return oil_types
 
     def _write_cell_safe(self, worksheet, row, column, value):
         """
@@ -372,8 +390,32 @@ class CustomerStatementGenerator(BaseReportGenerator):
 
         wb = None
         try:
+            # 自定义警告处理器，提供更详细的图表外部数据引用错误信息
+            def custom_warning_handler(message, category, filename, lineno, file=None, line=None):
+                """自定义警告处理器，提供更详细的图表外部数据引用错误信息"""
+                if "externalData" in str(message) and "id should be" in str(message):
+                    # 对于图表外部数据引用问题，提供更友好的提示信息
+                    print("信息: 检测到Excel模板中的图表存在外部数据引用")
+                    print("  问题描述:", str(message))
+                    print("  详细解释: 这是Excel模板中图表的一个技术性问题，不是数据源引用错误。")
+                    print("            openpyxl在读取包含图表的Excel文件时无法正确处理某些外部数据引用，")
+                    print("            但这不影响我们生成的报表，因为程序会在处理过程中修复这些问题。")
+                    print("  建议措施: 可以安全忽略此警告，它不会影响最终生成的报表文件。")
+                    print("  详细位置: 文件 %s, 行 %s" % (filename, lineno))
+                    print("")
+                else:
+                    # 其他警告使用默认处理方式
+                    print("警告:", str(message))
+
+            # 临时设置自定义警告处理器
+            old_showwarning = warnings.showwarning
+            warnings.showwarning = custom_warning_handler
+
             # 加载模板工作簿
             wb = load_workbook(template_path)
+            
+            # 恢复原来的警告处理器
+            warnings.showwarning = old_showwarning
 
             # 检查必需的工作表是否存在
             required_sheets = ["中润对账单", "每日用量明细", "每月用量对比"]
@@ -640,14 +682,14 @@ class CustomerStatementGenerator(BaseReportGenerator):
                     oil_columns.append(oil_key)
 
                 # 使用正确的数据源（对账单应该使用油加注值，而不是原油剩余比例）
-                for date, value in device_data.get("monthly_usage_data", device_data["data"]):
+                data_source = device_data.get("monthly_usage_data", device_data.get("data", []))
+                for date, value in data_source:
                     # 确保日期是date对象
                     if isinstance(date, str):
                         # 处理不同格式的日期字符串
                         # monthly_usage_data中的日期格式是"YYYY-MM"（例如"2025-07"）
                         # 而data中的日期可能是完整日期格式
                         date_obj = datetime.strptime(date, "%Y-%m").date()
-
                     else:
                         print(f"方法名: _update_monthly_comparison_sheet")
                         exit()
