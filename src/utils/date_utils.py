@@ -30,7 +30,7 @@ def parse_date(date_str):
         pass
 
     # 如果以上两种格式都不匹配，抛出异常
-    raise ValueError("Invalid date format. Expected 'YYYY-MM-DD' or 'YYYY/M/D'.")
+    raise ValueError("日期格式无效。请使用 'YYYY-MM-DD' 或 'YYYY/M/D' 格式（例如: 2025-07-01 或 2025/7/1）")
 
 
 def validate_csv_data(row):
@@ -48,14 +48,12 @@ def validate_csv_data(row):
         start_date = parse_date(row["start_date"])
         end_date = parse_date(row["end_date"])
     except ValueError as e:
-        print(f"Date format error in row: {row}. Error: {e}")
+        print(f"日期格式错误: {row}。{e}")
         return False
 
     # 验证开始日期不能晚于结束日期
     if start_date > end_date:
-        print(
-            f"Date logic error in row: {row}. Start date {row['start_date']} cannot be later than end date {row['end_date']}"
-        )
+        print(f"日期逻辑错误: 开始日期 {row['start_date']} 不能晚于结束日期 {row['end_date']}")
         return False
 
     return True
@@ -74,7 +72,7 @@ def validate_date_span(row):
         start_date = parse_date(row["start_date"])
         end_date = parse_date(row["end_date"])
     except ValueError as e:
-        print(f"Date format error in row: {row}. Error: {e}")
+        print(f"日期格式错误: {row}。{e}")
         return False
 
     # 验证日期跨度是否超过2个月
@@ -89,14 +87,10 @@ def validate_date_span(row):
     # 实际月份跨度会比计算的月份数少一天到一个月不等
     # 因此，如果月份差为2时，还需要进一步检查具体的日期
     if month_diff > 2:
-        print(
-            f"Date span error in row: {row}. The date range from {row['start_date']} to {row['end_date']} exceeds 2 months."
-        )
+        print(f"日期跨度错误: 从 {row['start_date']} 到 {row['end_date']} 的日期范围超过了2个月")
         return False
     elif month_diff == 2 and end_date.day >= start_date.day:
-        print(
-            f"Date span error in row: {row}. The date range from {row['start_date']} to {row['end_date']} exceeds 2 months."
-        )
+        print(f"日期跨度错误: 从 {row['start_date']} 到 {row['end_date']} 的日期范围超过了2个月")
         return False
     
     return True

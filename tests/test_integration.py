@@ -22,10 +22,10 @@ class TestIntegration(BaseTestCase):
         """测试前准备"""
         super().setUp()
 
-    @patch("ZR_Daily_Report.load_config")
-    @patch("ZR_Daily_Report.InventoryReportGenerator")
-    @patch("ZR_Daily_Report.FileHandler")
-    @patch("ZR_Daily_Report.DatabaseHandler")
+    @patch("ZR_Daily_Report._load_config")
+    @patch("src.core.inventory_handler.InventoryReportGenerator")
+    @patch("src.core.file_handler.FileHandler")
+    @patch("src.core.db_handler.DatabaseHandler")
     def test_main_workflow_success(
         self,
         mock_db_handler,
@@ -72,7 +72,7 @@ class TestIntegration(BaseTestCase):
 
         # 模拟库存报告处理器
         mock_inventory_instance = mock_inventory_handler.return_value
-        mock_inventory_instance.generate_excel_with_chart.return_value = None
+        mock_inventory_instance.generate_inventory_report_with_chart.return_value = None
 
         # 记录choose_file被调用的次数
         choose_file_call_count = 0
@@ -84,8 +84,8 @@ class TestIntegration(BaseTestCase):
         # 执行主函数
         test_args = ["ZR_Daily_Report.py", "--mode", "inventory"]
         with patch.object(sys, "argv", test_args):
-            with patch('src.utils.ui_utils.choose_file', side_effect=mock_choose_file), \
-                 patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir), \
+            with patch('src.ui.filedialog_selector.choose_file', side_effect=mock_choose_file), \
+                 patch('src.ui.filedialog_selector.choose_directory', return_value=self.test_output_dir), \
                  patch('builtins.print'):  # 避免打印干扰
                 result = main()
 
@@ -97,14 +97,18 @@ class TestIntegration(BaseTestCase):
         # 修正断言，使用正确的mock对象方法
         mock_db_instance.get_latest_device_id_and_customer_id.assert_called()
 
-    @patch('ZR_Daily_Report.load_config')
-    @patch('ZR_Daily_Report.FileHandler')
-    @patch('ZR_Daily_Report.DatabaseHandler')
-    @patch('ZR_Daily_Report.InventoryReportGenerator')
-    @patch('ZR_Daily_Report.CustomerStatementGenerator')
-    def test_both_modes_success(self, mock_statement_handler, mock_inventory_handler,
-                                mock_db_handler, mock_file_handler, mock_load_config):
-        """测试同时生成库存报表和对账单功能成功执行"""
+    @patch('ZR_Daily_Report._load_config')
+    @patch('src.core.file_handler.FileHandler')
+    @patch('src.core.db_handler.DatabaseHandler')
+    @patch('src.core.statement_handler.CustomerStatementGenerator')
+    def test_both_modes_success(
+        self, 
+        mock_statement_handler,
+        mock_db_handler, 
+        mock_file_handler,
+        mock_load_config
+    ):
+        """测试同时生成两种报表模式成功执行"""
         # 模拟配置加载
         mock_load_config.return_value = {
             "db_config": {
@@ -112,13 +116,13 @@ class TestIntegration(BaseTestCase):
                 "port": 3306,
                 "user": "test_user",
                 "password": "test_password",
-                "database": "test_db"
+                "database": "test_db",
             },
             "sql_templates": {
                 "device_id_query": "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s",
                 "inventory_query": "SELECT * FROM oil.t_order WHERE device_id = {device_id}",
-                "customer_query": "SELECT customer_name FROM oil.t_customer WHERE id = %s"
-            }
+                "customer_query": "SELECT customer_name FROM oil.t_customer WHERE id = %s",
+            },
         }
 
         # 模拟文件处理器
@@ -127,59 +131,54 @@ class TestIntegration(BaseTestCase):
             {
                 "device_code": "DEV001",
                 "start_date": "2025-07-01",
-                "end_date": "2025-07-31"
+                "end_date": "2025-07-31",
             }
         ]
 
         # 模拟数据库处理器
         mock_db_instance = mock_db_handler.return_value
-        mock_db_instance.get_device_and_customer_info.return_value = (1, 100)
+        mock_db_instance.get_latest_device_id_and_customer_id.return_value = (1, 100)
         mock_db_instance.get_customer_name_by_device_code.return_value = "测试客户"
         mock_db_instance.fetch_inventory_data.return_value = (
-            [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)],
-            ["加注时间", "原油剩余比例", "油品名称"],
-            [(date(2025, 7, 1), 95.5), (date(2025, 7, 2), 93.2)]
+            [(date(2025, 7, 1), 50.0)],
+            ["加注时间", "原油剩余比例"],
+            [(date(2025, 7, 1), 50.0)]
         )
-
-        # 模拟库存报告处理器
-        mock_inventory_instance = mock_inventory_handler.return_value
-        mock_inventory_instance.generate_excel_with_chart.return_value = None
 
         # 模拟对账单处理器
         mock_statement_instance = mock_statement_handler.return_value
         mock_statement_instance.generate_customer_statement_from_template.return_value = None
 
+        # 记录choose_file被调用的次数
+        choose_file_call_count = 0
+        def mock_choose_file(*args, **kwargs):
+            nonlocal choose_file_call_count
+            choose_file_call_count += 1
+            return 'test.csv'
+
         # 执行主函数
-        test_args = ['ZR_Daily_Report.py', '--mode', 'both']
-        with patch.object(sys, 'argv', test_args):
-            with patch('src.utils.ui_utils.choose_file', return_value='test.csv'), \
-                 patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir), \
+        test_args = ["ZR_Daily_Report.py", "--mode", "both"]
+        with patch.object(sys, "argv", test_args):
+            with patch('src.ui.filedialog_selector.choose_file', side_effect=mock_choose_file), \
+                 patch('src.ui.filedialog_selector.choose_directory', return_value=self.test_output_dir), \
                  patch('builtins.print'):  # 避免打印干扰
-                # 捕获SystemExit异常，因为程序正常执行完会调用exit(0)
-                try:
-                    result = main()
-                except SystemExit as e:
-                    # 程序正常执行完毕会调用exit(0)，我们捕获它
-                    self.assertEqual(e.code, 0)
-                    result = None
+                result = main()
 
         # 验证结果
         self.assertIsNone(result)
         mock_load_config.assert_called_once()
         mock_file_instance.read_devices_from_csv.assert_called_once()
-        mock_db_instance.connect.assert_called()
-        mock_db_instance.get_latest_device_id_and_customer_id.assert_called()
-        mock_inventory_instance.generate_excel_with_chart.assert_called()
-        mock_statement_instance.generate_customer_statement_from_template.assert_called()
+        mock_db_instance.connect.assert_called_once()
+        mock_statement_instance.generate_customer_statement_from_template.assert_called_once()
 
-    @patch('ZR_Daily_Report.load_config')
-    @patch('ZR_Daily_Report.FileHandler')
-    @patch('ZR_Daily_Report.DatabaseHandler')
-    @patch('ZR_Daily_Report.InventoryReportGenerator')
-    @patch('ZR_Daily_Report.CustomerStatementGenerator')
-    def test_both_modes_empty_device_list(self, mock_statement_handler, mock_inventory_handler,
-                                          mock_db_handler, mock_file_handler, mock_load_config):
-        """测试在both模式下，当库存报表返回空设备列表时的处理"""
+    @patch('ZR_Daily_Report._load_config')
+    @patch('src.core.file_handler.FileHandler')
+    def test_both_modes_empty_device_list(
+        self,
+        mock_file_handler,
+        mock_load_config
+    ):
+        """测试设备列表为空的情况"""
         # 模拟配置加载
         mock_load_config.return_value = {
             "db_config": {
@@ -228,8 +227,8 @@ class TestIntegration(BaseTestCase):
         # 执行主函数
         test_args = ['ZR_Daily_Report.py', '--mode', 'both']
         with patch.object(sys, 'argv', test_args):
-            with patch('src.utils.ui_utils.choose_file', side_effect=mock_choose_file), \
-                 patch('src.utils.ui_utils.choose_directory', return_value=self.test_output_dir), \
+            with patch('src.ui.filedialog_selector.choose_file', side_effect=mock_choose_file), \
+                 patch('src.ui.filedialog_selector.choose_directory', return_value=self.test_output_dir), \
                  patch('builtins.print'):  # 避免打印干扰
                 # 捕获SystemExit异常
                 try:

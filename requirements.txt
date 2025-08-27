@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 基础依赖
 openpyxl==3.1.0
 # 指定兼容的mysql-connector-python版本范围，避免出现内存访问冲突问题
@@ -48,3 +49,10 @@ twine>=4.0.0
 # 文档生成
 mkdocs==1.5.3
 mkdocs-material==9.4.8
+=======
+mysql-connector-python~=8.0.33
+aiohttp~=3.12.15
+aiomysql~=0.2.0
+openpyxl~=3.1.0
+cryptography~=45.0.6
+>>>>>>> 2c70ea71d10c297a06e670cf428a38b578983b25

@@ -1,0 +1,36 @@
+"""
+命令行参数解析模块
+"""
+import argparse
+
+
+def parse_arguments():
+    """
+    解析命令行参数
+    
+    Returns:
+        argparse.Namespace: 解析后的命令行参数
+    """
+    parser = argparse.ArgumentParser(description='ZR Daily Report Generator')
+    parser.add_argument('--mode', choices=['inventory', 'statement', 'both'], 
+                        default='both', help='选择执行模式: inventory(库存报表), statement(客户对账单), both(两者都执行)')
+    return parser.parse_args()
+
+
+def print_usage():
+    """
+    打印使用说明
+    """
+    print("ZR Daily Report Generator 使用说明:")
+    print("=" * 50)
+    print("命令行参数选项:")
+    print("  --mode inventory    只生成库存报表")
+    print("  --mode statement    只生成客户对账单")
+    print("  --mode both         同时生成库存报表和客户对账单（默认）")
+    print()
+    print("示例:")
+    print("  python ZR_Daily_Report.py")
+    print("  python ZR_Daily_Report.py --mode inventory")
+    print("  python ZR_Daily_Report.py --mode statement")
+    print("  python ZR_Daily_Report.py --mode both")
+    print("=" * 50)

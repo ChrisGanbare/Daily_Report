@@ -12,4 +12,7 @@
     <orderEntry type="jdk" jdkName="Python 3.13 (Daily_Report)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
+  <component name="PackageRequirementsSettings">
+    <option name="removeUnused" value="true" />
+  </component>
 </module>

@@ -8,14 +8,42 @@ from openpyxl.chart import BarChart, LineChart, Reference
 
 # 修复导入语句，使用正确的相对导入
 from ..utils.date_utils import parse_date
+from .base_report import BaseReportGenerator
 
 
-class CustomerStatementGenerator:
+class CustomerStatementGenerator(BaseReportGenerator):
     """客户对账单生成器类，负责生成客户对账单Excel报表"""
 
     def __init__(self):
         """初始化客户对账单生成器"""
-        pass
+        super().__init__()
+
+    def generate_report(self, statement_data, output_file_path, **kwargs):
+        """
+        生成对账单报表的实现方法
+        
+        Args:
+            statement_data: 对账单数据
+            output_file_path (str): 输出文件路径
+            **kwargs: 其他参数
+            
+        Returns:
+            bool: 报表生成是否成功
+        """
+        # 提取参数
+        template_path = kwargs.get('template_path')
+        customer_name = kwargs.get('customer_name')
+        start_date = kwargs.get('start_date')
+        end_date = kwargs.get('end_date')
+        device_data = kwargs.get('device_data', {})
+        
+        return self.generate_customer_statement_from_template(
+            all_devices_data=device_data,  # 注意参数名称变化
+            output_file=output_file_path,  # 注意参数名称变化
+            customer_name=customer_name,
+            start_date=start_date,
+            end_date=end_date
+        )
 
     def _write_cell_safe(self, worksheet, row, column, value):
         """
