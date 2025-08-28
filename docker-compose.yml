@@ -10,7 +10,7 @@ services:
       - .:/app
     depends_on:
       - mysql
-    command: python ZR_Daily_Report.py
+    command: python zr_daily_report.py
 
   mysql:
     image: mysql:8.0

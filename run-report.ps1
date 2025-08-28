@@ -14,7 +14,7 @@ if (Test-Path ".venv\Scripts\Activate.ps1") {
 
 # 运行主程序并传递所有参数
 $Arguments = $args -join " "
-Invoke-Expression "python ZR_Daily_Report.py $Arguments"
+Invoke-Expression "python zr_daily_report.py $Arguments"
 
 # 检查运行结果
 if ($LASTEXITCODE -ne 0) {

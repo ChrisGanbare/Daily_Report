@@ -1,19 +1,19 @@
 """测试ZR Daily Report的主程序功能"""
 
-import os
-import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch, MagicMock
+import sys
+import os
 
-from tests.base_test import BaseTestCase
+# 添加项目根目录到sys.path
+sys.path.insert(0, os.path.dirname(__file__))
 
-# 添加项目根目录到sys.path，确保能正确导入模块
-project_root = os.path.dirname(os.path.dirname(__file__))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+# 导入主程序模块
+import zr_daily_report
+from zr_daily_report import main, get_user_input
 
 
-class TestZRDailyReport(BaseTestCase):
+class TestZRDailyReport(unittest.TestCase):
     """综合测试ZR Daily Report的主程序功能"""
 
     def test_import_main_modules(self):
@@ -21,19 +21,19 @@ class TestZRDailyReport(BaseTestCase):
         try:
             # 测试核心模块导入
             # 测试主程序导入
-            import ZR_Daily_Report  # noqa: F401
-            from src.core.db_handler import DatabaseHandler  # noqa: F401
-            from src.core.file_handler import FileHandler  # noqa: F401
-            from src.core.inventory_handler import (  # noqa: F401
+            import zr_daily_report  # noqa: F401
+            from zr_daily_report.src.core.db_handler import DatabaseHandler  # noqa: F401
+            from zr_daily_report.src.core.file_handler import FileHandler  # noqa: F401
+            from zr_daily_report.src.core.inventory_handler import (  # noqa: F401
                 InventoryReportGenerator,
             )
-            from src.core.statement_handler import (  # noqa: F401
+            from zr_daily_report.src.core.statement_handler import (  # noqa: F401
                 CustomerStatementGenerator,
             )
 
             # 测试工具模块导入
-            from src.utils.config_handler import ConfigHandler  # noqa: F401
-            from src.utils.date_utils import parse_date  # noqa: F401
+            from zr_daily_report.src.utils.config_handler import ConfigHandler  # noqa: F401
+            from zr_daily_report.src.utils.date_utils import parse_date  # noqa: F401
 
         except ImportError as e:
             self.fail(f"模块导入失败: {str(e)}")
@@ -41,72 +41,72 @@ class TestZRDailyReport(BaseTestCase):
         # 如果没有抛出异常，说明导入成功
         self.assertTrue(True)
 
-    @patch("ZR_Daily_Report.print_usage")
-    @patch("ZR_Daily_Report.show_mode_selection_dialog")
+    @patch("zr_daily_report.print_usage")
+    @patch("zr_daily_report.show_mode_selection_dialog")
     def test_main_function_with_no_args(self, mock_dialog, mock_print_usage):
         """测试主程序在没有参数时的行为"""
-        from ZR_Daily_Report import main
+        from zr_daily_report import main
 
         mock_dialog.return_value = None
 
         # 模拟没有命令行参数的情况
-        with patch("sys.argv", ["ZR_Daily_Report.py"]):
+        with patch("sys.argv", ["zr_daily_report.py"]):
             main()
 
         # 验证调用了使用说明和对话框
         mock_print_usage.assert_called_once()
         mock_dialog.assert_called_once()
 
-    @patch("ZR_Daily_Report.generate_inventory_reports")
+    @patch("zr_daily_report.generate_inventory_reports")
     def test_main_function_with_inventory_mode(self, mock_generate_inventory):
         """测试主程序在库存模式下的行为"""
-        from ZR_Daily_Report import main
+        from zr_daily_report import main
 
         # 模拟命令行参数
-        with patch("sys.argv", ["ZR_Daily_Report.py", "--mode", "inventory"]):
+        with patch("sys.argv", ["zr_daily_report.py", "--mode", "inventory"]):
             main()
 
         # 验证调用了库存报表生成函数
         mock_generate_inventory.assert_called_once()
 
-    @patch("ZR_Daily_Report.generate_customer_statement")
+    @patch("zr_daily_report.generate_customer_statement")
     def test_main_function_with_statement_mode(self, mock_generate_statement):
         """测试主程序在对账单模式下的行为"""
-        from ZR_Daily_Report import main
+        from zr_daily_report import main
 
         # 模拟命令行参数
-        with patch("sys.argv", ["ZR_Daily_Report.py", "--mode", "statement"]):
+        with patch("sys.argv", ["zr_daily_report.py", "--mode", "statement"]):
             main()
 
         # 验证调用了客户对账单生成函数
         mock_generate_statement.assert_called_once()
 
-    @patch("ZR_Daily_Report.generate_inventory_reports")
-    @patch("ZR_Daily_Report.generate_customer_statement")
+    @patch("zr_daily_report.generate_inventory_reports")
+    @patch("zr_daily_report.generate_customer_statement")
     def test_main_function_with_both_mode(
         self, mock_generate_statement, mock_generate_inventory
     ):
         """测试主程序在同时生成两种报表模式下的行为"""
-        from ZR_Daily_Report import main
+        from zr_daily_report import main
 
         mock_generate_inventory.return_value = []
 
         # 模拟命令行参数
-        with patch("sys.argv", ["ZR_Daily_Report.py", "--mode", "both"]):
+        with patch("sys.argv", ["zr_daily_report.py", "--mode", "both"]):
             main()
 
         # 验证调用了库存报表和客户对账单生成函数
         mock_generate_inventory.assert_called_once()
         mock_generate_statement.assert_called_once()
 
-    @patch("ZR_Daily_Report.load_config")
-    @patch("ZR_Daily_Report.generate_inventory_reports")
-    @patch("ZR_Daily_Report.generate_customer_statement")
+    @patch("zr_daily_report.load_config")
+    @patch("zr_daily_report.generate_inventory_reports")
+    @patch("zr_daily_report.generate_customer_statement")
     def test_main_function_with_both_mode_device_data_passed(
         self, mock_generate_statement, mock_generate_inventory, mock_load_config
     ):
         """测试主程序在both模式下正确传递设备数据"""
-        from ZR_Daily_Report import main
+        from zr_daily_report import main
 
         # 模拟配置加载
         mock_load_config.return_value = {
@@ -147,14 +147,14 @@ class TestZRDailyReport(BaseTestCase):
             mock_load_config.return_value
         )
 
-    @patch("ZR_Daily_Report.load_config")
-    @patch("ZR_Daily_Report.generate_inventory_reports")
-    @patch("ZR_Daily_Report.generate_customer_statement")
+    @patch("zr_daily_report.load_config")
+    @patch("zr_daily_report.generate_inventory_reports")
+    @patch("zr_daily_report.generate_customer_statement")
     def test_main_function_with_both_mode_empty_device_data(
         self, mock_generate_statement, mock_generate_inventory, mock_load_config
     ):
         """测试主程序在both模式下处理空设备数据的情况"""
-        from ZR_Daily_Report import main
+        from zr_daily_report import main
 
         # 模拟配置加载
         mock_load_config.return_value = {

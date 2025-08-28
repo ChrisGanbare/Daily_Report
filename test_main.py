@@ -1,4 +1,4 @@
 # -*- coding: utf-8 -*-
 
-from ZR_Daily_Report import main
+from zr_daily_report import main
 print("Main program imported successfully")

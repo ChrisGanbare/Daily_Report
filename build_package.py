@@ -114,7 +114,7 @@ def copy_project_files(project_root, target_dir):
         "src",
         "config",
         "template",
-        "ZR_Daily_Report.py",
+        "zr_daily_report.py",
         "README.md",
     ]
     
@@ -190,16 +190,16 @@ REM 切换到项目目录
 cd /d "%PROJECT_DIR%zr_daily_report"
 
 REM 激活虚拟环境
-call "..\\venv\\Scripts\\activate.bat"
+call "..\venv\Scripts\activate.bat"
 
 REM 运行主程序
-python ZR_Daily_Report.py %*
+python zr_daily_report.py %*
 
 REM 如果程序正常结束也暂停，防止窗口关闭
 pause
 """
     
-    with open(package_dir / "run_report.bat", "w", encoding="utf-8") as f:
+    with open(package_dir / "run-report.bat", "w", encoding="utf-8") as f:
         f.write(bat_content)
     
     # 创建PowerShell脚本
@@ -215,13 +215,13 @@ Set-Location "$ProjectDir\\zr_daily_report"
 ..\\venv\\Scripts\\Activate.ps1
 
 # 运行主程序
-python ZR_Daily_Report.py $args
+python zr_daily_report.py $args
 
 # 如果程序正常结束也暂停，防止窗口关闭
 Read-Host -Prompt "按Enter键退出"
 """
     
-    with open(package_dir / "run_report.ps1", "w", encoding="utf-8") as f:
+    with open(package_dir / "run-report.ps1", "w", encoding="utf-8") as f:
         f.write(ps1_content)
     
     # 创建Unix/Linux/macOS启动脚本
@@ -238,13 +238,13 @@ cd "$PROJECT_DIR/zr_daily_report"
 source "../venv/bin/activate"
 
 # 运行主程序
-python ZR_Daily_Report.py "$@"
+python zr_daily_report.py "$@"
 
 # 如果程序正常结束也暂停，防止窗口关闭
 read -p "按Enter键退出"
 """
     
-    sh_path = package_dir / "run_report.sh"
+    sh_path = package_dir / "run-report.sh"
     with open(sh_path, "w", encoding="utf-8") as f:
         f.write(sh_content)
     
@@ -340,8 +340,8 @@ echo.
 echo 安装完成！
 echo.
 echo 请使用以下方式运行程序：
-echo 1. 双击 run_report.bat
-echo 2. 或在命令行中执行：python ZR_Daily_Report.py
+echo 1. 双击 run-report.bat
+echo 2. 或在命令行中执行：python zr_daily_report.py
 echo.
 echo 按任意键退出...
 pause >nul
@@ -364,15 +364,15 @@ pause >nul
 ## 运行程序
 
 安装完成后，可以通过以下方式运行程序：
-- 双击 `run_report.bat` 运行程序
-- 或在命令行中执行 `python ZR_Daily_Report.py`
+- 双击 `run-report.bat` 运行程序
+- 或在命令行中执行 `python zr_daily_report.py`
 
 ## 项目结构
 - `zr_daily_report/` - 项目主目录
 - `venv/` - 虚拟环境目录（安装后创建）
 - `install.bat` - 安装脚本
-- `run_report.bat` - 启动脚本
-- `run_report.ps1` - PowerShell启动脚本
+- `run-report.bat` - 启动脚本
+- `run-report.ps1` - PowerShell启动脚本
 
 ## 系统要求
 - Windows 7/8/10/11

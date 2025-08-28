@@ -47,7 +47,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "zr-report=ZR_Daily_Report:main",
+            "zr-report=zr_daily_report:main",
         ],
     },
     package_data={

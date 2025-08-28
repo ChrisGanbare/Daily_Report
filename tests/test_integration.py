@@ -82,7 +82,7 @@ class TestIntegration(BaseTestCase):
             return 'test.csv'
 
         # 执行主函数
-        test_args = ["ZR_Daily_Report.py", "--mode", "inventory"]
+        test_args = ["zr_daily_report.py", "--mode", "inventory"]
         with patch.object(sys, "argv", test_args):
             with patch('src.ui.filedialog_selector.choose_file', side_effect=mock_choose_file), \
                  patch('src.ui.filedialog_selector.choose_directory', return_value=self.test_output_dir), \

@@ -115,19 +115,19 @@ pip install .[docs]     # 文档依赖
 
 3. 配置 query_config.json 文件，设置数据库查询语句
 
-## 使用方法
+## 运行程序
 
-### 命令行模式
+### 基本用法
 
 ```bash
 # 生成库存报表和客户对账单（默认模式）
-python zr_daily_report.py
+python ZR_Daily_Report.py
 
 # 只生成库存报表
-python zr_daily_report.py --mode inventory
+python ZR_Daily_Report.py --mode inventory
 
 # 只生成客户对账单
-python zr_daily_report.py --mode statement
+python ZR_Daily_Report.py --mode statement
 ```
 
 ### 配置说明
@@ -136,7 +136,7 @@ python zr_daily_report.py --mode statement
 
 ## 项目结构
 ```
-ZR_Daily_Report/
+.
 ├── config/              # 配置文件目录
 ├── data/                # 数据文件目录
 ├── defect_fixes/        # 缺陷修复记录目录
@@ -153,7 +153,7 @@ ZR_Daily_Report/
 ├── query_config.json    # 查询配置文件(加密)
 ├── README.md            # 项目说明文档
 ├── requirements.txt     # 依赖包列表
-└── zr_daily_report.py   # 主程序文件
+└── ZR_Daily_Report.py   # 主程序文件
 ```
 
 ## 核心功能模块

@@ -26,7 +26,7 @@ def main():
         venv_activate = os.path.join(project_dir, '.venv', 'bin', 'activate')
     
     # 构建运行命令
-    cmd = [sys.executable, "ZR_Daily_Report.py"] + sys.argv[1:]
+    cmd = [sys.executable, "zr_daily_report.py"] + sys.argv[1:]
     
     try:
         # 运行主程序

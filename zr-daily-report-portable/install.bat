@@ -34,6 +34,6 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo Installation completed successfully!
-echo You can now run the program using run_report.bat
+echo You can now run the program using run-report.bat
 echo.
 pause

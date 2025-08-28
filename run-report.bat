@@ -39,7 +39,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM Run the main program and pass all arguments
 echo Running ZR Daily Report program...
-python ZR_Daily_Report.py %*
+python zr_daily_report.py %*
 
 REM Keep the window open to view the output
 if %ERRORLEVEL% NEQ 0 (

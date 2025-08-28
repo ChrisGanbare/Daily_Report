@@ -111,7 +111,7 @@ def copy_project_files(project_root, target_dir):
         "src",
         "config",
         "template",
-        "ZR_Daily_Report.py",
+        "zr_daily_report.py",
         "README.md",
         "setup.py",
         "pyproject.toml",
