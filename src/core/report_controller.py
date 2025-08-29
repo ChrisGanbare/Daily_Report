@@ -903,7 +903,7 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
         os.makedirs(output_dir, exist_ok=True)
         
         print("\n" + "-" * 50)
-        print("步骤2：生成库存报表和客户对账单")
+        print("步骤2：生成库存报表文件")
         print("-" * 50)
         
         # 用于存储处理失败的设备

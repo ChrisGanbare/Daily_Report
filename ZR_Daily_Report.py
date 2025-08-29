@@ -5,14 +5,10 @@
 ZR Daily Report 主程序
 """
 
-import argparse
-import datetime
-import json
 import os
 import sys
 import traceback
 import tkinter as tk
-from tkinter import ttk
 
 # 添加项目根目录到sys.path，确保能正确导入模块
 sys.path.insert(0, os.path.dirname(__file__))
@@ -20,22 +16,12 @@ sys.path.insert(0, os.path.dirname(__file__))
 # 导入项目模块
 from src.cli.argument_parser import parse_arguments, print_usage
 from src.ui.mode_selector import show_mode_selection_dialog
-from src.ui.filedialog_selector import choose_file, choose_directory
 from src.core.report_controller import (
     generate_inventory_reports,
     generate_customer_statement,
-    generate_both_reports,
-    _load_config
+    generate_both_reports
 )
-from src.core.db_handler import DatabaseHandler
-from src.core.inventory_handler import InventoryReportGenerator
-from src.core.statement_handler import CustomerStatementGenerator
-from src.core.file_handler import FileHandler
-from src.utils.date_utils import validate_csv_data
-from src.utils.config_handler import ConfigHandler
 
-# 导入mysql.connector
-import mysql.connector
 
 
 def get_user_input(prompt):

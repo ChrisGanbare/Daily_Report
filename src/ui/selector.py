@@ -12,7 +12,7 @@ class Selector:
     提供所有UI选择器的通用功能，如窗口创建、居中显示等
     """
     
-    def __init__(self, width: int = 800, height: int = 600, topmost: bool = True):
+    def __init__(self, width: int = 900, height: int = 600, topmost: bool = True):
         """
         初始化选择器
         
