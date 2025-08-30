@@ -14,7 +14,7 @@ from src.core.file_handler import FileHandler
 from src.core.data_manager import ReportDataManager
 from src.utils.date_utils import validate_csv_data
 from src.utils.config_handler import ConfigHandler
-from src.ui.filedialog_selector import choose_file, choose_directory
+from src.ui.filedialog_selector import file_dialog_selector
 
 import mysql.connector
 
@@ -817,7 +817,7 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
             customer_query_template = "SELECT customer_name FROM oil.t_customer WHERE id = %s"
         
         # 显示文件选择对话框，让用户选择设备信息CSV文件
-        csv_file = choose_file(
+        csv_file = file_dialog_selector.choose_file(
             title="选择设备信息CSV文件",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
             initialdir=os.path.join(os.path.expanduser("~"), "Desktop")  # 修改为桌面路径
@@ -893,7 +893,7 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
             exit(1)
 
         # 显示目录选择对话框，让用户选择输出目录
-        output_dir = choose_directory(title="选择保存目录（综合报表）", initialdir=os.path.join(os.path.expanduser("~"), "Desktop"))
+        output_dir = file_dialog_selector.choose_directory(title="选择保存目录（综合报表）", initialdir=os.path.join(os.path.expanduser("~"), "Desktop"))
         if not output_dir:
             print("未选择输出目录，程序退出。")
             connection.close()
