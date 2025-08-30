@@ -6,498 +6,328 @@
 import os
 import sys
 import shutil
-import subprocess
 import zipfile
+import logging
+import time
 from pathlib import Path
 import subprocess
 
+# 根据操作系统设置合适的编码
+if sys.platform.startswith('win'):
+    # Windows系统使用UTF-8或者mbcs编码
+    DEFAULT_ENCODING = 'utf-8'  # 或者使用 'mbcs' 以适配Windows默认编码
+else:
+    DEFAULT_ENCODING = 'utf-8'
 
-def get_project_version():
-    """
-    获取项目版本号
-    """
-    # 首先尝试从Git标签获取版本号
-    try:
-        result = subprocess.run(["git", "describe", "--tags", "--abbrev=0"], 
-                              capture_output=True, text=True, cwd=Path(__file__).parent)
-        if result.returncode == 0:
-            version = result.stdout.strip()
-            # 移除开头的'v'字符（如果存在）
-            if version.startswith('v'):
-                version = version[1:]
-            return version
-    except Exception:
-        pass  # 如果Git命令失败，则使用其他方法
-    
-    # 从pyproject.toml文件中提取版本号
-    pyproject_path = Path(__file__).parent / "pyproject.toml"
-    if pyproject_path.exists():
-        with open(pyproject_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip().startswith("version ="):
-                    # 提取版本号字符串
-                    version = line.split("=")[1].strip().strip('"')
-                    return version
-    
-    # 如果无法从pyproject.toml获取，则从setup.py获取
-    setup_path = Path(__file__).parent / "setup.py"
-    if setup_path.exists():
-        with open(setup_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if "version=" in line:
-                    # 提取版本号字符串
-                    version = line.split("version=")[1].split(",")[0].strip().strip('"')
-                    return version
-    
-    # 默认版本号
-    return "1.0.0"
-
-
-def create_portable_package():
-    """
-    创建可移植的完整包
-    """
-    project_root = Path(__file__).parent.absolute()
-    version = get_project_version()
-    package_name = f"zr_daily_report_v{version}"
-    package_dir = project_root / package_name
-    
-    # 创建 release 目录（如果不存在）
-    release_dir = project_root / "release"
-    release_dir.mkdir(exist_ok=True)
-    
-    print(f"开始创建可移植包: {package_name}")
-    
-    # 删除已存在的包目录
-    if package_dir.exists():
-        shutil.rmtree(package_dir)
-    
-    # 删除旧的压缩包
-    zip_filename = f"{package_name}.zip"
-    zip_path = release_dir / zip_filename  # 将压缩包放在 release 目录中
-    if zip_path.exists():
-        zip_path.unlink()
-    
-    # 创建包目录结构
-    (package_dir / "zr_daily_report").mkdir(parents=True)
-    (package_dir / "venv").mkdir()
-    
-    print("复制项目文件...")
-    # 复制项目文件
-    copy_project_files(project_root, package_dir / "zr_daily_report")
-    
-    print("创建虚拟环境...")
-    # 创建虚拟环境
-    create_virtual_environment(package_dir)
-    
-    print("安装依赖...")
-    # 安装依赖
-    install_dependencies(package_dir)
-    
-    print("打包依赖...")
-    # 打包依赖到便携包中
-    pack_dependencies(package_dir)
-    
-    print("创建启动脚本...")
-    # 创建启动脚本
-    create_startup_scripts(package_dir)
-    
-    print("创建压缩包...")
-    # 创建压缩包
-    create_zip_package(package_dir, zip_path)
-    
-    # 清理临时目录
-    print("清理临时文件...")
-    shutil.rmtree(package_dir)
-    
-    print(f"打包完成！可移植包位置: {zip_path}")
-
-
-def copy_project_files(project_root, target_dir):
-    """
-    复制项目文件到目标目录
-    """
-    # 需要复制的目录和文件
-    items_to_copy = [
-        "src",
-        "config",
-        "template",
-        "zr_daily_report.py",
-        "README.md",
+# 配置日志记录，确保兼容Windows系统
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # 明确指定stdout
+        logging.FileHandler('release/package_build.log', encoding=DEFAULT_ENCODING)
     ]
-    
-    # 复制项目文件和目录
-    for item in items_to_copy:
-        src_path = project_root / item
-        if src_path.exists():
-            if src_path.is_dir():
-                shutil.copytree(src_path, target_dir / item)
-            else:
-                shutil.copy2(src_path, target_dir / item)
-    
-    # 创建requirements.txt文件
-    create_requirements_file(target_dir)
-
-
-def create_requirements_file(target_dir):
-    """
-    创建requirements.txt文件
-    """
-    requirements_content = """openpyxl>=3.1.0
-mysql-connector-python>=8.0.0,<9.0.0
-cryptography==43.0.1
-"""
-    
-    with open(target_dir / "requirements.txt", "w", encoding="utf-8") as f:
-        f.write(requirements_content)
-
-
-def create_virtual_environment(package_dir):
-    """
-    在包目录中创建虚拟环境
-    """
-    venv_dir = package_dir / "venv"
-    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-
-
-def install_dependencies(package_dir):
-    """
-    在虚拟环境中安装项目依赖
-    """
-    # Windows和Unix系统使用不同的激活脚本
-    if os.name == "nt":  # Windows
-        python_path = package_dir / "venv" / "Scripts" / "python.exe"
-        pip_path = package_dir / "venv" / "Scripts" / "pip"
-    else:  # Unix/Linux/macOS
-        python_path = package_dir / "venv" / "bin" / "python"
-        pip_path = package_dir / "venv" / "bin" / "pip"
-    
-    requirements_path = package_dir / "zr_daily_report" / "requirements.txt"
-    
-    # 升级pip，使用阿里云镜像源
-    try:
-        subprocess.run([str(python_path), "-m", "pip", "install", "--upgrade", "pip", 
-                        "-i", "https://mirrors.aliyun.com/pypi/simple/"], check=True)
-    except subprocess.CalledProcessError:
-        # 如果阿里云镜像源失败，则使用默认源
-        print("使用阿里云镜像源升级pip失败，尝试使用默认源...")
-        subprocess.run([str(python_path), "-m", "pip", "install", "--upgrade", "pip"], check=True)
-    
-    # 安装项目依赖，使用阿里云镜像源
-    try:
-        subprocess.run([str(pip_path), "install", "-r", str(requirements_path), 
-                        "-i", "https://mirrors.aliyun.com/pypi/simple/"], check=True)
-    except subprocess.CalledProcessError:
-        # 如果阿里云镜像源失败，则使用默认源
-        print("使用阿里云镜像源安装依赖失败，尝试使用默认源...")
-        subprocess.run([str(pip_path), "install", "-r", str(requirements_path)], check=True)
-
-
-def pack_dependencies(package_dir):
-    """
-    将依赖打包到便携包中，使用阿里云镜像源下载依赖
-    """
-    # Windows和Unix系统使用不同的激活脚本
-    if os.name == "nt":  # Windows
-        python_path = package_dir / "venv" / "Scripts" / "python.exe"
-        pip_path = package_dir / "venv" / "Scripts" / "pip"
-    else:  # Unix/Linux/macOS
-        python_path = package_dir / "venv" / "bin" / "python"
-        pip_path = package_dir / "venv" / "bin" / "pip"
-    
-    # 下载依赖包到本地目录，使用阿里云镜像源
-    wheels_dir = package_dir / "zr_daily_report" / "wheels"
-    wheels_dir.mkdir(exist_ok=True)
-    
-    requirements_path = package_dir / "zr_daily_report" / "requirements.txt"
-    try:
-        subprocess.run([str(pip_path), "download", "-r", str(requirements_path), 
-                        "-d", str(wheels_dir), "-i", "https://mirrors.aliyun.com/pypi/simple/"], check=True)
-    except subprocess.CalledProcessError:
-        # 如果阿里云镜像源失败，则使用默认源
-        print("使用阿里云镜像源下载依赖失败，尝试使用默认源...")
-        subprocess.run([str(pip_path), "download", "-r", str(requirements_path), 
-                        "-d", str(wheels_dir)], check=True)
-
-
-def create_startup_scripts(package_dir):
-    """
-    创建启动脚本
-    """
-    project_dir = package_dir / "zr_daily_report"
-    
-    # 创建Windows批处理脚本
-    bat_content = f"""@echo off
-REM ZR Daily Report 启动脚本
-
-REM 获取当前脚本所在的目录
-set PROJECT_DIR=%~dp0
-
-REM 切换到项目目录
-cd /d "%PROJECT_DIR%zr_daily_report"
-
-REM 激活虚拟环境
-call "..\venv\Scripts\activate.bat"
-
-REM 安装本地依赖包（如果存在）
-if exist "wheels" (
-    echo 安装本地依赖包...
-    pip install wheels/*.whl --force-reinstall
 )
 
-REM 运行主程序
-python zr_daily_report.py %*
 
-REM 如果程序正常结束也暂停，防止窗口关闭
-pause
-"""
-    
-    with open(package_dir / "run-report.bat", "w", encoding="utf-8") as f:
-        f.write(bat_content)
-    
-    # 创建PowerShell脚本
-    ps1_content = f"""# ZR Daily Report 启动脚本
-
-# 获取当前脚本所在的目录
-$ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-
-# 切换到项目目录
-Set-Location "$ProjectDir\\zr_daily_report"
-
-# 激活虚拟环境
-..\\venv\\Scripts\\Activate.ps1
-
-# 安装本地依赖包（如果存在）
-if (Test-Path "wheels") {{
-    Write-Host "安装本地依赖包..."
-    pip install wheels/*.whl --force-reinstall
-}}
-
-# 运行主程序
-python zr_daily_report.py $args
-
-# 如果程序正常结束也暂停，防止窗口关闭
-Read-Host -Prompt "按Enter键退出"
-"""
-    
-    with open(package_dir / "run-report.ps1", "w", encoding="utf-8") as f:
-        f.write(ps1_content)
-    
-    # 创建Unix/Linux/macOS启动脚本
-    sh_content = f"""#!/bin/bash
-# ZR Daily Report 启动脚本
-
-# 获取当前脚本所在的目录
-PROJECT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
-
-# 切换到项目目录
-cd "$PROJECT_DIR/zr_daily_report"
-
-# 激活虚拟环境
-source "../venv/bin/activate"
-
-# 安装本地依赖包（如果存在）
-if [ -d "wheels" ]; then
-    echo "安装本地依赖包..."
-    pip install wheels/*.whl --force-reinstall
-fi
-
-# 运行主程序
-python zr_daily_report.py "$@"
-
-# 如果程序正常结束也暂停，防止窗口关闭
-read -p "按Enter键退出"
-"""
-    
-    sh_path = package_dir / "run-report.sh"
-    with open(sh_path, "w", encoding="utf-8") as f:
-        f.write(sh_content)
-    
-    # 给予执行权限
-    os.chmod(sh_path, 0o755)
-    
-    # 创建安装脚本
-    install_bat_content = """@echo off
-REM ZR Daily Report 安装脚本
-
-@chcp 65001 >nul
-
-echo ================================
-echo ZR Daily Report 环境安装
-echo ================================
-
-REM 检查Python是否已安装
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo 错误：未检测到Python，请先安装Python 3.8或更高版本
-    echo 下载地址：https://www.python.org/downloads/
-    pause
-    exit /b 1
-)
-
-REM 获取Python版本
-for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
-echo 检测到Python版本: %PYTHON_VERSION%
-
-REM 创建虚拟环境
-echo.
-echo 正在创建虚拟环境...
-python -m venv venv
-if %errorlevel% neq 0 (
-    echo 错误：创建虚拟环境失败
-    pause
-    exit /b 1
-)
-
-REM 激活虚拟环境
-echo.
-echo 正在激活虚拟环境...
-call "venv\\Scripts\\activate.bat"
-if %errorlevel% neq 0 (
-    echo 错误：激活虚拟环境失败
-    pause
-    exit /b 1
-)
-
-REM 检查是否需要升级pip
-echo.
-echo 检查pip版本...
-for /f "tokens=2" %%i in ('pip --version 2^>^&1') do set PIP_VERSION=%%i
-echo 当前pip版本: %PIP_VERSION%
-
-REM 只有在明确需要升级时才升级pip
-set NEED_UPGRADE=0
-REM 这里可以添加检查pip版本是否过旧的逻辑，简化起见我们跳过自动升级
-if "%NEED_UPGRADE%"=="1" (
-    echo.
-    echo 正在升级pip...
-    python -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/
-    if %errorlevel% neq 0 (
-        echo 警告：使用阿里云镜像源升级pip失败，尝试使用默认源...
-        python -m pip install --upgrade pip
-        if %errorlevel% neq 0 (
-            echo 错误：升级pip失败
-            pause
-            exit /b 1
-        )
-    )
-) else (
-    echo.
-    echo 跳过pip升级以节省时间
-)
-
-REM 安装项目依赖
-echo.
-echo 正在安装项目依赖...
-python -m pip install -r "zr_daily_report\\requirements.txt" -i https://mirrors.aliyun.com/pypi/simple/
-if %errorlevel% neq 0 (
-    echo 警告：使用阿里云镜像源安装依赖失败，尝试使用默认源...
-    python -m pip install -r "zr_daily_report\\requirements.txt"
-    if %errorlevel% neq 0 (
-        echo 错误：安装项目依赖失败
-        pause
-        exit /b 1
-    )
-)
-
-echo.
-echo 安装完成！
-echo.
-echo 请使用以下方式运行程序：
-echo 1. 双击 run-report.bat
-echo 2. 或在命令行中执行：python zr_daily_report.py
-echo.
-echo 按任意键退出...
-pause >nul
-"""
-    
-    with open(package_dir / "install.bat", "w", encoding="utf-8") as f:
-        f.write(install_bat_content)
-    
-    # 创建README.txt文件
-    readme_content = """# ZR Daily Report 可移植包
-
-这是一个完整的可移植包，包含了运行ZR Daily Report所需的所有文件。
-
-## 安装步骤
-
-1. 在目标计算机上确保已安装Python 3.8或更高版本
-2. 双击运行 `install.bat` 脚本
-3. 按照提示完成环境安装
-
-## 运行程序
-
-安装完成后，可以通过以下方式运行程序：
-- 双击 `run-report.bat` 运行程序
-- 或在命令行中执行 `python zr_daily_report.py`
-
-## 项目结构
-- `zr_daily_report/` - 项目主目录
-- `venv/` - 虚拟环境目录（安装后创建）
-- `wheels/` - 本地依赖包目录（包含项目核心依赖）
-- `install.bat` - 安装脚本
-- `run-report.bat` - 启动脚本
-- `run-report.ps1` - PowerShell启动脚本
-
-## 系统要求
-- Windows 7/8/10/11
-- Python 3.8或更高版本
-- 至少100MB可用磁盘空间
-
-## 注意事项
-- 请勿修改目录结构
-- 如需重新安装，请删除 `venv` 目录并重新运行 `install.bat`
-- 本地依赖包(wheels目录)已包含项目核心依赖，无需联网下载
-"""
-    
-    with open(package_dir / "README.txt", "w", encoding="utf-8") as f:
-        f.write(readme_content)
+class PackageError(Exception):
+    """打包过程中的自定义异常"""
+    pass
 
 
-def should_exclude_file(file_path):
-    """
-    判断文件是否应该被排除在打包之外
-    """
-    # 需要排除的文件和目录模式
-    exclude_patterns = [
-        '__pycache__',
-        '.pyc',
-        '.pyo',
-        '.pyd',
-        '.pytest_cache',
-        '.coverage',
-        'test_',
-        '_test',
-        'tests/',
-        'test.py',
-        'conftest.py',
+class PackageBuilder:
+    """打包工具类，处理整个打包流程"""
+
+    # 定义核心依赖列表
+    CORE_DEPENDENCIES = [
+        "openpyxl",
+        "mysql-connector-python",
+        "cryptography",
+        # 其他必要的核心依赖
     ]
-    
-    # 检查文件路径是否匹配排除模式
-    for pattern in exclude_patterns:
-        if pattern in file_path:
-            return True
-    
-    return False
 
-def create_zip_package(package_dir, zip_path):
-    """
-    创建ZIP压缩包，排除release目录和测试文件等非业务逻辑文件
-    """
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(package_dir):
-            # 移除release目录，避免递归打包
-            dirs[:] = [d for d in dirs if d != "release"]
+    def __init__(self):
+        self.project_root = Path(__file__).parent.absolute()
+        self.version = self._get_project_version()
+        self.package_name = f"zr_daily_report_v{self.version}"
+        self.release_dir = self.project_root / "release"
+        self.package_dir = self.release_dir / self.package_name
+        self.zip_path = self.release_dir / f"{self.package_name}.zip"
+
+    def _get_project_version(self) -> str:
+        """获取项目版本号"""
+        try:
+            # 尝试从Git标签获取版本号
+            result = subprocess.run(
+                ["git", "describe", "--tags", "--abbrev=0"],
+                capture_output=True, text=True, cwd=self.project_root,
+                timeout=5  # 添加超时限制
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                return version[1:] if version.startswith('v') else version
+        except (subprocess.SubprocessError, TimeoutError) as e:
+            logging.warning(f"从Git获取版本号失败: {e}")
+
+        # 如果无法从Git获取，返回默认版本
+        return "1.0.0"
+
+    def _safe_remove(self, path: Path) -> None:
+        """安全删除文件或目录，处理Windows文件锁定问题"""
+        try:
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path, ignore_errors=False)
+        except PermissionError:
+            # 在Windows上，如果文件被占用可能需要等待
+            time.sleep(0.1)
+            try:
+                if path.is_file():
+                    path.unlink()
+                elif path.is_dir():
+                    shutil.rmtree(path, ignore_errors=True)
+            except Exception as e:
+                raise PackageError(f"无法删除 {path}: {e}")
+        except Exception as e:
+            raise PackageError(f"删除 {path} 失败: {e}")
+
+    def _create_directory_structure(self):
+        """创建目录结构"""
+        try:
+            # 创建必要的目录
+            self.release_dir.mkdir(exist_ok=True)
+            self.package_dir.mkdir(exist_ok=True)
+        except Exception as e:
+            raise PackageError(f"创建目录结构失败: {e}")
+
+    def _copy_project_files(self):
+        """复制项目文件到构建目录"""
+        # 创建项目文件目录
+        project_dir = self.package_dir / "zr_daily_report"
+        project_dir.mkdir(exist_ok=True)
+
+        # 完整的必需文件和目录列表
+        source_items = [
+            "zr_daily_report.py",
+            "pyproject.toml",
+            "setup.py",  # 如果存在
+            "README.md",
+            "LICENSE",  # 如果存在
+            "requirements.txt",  # 依赖配置文件
+            "config/",  # 配置文件目录
+            "src/",  # 所有源代码
+            "template/",  # 模板文件目录
+            "data/",  # 数据文件目录（如果存在）
+        ]
+
+        # 过滤掉不存在的文件和目录
+        for item in source_items:
+            source_path = self.project_root / item
+            dest_path = project_dir / item
+
+            # 检查源文件/目录是否存在
+            if not source_path.exists():
+                logging.warning(f"源文件或目录不存在，跳过: {item}")
+                continue
+
+            try:
+                if source_path.is_file():
+                    shutil.copy2(source_path, dest_path)
+                elif source_path.is_dir():
+                    shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+            except Exception as e:
+                raise PackageError(f"复制文件失败 {source_path} -> {dest_path}: {e}")
+
+    def _create_virtual_environment(self):
+        """创建虚拟环境"""
+        try:
+            # 虚拟环境将在安装时创建，这里不预先创建
+            pass
+        except Exception as e:
+            raise PackageError(f"创建虚拟环境失败: {e}")
+
+    def _install_dependencies(self):
+        """安装依赖"""
+        # 依赖将在安装脚本中安装，这里不预先安装
+        pass
+
+    def _copy_dependencies(self):
+        """复制依赖"""
+        try:
+            # 在项目目录中创建依赖目录
+            deps_dir = self.package_dir / "zr_daily_report" / "dependencies"
+            deps_dir.mkdir(exist_ok=True)
             
-            for file in files:
-                file_path = os.path.join(root, file)
-                arc_path = os.path.relpath(file_path, package_dir)
-                # 确保不包含release目录中的内容
-                if not arc_path.startswith("release"):
-                    # 排除测试相关的文件
-                    if not should_exclude_file(arc_path):
-                        zipf.write(file_path, arc_path)
+            # 使用pip下载依赖项到dependencies目录
+            requirements_path = self.project_root / "requirements.txt"
+            if requirements_path.exists():
+                try:
+                    # 下载依赖项到dependencies目录
+                    subprocess.run([
+                        sys.executable, "-m", "pip", "download", 
+                        "-r", str(requirements_path), 
+                        "-d", str(deps_dir)
+                    ], check=True, cwd=self.project_root)
+                    logging.info("依赖项已下载到dependencies目录")
+                except subprocess.CalledProcessError as e:
+                    logging.warning(f"下载依赖项失败: {e}")
+                    logging.info("依赖项将在安装时下载")
+            else:
+                logging.warning("未找到requirements.txt文件")
+                
+        except Exception as e:
+            raise PackageError(f"复制依赖失败: {e}")
+
+    def _create_startup_scripts(self):
+        """创建启动脚本，确保使用正确的Windows编码"""
+        try:
+            # 创建Windows批处理脚本
+            bat_script = self.package_dir / "run_report.bat"
+            with open(bat_script, 'w', encoding=DEFAULT_ENCODING, newline='\r\n') as f:
+                f.write("@echo off\n")
+                f.write("chcp 65001 >nul\n")  # 设置代码页为UTF-8
+                f.write("echo 设置环境以使用本地依赖...\n")
+                f.write("set PYTHONPATH=%~dp0zr_daily_report;%~dp0zr_daily_report\\dependencies;%PYTHONPATH%\n")
+                f.write("cd zr_daily_report\n")
+                f.write("python zr_daily_report.py\n")
+                f.write("pause\n")
+
+            # 创建PowerShell脚本
+            ps_script = self.package_dir / "run_report.ps1"
+            with open(ps_script, 'w', encoding=DEFAULT_ENCODING, newline='\r\n') as f:
+                f.write("# ZR Daily Report 启动脚本\n")
+                f.write(".\\venv\\Scripts\\Activate.ps1\n")
+                f.write("Set-Location -Path \"zr_daily_report\"\n")
+                f.write("python zr_daily_report.py\n")
+
+            # 创建安装脚本
+            install_bat_script = self.package_dir / "install.bat"
+            with open(install_bat_script, 'w', encoding=DEFAULT_ENCODING, newline='\r\n') as f:
+                f.write("@echo off\n")
+                f.write("chcp 65001 >nul\n")  # 设置代码页为UTF-8
+                f.write("echo 创建虚拟环境...\n")
+                f.write("python -m venv venv\n")
+                f.write("echo 激活虚拟环境...\n")
+                f.write("call venv\\Scripts\\activate.bat\n")
+                f.write("echo 设置编码环境变量...\n")
+                f.write("set PYTHONIOENCODING=utf-8\n")
+                f.write("set PYTHONLEGACYWINDOWSFSENCODING=1\n")
+                f.write("echo 升级pip...\n")
+                f.write("python -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/\n")
+                f.write("echo 安装本地依赖...\n")
+                f.write("pip install zr_daily_report/dependencies/*.whl --force-reinstall || pip install -r zr_daily_report/requirements.txt -i https://mirrors.aliyun.com/pypi/simple/\n")
+                f.write("echo 安装完成!\n")
+                f.write("pause\n")
+
+            # 创建README.txt文件
+            readme_file = self.package_dir / "README.txt"
+            with open(readme_file, 'w', encoding=DEFAULT_ENCODING, newline='\r\n') as f:
+                f.write("# ZR Daily Report 可移植包\n\n")
+                f.write("这是一个完整的可移植包，包含了运行ZR Daily Report所需的所有文件。\n\n")
+                f.write("## 安装步骤\n\n")
+                f.write("1. 在目标计算机上确保已安装Python 3.8或更高版本\n")
+                f.write("2. 双击运行 `install.bat` 脚本\n")
+                f.write("3. 按照提示完成环境安装\n\n")
+                f.write("## 运行程序\n\n")
+                f.write("安装完成后，可以通过以下方式运行程序：\n")
+                f.write("- 双击 `run_report.bat` 运行程序\n")
+                f.write("- 或在命令行中执行 `python zr_daily_report.py`\n\n")
+                f.write("## 项目结构\n")
+                f.write("- `zr_daily_report/` - 项目主目录\n")
+                f.write("- `venv/` - 虚拟环境目录（安装后创建）\n")
+                f.write("- `install.bat` - 安装脚本\n")
+                f.write("- `run_report.bat` - 启动脚本\n")
+                f.write("- `run_report.ps1` - PowerShell启动脚本\n\n")
+                f.write("## 系统要求\n")
+                f.write("- Windows 7/8/10/11\n")
+                f.write("- Python 3.8或更高版本\n")
+                f.write("- 至少100MB可用磁盘空间\n\n")
+                f.write("## 注意事项\n")
+                f.write("- 请勿修改目录结构\n")
+                f.write("- 如需重新安装，请删除 `venv` 目录并重新运行 `install.bat`\n")
+
+        except Exception as e:
+            raise PackageError(f"创建启动脚本失败: {e}")
+
+
+    def _create_zip_package(self):
+        """创建ZIP压缩包"""
+        try:
+            with zipfile.ZipFile(self.zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file_path in self.package_dir.rglob('*'):
+                    if file_path.is_file():
+                        arcname = file_path.relative_to(self.package_dir)
+                        zipf.write(file_path, arcname)
+        except Exception as e:
+            raise PackageError(f"创建ZIP包失败: {e}")
+
+    def create_package(self) -> None:
+        """创建可移植包的主函数"""
+        try:
+            logging.info(f"开始创建可移植包: {self.package_name}")
+
+            # 创建必要的目录
+            self.release_dir.mkdir(exist_ok=True)
+
+            # 清理旧文件
+            for path in [self.package_dir, self.zip_path]:
+                if path.exists():
+                    self._safe_remove(path)
+
+            # 创建包目录结构
+            self._create_directory_structure()
+
+            # 执行打包步骤
+            steps = [
+                (self._copy_project_files, "复制项目文件"),
+                (self._copy_dependencies, "复制依赖"),
+                (self._create_startup_scripts, "创建启动脚本"),
+                (self._create_zip_package, "创建压缩包")
+            ]
+
+            for step_func, step_name in steps:
+                try:
+                    logging.info(f"正在{step_name}...")
+                    step_func()
+                except Exception as e:
+                    raise PackageError(f"{step_name}失败: {e}")
+
+            # 清理临时文件
+            logging.info("清理临时文件...")
+            self._safe_remove(self.package_dir)
+
+            logging.info(f"打包完成！可移植包位置: {self.zip_path}")
+
+        except Exception as e:
+            logging.error(f"打包过程失败: {e}")
+            # 清理未完成的文件
+            self._cleanup_on_error()
+            raise
+
+    def _cleanup_on_error(self) -> None:
+        """错误发生时的清理操作"""
+        try:
+            if self.package_dir.exists():
+                self._safe_remove(self.package_dir)
+            if self.zip_path.exists():
+                self._safe_remove(self.zip_path)
+        except Exception as e:
+            logging.error(f"清理临时文件失败: {e}")
+
+
+def main():
+    """主函数"""
+    try:
+        builder = PackageBuilder()
+        builder.create_package()
+    except PackageError as e:
+        logging.error(f"打包失败: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logging.exception("发生未预期的错误")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    create_portable_package()
+    main()
