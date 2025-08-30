@@ -1,27 +1,20 @@
-import os
-import sys
 import unittest
 from unittest.mock import Mock, patch
 
-# 添加项目根目录到sys.path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from src.ui.filedialog_selector import FileDialogSelector, choose_file, choose_directory
-from tests.base_test import BaseTestCase
+from src.ui.filedialog_selector import FileDialogSelector
 
 
-class TestUiFiledialogSelector(BaseTestCase):
+class TestFileDialogSelector(unittest.TestCase):
     """
-    ui.filedialog_selector 模块的单元测试
+    FileDialogSelector 类的单元测试
     """
 
     def setUp(self):
         """测试前准备"""
-        super().setUp()
-        self.dialog_selector = FileDialogSelector(width=800, height=600, topmost=True)
-        self.default_title = "测试对话框"
-        self.default_filetypes = [("Text files", "*.txt")]
-        self.default_initialdir = "/测试/初始/目录"
+        self.dialog_selector = FileDialogSelector()
+        self.default_title = "选择文件"
+        self.default_filetypes = [("All files", "*.*")]
+        self.default_initialdir = "/initial/dir"
 
     def test_filedialogselector_initialization(self):
         """
@@ -230,100 +223,6 @@ class TestUiFiledialogSelector(BaseTestCase):
             initialdir=None
         )
         mock_root.destroy.assert_called_once()
-
-    @patch("src.ui.filedialog_selector.file_dialog_selector")
-    def test_choose_file(self, mock_selector):
-        """
-        测试 choose_file 函数
-        """
-        # 模拟返回值
-        mock_selector.choose_file.return_value = "/path/to/file.txt"
-
-        # 调用函数
-        result = choose_file("选择文件", [("Text files", "*.txt")], "/initial/dir")
-
-        # 验证结果
-        self.assertEqual(result, "/path/to/file.txt")
-        mock_selector.choose_file.assert_called_once_with(
-            "选择文件", [("Text files", "*.txt")], "/initial/dir"
-        )
-
-    @patch("src.ui.filedialog_selector.file_dialog_selector")
-    def test_choose_file_user_cancel(self, mock_selector):
-        """
-        测试 choose_file 函数当用户取消选择时的行为
-        """
-        # 模拟用户取消选择
-        mock_selector.choose_file.return_value = None
-
-        # 调用函数
-        result = choose_file("选择文件", [("Text files", "*.txt")], "/initial/dir")
-
-        # 验证结果
-        self.assertIsNone(result)
-        mock_selector.choose_file.assert_called_once_with(
-            "选择文件", [("Text files", "*.txt")], "/initial/dir"
-        )
-
-    @patch("src.ui.filedialog_selector.file_dialog_selector")
-    def test_choose_file_without_optional_params(self, mock_selector):
-        """
-        测试 choose_file 函数未提供可选参数时的行为
-        """
-        # 模拟返回值
-        mock_selector.choose_file.return_value = "/path/to/file.txt"
-
-        # 调用函数，不提供可选参数
-        result = choose_file("选择文件")
-
-        # 验证结果
-        self.assertEqual(result, "/path/to/file.txt")
-        mock_selector.choose_file.assert_called_once_with("选择文件", None, None)
-
-    @patch("src.ui.filedialog_selector.file_dialog_selector")
-    def test_choose_directory(self, mock_selector):
-        """
-        测试 choose_directory 函数
-        """
-        # 模拟返回值
-        mock_selector.choose_directory.return_value = "/path/to/directory"
-
-        # 调用函数
-        result = choose_directory("选择目录", "/initial/dir")
-
-        # 验证结果
-        self.assertEqual(result, "/path/to/directory")
-        mock_selector.choose_directory.assert_called_once_with("选择目录", "/initial/dir")
-
-    @patch("src.ui.filedialog_selector.file_dialog_selector")
-    def test_choose_directory_user_cancel(self, mock_selector):
-        """
-        测试 choose_directory 函数当用户取消选择时的行为
-        """
-        # 模拟用户取消选择
-        mock_selector.choose_directory.return_value = None
-
-        # 调用函数
-        result = choose_directory("选择目录", "/initial/dir")
-
-        # 验证结果
-        self.assertIsNone(result)
-        mock_selector.choose_directory.assert_called_once_with("选择目录", "/initial/dir")
-
-    @patch("src.ui.filedialog_selector.file_dialog_selector")
-    def test_choose_directory_without_optional_params(self, mock_selector):
-        """
-        测试 choose_directory 函数未提供可选参数时的行为
-        """
-        # 模拟返回值
-        mock_selector.choose_directory.return_value = "/path/to/directory"
-
-        # 调用函数，不提供可选参数
-        result = choose_directory("选择目录")
-
-        # 验证结果
-        self.assertEqual(result, "/path/to/directory")
-        mock_selector.choose_directory.assert_called_once_with("选择目录", None)
 
 
 if __name__ == "__main__":

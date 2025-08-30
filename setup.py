@@ -28,10 +28,9 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        "openpyxl>=3.1.0",
-        "mysql-connector-python>=8.0.0,<9.0.0",
-        "pandas>=1.5.0",
-        "cryptography>=3.4.8",
+        "openpyxl==3.1.0,<3.1.0",
+        "mysql-connector-python==8.0.33,<8.0.33",
+        "cryptography==43.0.1,<43.0.1",
     ],
     extras_require={
         "test": [

@@ -62,6 +62,10 @@ def create_portable_package():
     package_name = f"zr_daily_report_v{version}"
     package_dir = project_root / package_name
     
+    # 创建 release 目录（如果不存在）
+    release_dir = project_root / "release"
+    release_dir.mkdir(exist_ok=True)
+    
     print(f"开始创建可移植包: {package_name}")
     
     # 删除已存在的包目录
@@ -70,7 +74,7 @@ def create_portable_package():
     
     # 删除旧的压缩包
     zip_filename = f"{package_name}.zip"
-    zip_path = project_root / zip_filename
+    zip_path = release_dir / zip_filename  # 将压缩包放在 release 目录中
     if zip_path.exists():
         zip_path.unlink()
     
@@ -89,6 +93,10 @@ def create_portable_package():
     print("安装依赖...")
     # 安装依赖
     install_dependencies(package_dir)
+    
+    print("打包依赖...")
+    # 打包依赖到便携包中
+    pack_dependencies(package_dir)
     
     print("创建启动脚本...")
     # 创建启动脚本
@@ -166,11 +174,50 @@ def install_dependencies(package_dir):
     
     requirements_path = package_dir / "zr_daily_report" / "requirements.txt"
     
-    # 升级pip
-    subprocess.run([str(python_path), "-m", "pip", "install", "--upgrade", "pip"], check=True)
+    # 升级pip，使用阿里云镜像源
+    try:
+        subprocess.run([str(python_path), "-m", "pip", "install", "--upgrade", "pip", 
+                        "-i", "https://mirrors.aliyun.com/pypi/simple/"], check=True)
+    except subprocess.CalledProcessError:
+        # 如果阿里云镜像源失败，则使用默认源
+        print("使用阿里云镜像源升级pip失败，尝试使用默认源...")
+        subprocess.run([str(python_path), "-m", "pip", "install", "--upgrade", "pip"], check=True)
     
-    # 安装项目依赖
-    subprocess.run([str(pip_path), "install", "-r", str(requirements_path)], check=True)
+    # 安装项目依赖，使用阿里云镜像源
+    try:
+        subprocess.run([str(pip_path), "install", "-r", str(requirements_path), 
+                        "-i", "https://mirrors.aliyun.com/pypi/simple/"], check=True)
+    except subprocess.CalledProcessError:
+        # 如果阿里云镜像源失败，则使用默认源
+        print("使用阿里云镜像源安装依赖失败，尝试使用默认源...")
+        subprocess.run([str(pip_path), "install", "-r", str(requirements_path)], check=True)
+
+
+def pack_dependencies(package_dir):
+    """
+    将依赖打包到便携包中，使用阿里云镜像源下载依赖
+    """
+    # Windows和Unix系统使用不同的激活脚本
+    if os.name == "nt":  # Windows
+        python_path = package_dir / "venv" / "Scripts" / "python.exe"
+        pip_path = package_dir / "venv" / "Scripts" / "pip"
+    else:  # Unix/Linux/macOS
+        python_path = package_dir / "venv" / "bin" / "python"
+        pip_path = package_dir / "venv" / "bin" / "pip"
+    
+    # 下载依赖包到本地目录，使用阿里云镜像源
+    wheels_dir = package_dir / "zr_daily_report" / "wheels"
+    wheels_dir.mkdir(exist_ok=True)
+    
+    requirements_path = package_dir / "zr_daily_report" / "requirements.txt"
+    try:
+        subprocess.run([str(pip_path), "download", "-r", str(requirements_path), 
+                        "-d", str(wheels_dir), "-i", "https://mirrors.aliyun.com/pypi/simple/"], check=True)
+    except subprocess.CalledProcessError:
+        # 如果阿里云镜像源失败，则使用默认源
+        print("使用阿里云镜像源下载依赖失败，尝试使用默认源...")
+        subprocess.run([str(pip_path), "download", "-r", str(requirements_path), 
+                        "-d", str(wheels_dir)], check=True)
 
 
 def create_startup_scripts(package_dir):
@@ -191,6 +238,12 @@ cd /d "%PROJECT_DIR%zr_daily_report"
 
 REM 激活虚拟环境
 call "..\venv\Scripts\activate.bat"
+
+REM 安装本地依赖包（如果存在）
+if exist "wheels" (
+    echo 安装本地依赖包...
+    pip install wheels/*.whl --force-reinstall
+)
 
 REM 运行主程序
 python zr_daily_report.py %*
@@ -214,6 +267,12 @@ Set-Location "$ProjectDir\\zr_daily_report"
 # 激活虚拟环境
 ..\\venv\\Scripts\\Activate.ps1
 
+# 安装本地依赖包（如果存在）
+if (Test-Path "wheels") {{
+    Write-Host "安装本地依赖包..."
+    pip install wheels/*.whl --force-reinstall
+}}
+
 # 运行主程序
 python zr_daily_report.py $args
 
@@ -236,6 +295,12 @@ cd "$PROJECT_DIR/zr_daily_report"
 
 # 激活虚拟环境
 source "../venv/bin/activate"
+
+# 安装本地依赖包（如果存在）
+if [ -d "wheels" ]; then
+    echo "安装本地依赖包..."
+    pip install wheels/*.whl --force-reinstall
+fi
 
 # 运行主程序
 python zr_daily_report.py "$@"
@@ -294,35 +359,34 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-REM 升级pip（使用阿里云镜像源）
+REM 检查是否需要升级pip
 echo.
-echo 正在升级pip...
-python -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/
-if %errorlevel% neq 0 (
-    echo 警告：使用阿里云镜像源升级pip失败，尝试使用默认源...
-    python -m pip install --upgrade pip
+echo 检查pip版本...
+for /f "tokens=2" %%i in ('pip --version 2^>^&1') do set PIP_VERSION=%%i
+echo 当前pip版本: %PIP_VERSION%
+
+REM 只有在明确需要升级时才升级pip
+set NEED_UPGRADE=0
+REM 这里可以添加检查pip版本是否过旧的逻辑，简化起见我们跳过自动升级
+if "%NEED_UPGRADE%"=="1" (
+    echo.
+    echo 正在升级pip...
+    python -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/
     if %errorlevel% neq 0 (
-        echo 错误：升级pip失败
-        pause
-        exit /b 1
+        echo 警告：使用阿里云镜像源升级pip失败，尝试使用默认源...
+        python -m pip install --upgrade pip
+        if %errorlevel% neq 0 (
+            echo 错误：升级pip失败
+            pause
+            exit /b 1
+        )
     )
+) else (
+    echo.
+    echo 跳过pip升级以节省时间
 )
 
-REM 重新安装pip以解决路径问题（使用阿里云镜像源）
-echo.
-echo 正在重新安装pip以解决路径问题...
-python -m pip install --force-reinstall pip -i https://mirrors.aliyun.com/pypi/simple/
-if %errorlevel% neq 0 (
-    echo 警告：使用阿里云镜像源重新安装pip失败，尝试使用默认源...
-    python -m pip install --force-reinstall pip
-    if %errorlevel% neq 0 (
-        echo 错误：重新安装pip失败
-        pause
-        exit /b 1
-    )
-)
-
-REM 安装项目依赖（使用阿里云镜像源）
+REM 安装项目依赖
 echo.
 echo 正在安装项目依赖...
 python -m pip install -r "zr_daily_report\\requirements.txt" -i https://mirrors.aliyun.com/pypi/simple/
@@ -370,6 +434,7 @@ pause >nul
 ## 项目结构
 - `zr_daily_report/` - 项目主目录
 - `venv/` - 虚拟环境目录（安装后创建）
+- `wheels/` - 本地依赖包目录（包含项目核心依赖）
 - `install.bat` - 安装脚本
 - `run-report.bat` - 启动脚本
 - `run-report.ps1` - PowerShell启动脚本
@@ -382,22 +447,56 @@ pause >nul
 ## 注意事项
 - 请勿修改目录结构
 - 如需重新安装，请删除 `venv` 目录并重新运行 `install.bat`
+- 本地依赖包(wheels目录)已包含项目核心依赖，无需联网下载
 """
     
     with open(package_dir / "README.txt", "w", encoding="utf-8") as f:
         f.write(readme_content)
 
 
+def should_exclude_file(file_path):
+    """
+    判断文件是否应该被排除在打包之外
+    """
+    # 需要排除的文件和目录模式
+    exclude_patterns = [
+        '__pycache__',
+        '.pyc',
+        '.pyo',
+        '.pyd',
+        '.pytest_cache',
+        '.coverage',
+        'test_',
+        '_test',
+        'tests/',
+        'test.py',
+        'conftest.py',
+    ]
+    
+    # 检查文件路径是否匹配排除模式
+    for pattern in exclude_patterns:
+        if pattern in file_path:
+            return True
+    
+    return False
+
 def create_zip_package(package_dir, zip_path):
     """
-    创建ZIP压缩包
+    创建ZIP压缩包，排除release目录和测试文件等非业务逻辑文件
     """
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, dirs, files in os.walk(package_dir):
+            # 移除release目录，避免递归打包
+            dirs[:] = [d for d in dirs if d != "release"]
+            
             for file in files:
                 file_path = os.path.join(root, file)
                 arc_path = os.path.relpath(file_path, package_dir)
-                zipf.write(file_path, arc_path)
+                # 确保不包含release目录中的内容
+                if not arc_path.startswith("release"):
+                    # 排除测试相关的文件
+                    if not should_exclude_file(arc_path):
+                        zipf.write(file_path, arc_path)
 
 
 if __name__ == "__main__":

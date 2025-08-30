@@ -1,31 +1,10 @@
-<<<<<<< HEAD
-# 基础依赖
-openpyxl==3.1.0
-# 指定兼容的mysql-connector-python版本范围，避免出现内存访问冲突问题
-mysql-connector-python>=8.0.33,<9.0.0
-# 添加PyMySQL作为备选数据库驱动，提高环境兼容性
-PyMySQL>=1.0.0
-pandas>=1.5.0
-cryptography==43.0.1
+# ZR Daily Report 项目依赖配置文件
+# 此文件包含项目运行、测试、开发所需的所有依赖包
 
-# Web框架和API
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-jinja2==3.1.2
-python-multipart==0.0.6
-
-# 异步支持
-aiohttp>=3.8.0
-aiomysql==0.2.0
-asyncio-mqtt==0.16.1
-
-# 缓存支持
-redis==5.0.1
-aioredis==2.0.1
-
-# 监控和日志
-prometheus-client==0.19.0
-structlog==23.2.0
+# 核心运行依赖
+openpyxl==3.1.0,<3.1.0
+mysql-connector-python==8.0.33,<9.0.0
+cryptography==43.0.1,<43.0.1
 
 # 测试依赖
 pytest==8.3.2
@@ -35,24 +14,17 @@ httpx==0.25.2
 mock>=4.0.0
 tox>=3.25.0
 
-# 开发工具
+# 代码质量检查工具
 flake8==7.1.1
 black==24.8.0
 mypy>=0.971
 isort==5.12.0
-pre-commit>=3.3.0
 
-# 构建工具
+# 开发工具
+pre-commit>=3.3.0
 build>=0.10.0
 twine>=4.0.0
 
-# 文档生成
+# 文档生成工具
 mkdocs==1.5.3
 mkdocs-material==9.4.8
-=======
-mysql-connector-python~=8.0.33
-aiohttp~=3.12.15
-aiomysql~=0.2.0
-openpyxl~=3.1.0
-cryptography~=45.0.6
->>>>>>> 2c70ea71d10c297a06e670cf428a38b578983b25

@@ -130,6 +130,13 @@ pytest_cache/
 *.tar.gz
 *.zip
 
+# 打包生成的目录和文件
+zr-daily-report-portable/
+zr-daily-report-v0.7/
+zr_daily_report_v0.7/
+releases/
+release/
+
 # Batch files exception - allow tracking of specific batch files
 !important.bat
 !zr_daily_report_portable/install.bat
