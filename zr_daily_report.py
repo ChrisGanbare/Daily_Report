@@ -23,14 +23,6 @@ from src.core.report_controller import (
 )
 
 
-
-def get_user_input(prompt):
-    root = tk.Tk()
-    root.withdraw()
-    result = tk.simpledialog.askstring("Input", prompt)
-    return result.get()
-
-
 def main():
     try:
         # 显示使用说明

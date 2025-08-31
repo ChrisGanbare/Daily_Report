@@ -10,13 +10,13 @@ ZR Daily Report 是一个用于生成切削液设备日常库存报告的Python�
 ### 运行程序
 ```bash
 # 生成库存报表和客户对账单（默认模式）
-python ZR_Daily_Report.py
+python zr_daily_report.py
 
 # 只生成库存报表
-python ZR_Daily_Report.py --mode inventory
+python zr_daily_report.py --mode inventory
 
 # 只生成客户对账单
-python ZR_Daily_Report.py --mode statement
+python zr_daily_report.py --mode statement
 ```
 
 详细使用说明请参考 [README.md](../README.md#运行程序)。
