@@ -176,13 +176,13 @@ App -> Log: 生成处理日志
 ### 6.1 基本用法
 ```bash
 # 生成库存报表和客户对账单（默认模式）
-python ZR_Daily_Report.py
+python zr_daily_report.py
 
 # 只生成库存报表
-python ZR_Daily_Report.py --mode inventory
+python zr_daily_report.py --mode inventory
 
 # 只生成客户对账单
-python ZR_Daily_Report.py --mode statement
+python zr_daily_report.py --mode statement
 ```
 
 ### 6.2 CSV文件格式

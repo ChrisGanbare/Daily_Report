@@ -136,7 +136,7 @@ python zr_daily_report.py --mode statement
 
 ## 项目结构
 ```
-ZR_Daily_Report/
+zr_daily_report/
 ├── config/              # 配置文件目录
 ├── data/                # 数据文件目录
 ├── defect_fixes/        # 缺陷修复记录目录

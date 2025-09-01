@@ -134,7 +134,7 @@ class TestZRDailyReport(unittest.TestCase):
         ]
 
         # 模拟命令行参数
-        with patch("sys.argv", ["ZR_Daily_Report.py", "--mode", "both"]):
+        with patch("sys.argv", ["zr_daily_report.py", "--mode", "both"]):
             main()
 
         # 验证调用了库存报表和客户对账单生成函数
@@ -176,7 +176,7 @@ class TestZRDailyReport(unittest.TestCase):
         mock_generate_inventory.return_value = []
 
         # 模拟命令行参数
-        with patch("sys.argv", ["ZR_Daily_Report.py", "--mode", "both"]):
+        with patch("sys.argv", ["zr_daily_report.py", "--mode", "both"]):
             main()
 
         # 验证调用了库存报表和客户对账单生成函数
