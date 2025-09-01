@@ -11,7 +11,7 @@ from src.core.db_handler import DatabaseHandler
 from src.core.inventory_handler import InventoryReportGenerator
 from src.core.statement_handler import CustomerStatementGenerator
 from src.core.file_handler import FileHandler
-from src.core.data_manager import ReportDataManager
+from src.core.data_manager import ReportDataManager,CustomerGroupingUtil
 from src.utils.date_utils import validate_csv_data
 from src.utils.config_handler import ConfigHandler
 from src.ui.filedialog_selector import file_dialog_selector
@@ -338,7 +338,7 @@ def generate_inventory_reports(log_prefix="库存表处理日志", query_config=
                     log_messages.append(error_msg)
                     failed_devices.append(device_code)
                     continue
-                    
+
             except Exception as e:
                 error_msg = f"  处理设备 {device_code} 时发生错误: {e}"
                 print(error_msg)
@@ -357,7 +357,33 @@ def generate_inventory_reports(log_prefix="库存表处理日志", query_config=
         # 记录失败设备
         if failed_devices:
             log_messages.append("")
-            log_messages.append(f"失败设备列表: {', '.join(failed_devices)}")
+            log_messages.append("生成库存报表失败列表:")
+            
+            # 按客户分组显示失败设备
+            # 创建一个映射：设备代码 -> 客户信息
+            device_to_customer = {}
+            for device_data in valid_devices:  # 注意：这里使用原始设备数据
+                device_code = device_data['device_code']
+                if device_code in failed_devices:
+                    device_to_customer[device_code] = {
+                        'customer_name': device_data.get('customer_name', '未知客户'),
+                        'customer_id': device_data.get('customer_id', '未知ID')
+                    }
+            
+            # 按客户分组失败设备
+            customers_with_failures = {}
+            for device_code in failed_devices:
+                if device_code in device_to_customer:
+                    customer_info = device_to_customer[device_code]
+                    customer_key = (customer_info['customer_id'], customer_info['customer_name'])
+                    if customer_key not in customers_with_failures:
+                        customers_with_failures[customer_key] = []
+                    customers_with_failures[customer_key].append(device_code)
+            
+            # 打印分组后的失败设备信息
+            for (customer_id, customer_name), devices in customers_with_failures.items():
+                log_messages.append(f"  客户名称: {customer_name}, 客户ID: {customer_id}")
+                log_messages.append(f"    失败设备: {', '.join(devices)}")
         
         # 生成日志文件
         log_file = os.path.join(output_dir, f"{log_prefix}_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
@@ -623,7 +649,9 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
                     'raw_data': raw_data[2],
                     'columns': raw_data[1],
                     'customer_name': customer_name,
-                    'customer_id': customer_id
+                    'customer_id': customer_id,
+                    'start_date': start_date,  # 添加开始日期
+                    'end_date': end_date       # 添加结束日期
                 }
                 all_devices_data.append(device_data)
                 
@@ -666,51 +694,58 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
             print("\n" + "-" * 50)
             print("步骤3：生成客户对账单文件")
             print("-" * 50)
-            
-            # 获取第一个设备的信息作为对账单信息
-            first_device = all_devices_data[0]
-            customer_name = first_device['customer_name']
-            
-            # 生成输出文件名
-            first_device_info = valid_devices[0]
-            start_date = first_device_info['start_date']
-            end_date = first_device_info['end_date']
-            
-            # 替换日期中的非法字符，确保文件名合法
-            safe_start_date = start_date.replace("/", "-").replace("\\", "-")
-            safe_end_date = end_date.replace("/", "-").replace("\\", "-")
-            output_filename = f"{customer_name}_{safe_start_date}_to_{safe_end_date}_对账单.xlsx"
-            output_filepath = os.path.join(output_dir, output_filename)
-            
-            # 处理不同格式的日期字符串
-            def parse_date(date_string):
-                # 尝试多种日期格式
-                formats = ['%Y-%m-%d', '%Y/%m/%d']
-                for fmt in formats:
-                    try:
-                        parsed_date = datetime.datetime.strptime(date_string, fmt).date()
-                        return parsed_date
-                    except ValueError:
-                        continue
-                # 如果所有格式都失败，则抛出异常
-                raise ValueError(f"无法解析日期格式: {date_string}")
-            
-            # 生成对账单，使用重构后的generate_report方法
-            statement_handler = CustomerStatementGenerator()
-            statement_handler.generate_report(
-                statement_data=all_devices_data,
-                output_file_path=output_filepath,
-                template_path=None,  # 从现有代码看，这个参数似乎未被使用
-                customer_name=customer_name,
-                start_date=parse_date(start_date),
-                end_date=parse_date(end_date),
-                device_data=all_devices_data
-            )
-            
-            success_msg = f"成功生成客户对账单: {output_filepath}"
-            print(success_msg)
-            log_messages.append(success_msg)
-            
+
+            # 按客户分组设备数据
+            customers_data = CustomerGroupingUtil.group_devices_by_customer(all_devices_data)
+
+            # 为每个客户生成对账单
+            for customer_id, customer_info in customers_data.items():
+                customer_name = customer_info['customer_name']
+                customer_devices = customer_info['devices']
+
+                print(f"\n为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
+                log_messages.append(f"为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
+
+                # 获取日期范围（使用第一个设备的日期范围）
+                first_device = customer_devices[0]
+                start_date = first_device['start_date']
+                end_date = first_device['end_date']
+
+                # 替换日期中的非法字符，确保文件名合法
+                safe_start_date = start_date.replace("/", "-").replace("\\", "-")
+                safe_end_date = end_date.replace("/", "-").replace("\\", "-")
+                output_filename = f"{customer_name}_{safe_start_date}_to_{safe_end_date}_对账单.xlsx"
+                output_filepath = os.path.join(output_dir, output_filename)
+
+                # 处理不同格式的日期字符串
+                def parse_date(date_string):
+                    # 尝试多种日期格式
+                    formats = ['%Y-%m-%d', '%Y/%m/%d']
+                    for fmt in formats:
+                        try:
+                            parsed_date = datetime.datetime.strptime(date_string, fmt).date()
+                            return parsed_date
+                        except ValueError:
+                            continue
+                    # 如果所有格式都失败，则抛出异常
+                    raise ValueError(f"无法解析日期格式: {date_string}")
+
+                # 生成对账单，使用重构后的generate_report方法
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_report(
+                    statement_data=customer_devices,
+                    output_file_path=output_filepath,
+                    template_path=None,  # 从现有代码看，这个参数似乎未被使用
+                    customer_name=customer_name,
+                    start_date=parse_date(start_date),
+                    end_date=parse_date(end_date),
+                    device_data=customer_devices
+                )
+
+                success_msg = f"成功生成客户对账单: {output_filepath}"
+                print(success_msg)
+                log_messages.append(success_msg)
+
         except Exception as e:
             error_msg = f"生成客户对账单失败: {e}"
             print(error_msg)
@@ -725,10 +760,39 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
         log_messages.append(f"程序结束执行时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
         log_messages.append(f"总执行时间: {duration}")
         
-        # 记录失败设备
+        # 记录失败设备（按客户分组显示）
         if failed_devices:
             log_messages.append("")
-            log_messages.append(f"失败设备列表: {', '.join(failed_devices)}")
+            log_messages.append("生成对账单失败列表:")
+            
+            # 按客户分组显示失败设备
+            # 创建一个映射：设备代码 -> 客户信息
+            device_to_customer = {}
+            for device_data in all_devices_data:
+                device_code = device_data['device_code']
+                if device_code in failed_devices:
+                    device_to_customer[device_code] = {
+                        'customer_name': device_data['customer_name'],
+                        'customer_id': device_data['customer_id']
+                    }
+            
+            # 按客户分组失败设备
+            customers_with_failures = {}
+            for device_code in failed_devices:
+                if device_code in device_to_customer:
+                    customer_info = device_to_customer[device_code]
+                    customer_key = (customer_info['customer_id'], customer_info['customer_name'])
+                    if customer_key not in customers_with_failures:
+                        customers_with_failures[customer_key] = []
+                    customers_with_failures[customer_key].append(device_code)
+            
+            # 打印分组后的失败设备信息
+            for (customer_id, customer_name), devices in customers_with_failures.items():
+                log_messages.append(f"  客户名称: {customer_name}, 客户ID: {customer_id}")
+                log_messages.append(f"    失败设备: {', '.join(devices)}")
+        elif all_devices_data:  # 如果没有失败设备但有处理过的设备，显示成功信息
+            log_messages.append("")
+            log_messages.append("所有设备对账单均已成功生成")
         
         # 生成日志文件
         log_file = os.path.join(output_dir, f"{log_prefix}_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
@@ -1082,54 +1146,63 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
                 print(f"关闭数据库连接时发生错误: {e}")
             
             return
-        
+
         # 生成客户对账单（使用已处理数据）
         try:
             print("\n" + "-" * 50)
             print("步骤3：生成客户对账单文件")
             print("-" * 50)
-            
-            # 获取第一个设备的信息作为对账单信息
-            first_device = all_devices_processed_data[0]
-            customer_name = first_device['customer_name']
-            start_date = first_device['start_date']
-            end_date = first_device['end_date']
-            
-            # 生成输出文件名
-            # 替换日期中的非法字符，确保文件名合法
-            safe_start_date = start_date.replace("/", "-").replace("\\", "-")
-            safe_end_date = end_date.replace("/", "-").replace("\\", "-")
-            statement_output_filename = f"{customer_name}_{safe_start_date}_to_{safe_end_date}_对账单.xlsx"
-            statement_output_filepath = os.path.join(output_dir, statement_output_filename)
-            
-            # 处理不同格式的日期字符串
-            def parse_date(date_string):
-                # 尝试多种日期格式
-                formats = ['%Y-%m-%d', '%Y/%m/%d']
-                for fmt in formats:
-                    try:
-                        parsed_date = datetime.datetime.strptime(date_string, fmt).date()
-                        return parsed_date
-                    except ValueError:
-                        continue
-                # 如果所有格式都失败，则抛出异常
-                raise ValueError(f"无法解析日期格式: {date_string}")
-            
-            # 生成对账单，使用重构后的generate_report方法
-            statement_handler = CustomerStatementGenerator()
-            statement_handler.generate_report(
-                statement_data=all_devices_processed_data,
-                output_file_path=statement_output_filepath,
-                template_path=None,  # 从现有代码看，这个参数似乎未被使用
-                customer_name=customer_name,
-                start_date=parse_date(start_date),
-                end_date=parse_date(end_date),
-                device_data=all_devices_processed_data
-            )
-            
-            success_msg = f"成功生成客户对账单: {statement_output_filepath}"
-            print(success_msg)
-            log_messages.append(success_msg)
+
+            # 按客户分组设备数据
+            customers_data = CustomerGroupingUtil.group_devices_by_customer(all_devices_processed_data)
+
+            # 为每个客户生成对账单
+            for customer_id, customer_info in customers_data.items():
+                customer_name = customer_info['customer_name']
+                customer_devices = customer_info['devices']
+
+                print(f"\n为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
+                log_messages.append(f"为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
+
+                # 获取日期范围（使用第一个设备的日期范围）
+                first_device = customer_devices[0]
+                start_date = first_device['start_date']
+                end_date = first_device['end_date']
+
+                # 替换日期中的非法字符，确保文件名合法
+                safe_start_date = start_date.replace("/", "-").replace("\\", "-")
+                safe_end_date = end_date.replace("/", "-").replace("\\", "-")
+                statement_output_filename = f"{customer_name}_{safe_start_date}_to_{safe_end_date}_对账单.xlsx"
+                statement_output_filepath = os.path.join(output_dir, statement_output_filename)
+
+                # 处理不同格式的日期字符串
+                def parse_date(date_string):
+                    # 尝试多种日期格式
+                    formats = ['%Y-%m-%d', '%Y/%m/%d']
+                    for fmt in formats:
+                        try:
+                            parsed_date = datetime.datetime.strptime(date_string, fmt).date()
+                            return parsed_date
+                        except ValueError:
+                            continue
+                    # 如果所有格式都失败，则抛出异常
+                    raise ValueError(f"无法解析日期格式: {date_string}")
+
+                # 生成对账单，使用重构后的generate_report方法
+                statement_handler = CustomerStatementGenerator()
+                statement_handler.generate_report(
+                    statement_data=customer_devices,
+                    output_file_path=statement_output_filepath,
+                    template_path=None,  # 从现有代码看，这个参数似乎未被使用
+                    customer_name=customer_name,
+                    start_date=parse_date(start_date),
+                    end_date=parse_date(end_date),
+                    device_data=customer_devices
+                )
+
+                success_msg = f"成功生成客户对账单: {statement_output_filepath}"
+                print(success_msg)
+                log_messages.append(success_msg)
             
         except Exception as e:
             error_msg = f"生成客户对账单失败: {e}"
@@ -1145,10 +1218,39 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
         log_messages.append(f"程序结束执行时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
         log_messages.append(f"总执行时间: {duration}")
         
-        # 记录失败设备
+        # 记录失败设备（按客户分组显示）
         if failed_devices:
             log_messages.append("")
-            log_messages.append(f"失败设备列表: {', '.join(failed_devices)}")
+            log_messages.append("生成对账单失败列表:")
+            
+            # 按客户分组显示失败设备
+            # 创建一个映射：设备代码 -> 客户信息
+            device_to_customer = {}
+            for device_data in all_devices_processed_data:
+                device_code = device_data['device_code']
+                if device_code in failed_devices:
+                    device_to_customer[device_code] = {
+                        'customer_name': device_data['customer_name'],
+                        'customer_id': device_data['customer_id']
+                    }
+            
+            # 按客户分组失败设备
+            customers_with_failures = {}
+            for device_code in failed_devices:
+                if device_code in device_to_customer:
+                    customer_info = device_to_customer[device_code]
+                    customer_key = (customer_info['customer_id'], customer_info['customer_name'])
+                    if customer_key not in customers_with_failures:
+                        customers_with_failures[customer_key] = []
+                    customers_with_failures[customer_key].append(device_code)
+            
+            # 打印分组后的失败设备信息
+            for (customer_id, customer_name), devices in customers_with_failures.items():
+                log_messages.append(f"  客户名称: {customer_name}, 客户ID: {customer_id}")
+                log_messages.append(f"    失败设备: {', '.join(devices)}")
+        elif all_devices_processed_data:  # 如果没有失败设备但有处理过的设备，显示成功信息
+            log_messages.append("")
+            log_messages.append("所有设备对账单均已成功生成")
         
         # 生成日志文件
         log_file = os.path.join(output_dir, f"{log_prefix}_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
@@ -1168,7 +1270,7 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
         except Exception as e:
             print(f"关闭数据库连接时发生错误: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
-        
+
     except Exception as e:
         error_msg = f"综合报表生成过程中发生未处理异常: {e}"
         print(error_msg)

@@ -147,8 +147,8 @@ class TestCoreReportController(BaseTestCase):
         ]
         
         # 模拟目录选择
-        with patch("src.core.report_controller._file_dialog_selector.choose_directory", return_value=self.test_output_dir):
-            with patch("src.core.report_controller._file_dialog_selector.choose_file", return_value="test.csv"):
+        with patch("src.ui.filedialog_selector.choose_directory", return_value=self.test_output_dir):
+            with patch("src.ui.filedialog_selector.choose_file", return_value="test.csv"):
                 # 调用函数
                 result = generate_inventory_reports(query_config=mock_config)
                 
@@ -159,12 +159,10 @@ class TestCoreReportController(BaseTestCase):
                 mock_db_instance.connect.assert_called_once()
                 mock_inventory_instance.generate_report.assert_called_once()
                 
-    @patch("src.core.report_controller._file_dialog_selector.choose_file")
-    @patch("src.core.report_controller._file_dialog_selector.choose_directory")
     @patch("src.core.report_controller.CustomerStatementGenerator")
     @patch("src.core.report_controller.DatabaseHandler")
     @patch("src.core.report_controller.ReportDataManager")
-    def test_generate_customer_statement(self, mock_data_manager, mock_db_handler, mock_statement_handler, mock_choose_directory, mock_choose_file):
+    def test_generate_customer_statement(self, mock_data_manager, mock_db_handler, mock_statement_handler):
         """测试generate_customer_statement函数"""
         # 模拟配置
         mock_config = {
@@ -219,7 +217,7 @@ class TestCoreReportController(BaseTestCase):
         mock_statement_instance.generate_report.return_value = None
         
         # 模拟目录选择
-        with patch("src.core.report_controller.choose_directory", return_value=self.test_output_dir):
+        with patch("src.ui.filedialog_selector.choose_directory", return_value=self.test_output_dir):
             # 调用函数
             result = generate_customer_statement(devices_data=device_data, query_config=mock_config)
             
@@ -367,8 +365,8 @@ class TestCoreReportController(BaseTestCase):
         ]
         
         # 模拟文件和目录选择
-        with patch("src.core.report_controller._file_dialog_selector.choose_directory", return_value=self.test_output_dir):
-            with patch("src.core.report_controller._file_dialog_selector.choose_file", return_value="test.csv"):
+        with patch("src.ui.filedialog_selector.choose_directory", return_value=self.test_output_dir):
+            with patch("src.ui.filedialog_selector.choose_file", return_value="test.csv"):
                 # 调用函数
                 result = generate_both_reports(query_config=mock_config)
                 
@@ -522,8 +520,8 @@ class TestCoreReportController(BaseTestCase):
         ]
         
         # 模拟文件和目录选择
-        with patch("src.core.report_controller._file_dialog_selector.choose_directory", return_value=self.test_output_dir):
-            with patch("src.core.report_controller._file_dialog_selector.choose_file", return_value="test.csv"):
+        with patch("src.ui.filedialog_selector.choose_directory", return_value=self.test_output_dir):
+            with patch("src.ui.filedialog_selector.choose_file", return_value="test.csv"):
                 # 调用函数
                 result = generate_both_reports(query_config=mock_config)
                 
@@ -551,8 +549,8 @@ class TestCoreReportController(BaseTestCase):
                 mock_inventory_instance.generate_report.assert_called_once()
                 mock_statement_instance.generate_report.assert_called_once()
 
-    @patch("src.core.report_controller._file_dialog_selector.choose_file")
-    @patch("src.core.report_controller._file_dialog_selector.choose_directory")
+    @patch("src.ui.filedialog_selector.choose_file")
+    @patch("src.ui.filedialog_selector.choose_directory")
     @patch("src.core.report_controller._load_config")
     @patch("src.core.report_controller.InventoryReportGenerator")
     @patch("src.core.report_controller.FileHandler")
@@ -625,8 +623,8 @@ class TestCoreReportController(BaseTestCase):
                 mock_db_instance.get_customer_name_by_device_code.assert_called_once()
                 mock_db_instance.fetch_inventory_data.assert_called_once()
 
-    @patch("src.core.report_controller._file_dialog_selector.choose_file")
-    @patch("src.core.report_controller._file_dialog_selector.choose_directory")
+    @patch("src.ui.filedialog_selector.choose_file")
+    @patch("src.ui.filedialog_selector.choose_directory")
     @patch("src.core.report_controller.CustomerStatementGenerator")
     @patch("src.core.report_controller.DatabaseHandler")
     @patch("src.core.report_controller.ReportDataManager")
@@ -694,8 +692,8 @@ class TestCoreReportController(BaseTestCase):
             self.assertIsNone(result)
             mock_statement_instance.generate_report.assert_called_once()
 
-    @patch("src.core.report_controller._file_dialog_selector.choose_file")
-    @patch("src.core.report_controller._file_dialog_selector.choose_directory")
+    @patch("src.ui.filedialog_selector.choose_file")
+    @patch("src.ui.filedialog_selector.choose_directory")
     @patch("src.core.report_controller.CustomerStatementGenerator")
     @patch("src.core.report_controller.InventoryReportGenerator")
     @patch("src.core.report_controller.DatabaseHandler")
@@ -830,8 +828,8 @@ class TestCoreReportController(BaseTestCase):
         ]
         
         # 模拟文件和目录选择
-        with patch("src.core.report_controller._file_dialog_selector.choose_directory", return_value=self.test_output_dir):
-            with patch("src.core.report_controller._file_dialog_selector.choose_file", return_value="test.csv"):
+        with patch("src.ui.filedialog_selector.choose_directory", return_value=self.test_output_dir):
+            with patch("src.ui.filedialog_selector.choose_file", return_value="test.csv"):
                 # 调用函数
                 result = generate_both_reports(query_config=mock_config)
                 

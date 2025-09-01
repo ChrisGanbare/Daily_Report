@@ -144,3 +144,68 @@ class ReportDataManager:
                     monthly_usage[order_month] += float(oil_val)
         
         return sorted(monthly_usage.items())
+
+
+class CustomerGroupingUtil:
+    """客户分组工具类，用于按客户维度对设备进行分组"""
+
+    @staticmethod
+    def group_devices_by_customer(devices_data):
+        """
+        按客户ID对设备进行分组
+
+        Args:
+            devices_data (list): 设备数据列表，每个设备应包含customer_id和customer_name字段
+
+        Returns:
+            dict: 按客户ID分组的设备数据
+                  格式: {
+                      customer_id: {
+                          'customer_name': customer_name,
+                          'devices': [device_data, ...]
+                      },
+                      ...
+                  }
+        """
+        customers_data = {}
+        for device_data in devices_data:
+            customer_id = device_data.get('customer_id')
+            customer_name = device_data.get('customer_name')
+
+            # 确保customer_id和customer_name存在
+            if customer_id is None or customer_name is None:
+                continue
+
+            # 使用客户ID作为键，但保存客户名称用于文件命名
+            if customer_id not in customers_data:
+                customers_data[customer_id] = {
+                    'customer_name': customer_name,
+                    'devices': []
+                }
+            customers_data[customer_id]['devices'].append(device_data)
+
+        return customers_data
+
+    @staticmethod
+    def get_customer_list(devices_data):
+        """
+        获取设备列表中涉及的所有客户
+
+        Args:
+            devices_data (list): 设备数据列表
+
+        Returns:
+            list: 客户信息列表，格式: [{'customer_id': id, 'customer_name': name}, ...]
+        """
+        customers = {}
+        for device_data in devices_data:
+            customer_id = device_data.get('customer_id')
+            customer_name = device_data.get('customer_name')
+
+            if customer_id and customer_name and customer_id not in customers:
+                customers[customer_id] = {
+                    'customer_id': customer_id,
+                    'customer_name': customer_name
+                }
+
+        return list(customers.values())
