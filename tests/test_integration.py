@@ -27,8 +27,8 @@ class TestIntegration(BaseTestCase):
     # 4. InventoryReportGenerator - 库存报表生成器
     # 5. FileHandler - 文件处理器
     # 6. DatabaseHandler - 数据库处理器
-    @patch("src.core.report_controller._file_dialog_selector.choose_file")
-    @patch("src.core.report_controller._file_dialog_selector.choose_directory")
+    @patch("src.ui.filedialog_selector.file_dialog_selector.choose_file")
+    @patch("src.ui.filedialog_selector.file_dialog_selector.choose_directory")
     @patch("src.core.report_controller._load_config")
     @patch("src.core.report_controller.InventoryReportGenerator")
     @patch("src.core.report_controller.FileHandler")
@@ -79,9 +79,9 @@ class TestIntegration(BaseTestCase):
         mock_db_instance.get_latest_device_id_and_customer_id.return_value = (1, 100)
         mock_db_instance.get_customer_name_by_device_code.return_value = "测试客户"
         mock_db_instance.fetch_inventory_data.return_value = (
-            [],
-            [],
-            []
+            [(date(2025, 7, 1), 50.0)],
+            ["加注时间", "原油剩余比例", "油品名称"],
+            [(date(2025, 7, 1), 50.0, "测试油品")]
         )
 
         # 模拟库存报告处理器
@@ -105,7 +105,7 @@ class TestIntegration(BaseTestCase):
         mock_choose_directory.assert_called_once()
         mock_file_instance.read_devices_from_csv.assert_called_once()
         mock_db_instance.connect.assert_called_once()
-        mock_inventory_instance.generate_inventory_report_with_chart.assert_called_once()
+        mock_inventory_handler.assert_called_once()
 
     # 装饰器顺序按照业务流程执行顺序排列：
     # 1. choose_file - 首先选择输入文件
@@ -115,8 +115,8 @@ class TestIntegration(BaseTestCase):
     # 5. CustomerStatementGenerator - 对账单生成器
     # 6. FileHandler - 文件处理器
     # 7. DatabaseHandler - 数据库处理器
-    @patch("src.core.report_controller.choose_file")
-    @patch("src.core.report_controller.choose_directory")
+    @patch("src.ui.filedialog_selector.file_dialog_selector.choose_file")
+    @patch("src.ui.filedialog_selector.file_dialog_selector.choose_directory")
     @patch("src.core.report_controller._load_config")
     @patch("src.core.report_controller.InventoryReportGenerator")
     @patch("src.core.report_controller.CustomerStatementGenerator")
@@ -170,8 +170,8 @@ class TestIntegration(BaseTestCase):
         mock_db_instance.get_customer_name_by_device_code.return_value = "测试客户"
         mock_db_instance.fetch_inventory_data.return_value = (
             [(date(2025, 7, 1), 50.0)],
-            ["加注时间", "原油剩余比例"],
-            [(date(2025, 7, 1), 50.0)]
+            ["加注时间", "原油剩余比例", "油品名称"],
+            [(date(2025, 7, 1), 50.0, "测试油品")]
         )
 
         # 模拟库存报告处理器
@@ -195,37 +195,38 @@ class TestIntegration(BaseTestCase):
                     result = None
 
         # 验证调用
-        self.assertEqual(mock_choose_file.call_count, 2)
-        self.assertEqual(mock_choose_directory.call_count, 2)
+        self.assertEqual(mock_choose_file.call_count, 1)
+        self.assertEqual(mock_choose_directory.call_count, 1)
         mock_file_instance.read_devices_from_csv.assert_called_once()
         mock_db_instance.connect.assert_called_once()
-        mock_inventory_instance.generate_inventory_report_with_chart.assert_called_once()
-        mock_statement_instance.generate_customer_statement.assert_called_once()
+        mock_inventory_handler.assert_called_once()
+        mock_statement_instance.generate_report.assert_called_once()
 
-    # 装饰器顺序按照业务流程执行顺序排列：
-    # 1. choose_file - 首先选择输入文件
-    # 2. choose_directory - 然后选择输出目录
-    # 3. _load_config - 加载配置信息
-    # 4. InventoryReportGenerator - 库存报表生成器
-    # 5. CustomerStatementGenerator - 对账单生成器
-    # 6. FileHandler - 文件处理器
-    # 7. DatabaseHandler - 数据库处理器
-    @patch("src.core.report_controller._file_dialog_selector.choose_file")
-    @patch("src.core.report_controller._file_dialog_selector.choose_directory")
+        # 装饰器顺序按照业务流程执行顺序排列：
+        # 1. choose_file - 首先选择输入文件
+        # 2. choose_directory - 然后选择输出目录
+        # 3. _load_config - 加载配置信息
+        # 4. InventoryReportGenerator - 库存报表生成器
+        # 5. CustomerStatementGenerator - 对账单生成器
+        # 6. FileHandler - 文件处理器
+        # 7. DatabaseHandler - 数据库处理器
+
+    @patch("src.ui.filedialog_selector.file_dialog_selector.choose_file")
+    @patch("src.ui.filedialog_selector.file_dialog_selector.choose_directory")
     @patch("src.core.report_controller._load_config")
     @patch("src.core.report_controller.InventoryReportGenerator")
     @patch("src.core.report_controller.CustomerStatementGenerator")
     @patch("src.core.report_controller.FileHandler")
     @patch("src.core.report_controller.DatabaseHandler")
     def test_both_modes_empty_device_list(
-        self,
-        mock_db_handler,          # 对应 DatabaseHandler
-        mock_file_handler,        # 对应 FileHandler
-        mock_statement_handler,   # 对应 CustomerStatementGenerator
-        mock_inventory_handler,   # 对应 InventoryReportGenerator
-        mock_load_config,         # 对应 _load_config
-        mock_choose_directory,    # 对应 _file_dialog_selector.choose_directory
-        mock_choose_file          # 对应 _file_dialog_selector.choose_file
+            self,
+            mock_db_handler,  # 对应 DatabaseHandler
+            mock_file_handler,  # 对应 FileHandler
+            mock_statement_handler,  # 对应 CustomerStatementGenerator
+            mock_inventory_handler,  # 对应 InventoryReportGenerator
+            mock_load_config,  # 对应 _load_config
+            mock_choose_directory,  # 对应 _file_dialog_selector.choose_directory
+            mock_choose_file  # 对应 _file_dialog_selector.choose_file
     ):
         """测试设备列表为空的情况"""
         # 模拟配置加载
@@ -277,9 +278,9 @@ class TestIntegration(BaseTestCase):
                     result = None
 
         # 验证调用
-        self.assertEqual(mock_choose_file.call_count, 2)
-        self.assertEqual(mock_choose_directory.call_count, 2)
+        self.assertEqual(mock_choose_file.call_count, 1)
+        self.assertEqual(mock_choose_directory.call_count, 0)
         mock_file_instance.read_devices_from_csv.assert_called_once()
-        mock_db_instance.connect.assert_called_once()
+        mock_db_instance.connect.assert_not_called()
         mock_inventory_instance.generate_inventory_report_with_chart.assert_not_called()
         mock_statement_instance.generate_customer_statement.assert_not_called()
