@@ -43,7 +43,10 @@ class PackageBuilder:
         "openpyxl",
         "mysql-connector-python",
         "cryptography",
-        # 其他必要的核心依赖
+        "protobuf<=3.20.3",  # mysql-connector-python需要特定版本
+        "et-xmlfile",        # openpyxl依赖
+        "cffi",              # cryptography依赖
+        "pycparser"          # cffi依赖
     ]
 
     def __init__(self):
@@ -152,32 +155,68 @@ class PackageBuilder:
         # 依赖将在安装脚本中安装，这里不预先安装
         pass
 
-    def _copy_dependencies(self):
-        """复制依赖"""
+    def _download_and_copy_dependencies(self):
+        """下载并复制运行时必需的wheel文件"""
         try:
-            # 在项目目录中创建依赖目录
+            # 在项目目录中创建依赖目录（使用绝对路径）
             deps_dir = self.package_dir / "zr_daily_report" / "dependencies"
+            deps_dir = deps_dir.resolve()  # 转换为绝对路径
             deps_dir.mkdir(exist_ok=True)
             
-            # 使用pip下载依赖项到dependencies目录
-            requirements_path = self.project_root / "requirements.txt"
-            if requirements_path.exists():
+            # 使用核心依赖列表
+            core_dependencies = self.CORE_DEPENDENCIES
+            
+            logging.info(f"运行时核心依赖: {core_dependencies}")
+            
+            # 为每个核心依赖创建临时requirements文件
+            temp_requirements = self.project_root / "temp_core_requirements.txt"
+            try:
+                # 写入核心依赖到临时requirements文件
+                with open(temp_requirements, 'w', encoding=DEFAULT_ENCODING) as f:
+                    for req in core_dependencies:
+                        f.write(req + '\n')
+                
+                logging.info(f"核心依赖条目: {core_dependencies}")
                 try:
-                    # 下载依赖项到dependencies目录
-                    subprocess.run([
-                        sys.executable, "-m", "pip", "download", 
-                        "-r", str(requirements_path), 
-                        "-d", str(deps_dir)
-                    ], check=True, cwd=self.project_root)
-                    logging.info("依赖项已下载到dependencies目录")
+                    logging.info("正在下载运行时必需的依赖项的wheel文件...")
+                    # 使用pip download命令下载核心依赖的wheel文件到dependencies目录
+                    result = subprocess.run([
+                        sys.executable, "-m", "pip", "download",
+                        "-r", str(temp_requirements),
+                        "-d", str(deps_dir),
+                        "--prefer-binary",
+                        "--disable-pip-version-check"
+                    ], check=True, capture_output=True, text=True, timeout=300)
+                    logging.info("运行时必需的依赖项的wheel文件已下载到dependencies目录")
+                    logging.debug(f"pip download output: {result.stdout}")
+                    
+                    # 验证下载的文件
+                    wheel_files = list(deps_dir.glob("*.whl"))
+                    tar_files = list(deps_dir.glob("*.tar.gz"))
+                    logging.info(f"下载了 {len(wheel_files)} 个wheel文件和 {len(tar_files)} 个源码包")
+                    
+                    if len(wheel_files) + len(tar_files) == 0:
+                        logging.warning("未下载到任何依赖文件")
+                        raise PackageError("未能下载依赖文件")
+                        
+                except subprocess.TimeoutExpired:
+                    logging.error("下载依赖超时")
+                    raise PackageError("下载依赖超时")
                 except subprocess.CalledProcessError as e:
-                    logging.warning(f"下载依赖项失败: {e}")
-                    logging.info("依赖项将在安装时下载")
-            else:
-                logging.warning("未找到requirements.txt文件")
+                    logging.error(f"下载依赖项失败: {e}")
+                    logging.error(f"错误输出: {e.stderr}")
+                    raise PackageError(f"下载依赖失败: {e}")
+                except Exception as e:
+                    logging.error(f"处理依赖过程中发生错误: {e}")
+                    raise PackageError(f"处理依赖失败: {e}")
+                    
+            finally:
+                # 删除临时requirements文件
+                if temp_requirements.exists():
+                    temp_requirements.unlink()
                 
         except Exception as e:
-            raise PackageError(f"复制依赖失败: {e}")
+            raise PackageError(f"下载并复制依赖失败: {e}")
 
     def _create_startup_scripts(self):
         """创建启动脚本，确保使用正确的Windows编码"""
@@ -185,13 +224,45 @@ class PackageBuilder:
             # 创建Windows批处理脚本
             bat_script = self.package_dir / "run_report.bat"
             with open(bat_script, 'w', encoding=DEFAULT_ENCODING, newline='\r\n') as f:
-                f.write("@echo off\n")
-                f.write("chcp 65001 >nul\n")  # 设置代码页为UTF-8
-                f.write("echo 设置环境以使用本地依赖...\n")
-                f.write("set PYTHONPATH=%~dp0zr_daily_report;%~dp0zr_daily_report\\dependencies;%PYTHONPATH%\n")
-                f.write("cd zr_daily_report\n")
-                f.write("python zr_daily_report.py\n")
-                f.write("pause\n")
+                f.write('@echo off\n')
+                f.write('chcp 65001 >nul\n')
+                f.write('setlocal\n')
+                f.write('title ZR Daily Report\n\n')
+
+                # 设置Python路径
+                f.write('set "PYTHONPATH=%~dp0zr_daily_report;%~dp0zr_daily_report\\dependencies;%PYTHONPATH%"\n')
+                f.write('cd /d "%~dp0zr_daily_report"\n\n')
+
+                # 先激活虚拟环境
+                f.write('if exist "%~dp0venv\\Scripts\\activate.bat" (\n')
+                f.write('    call "%~dp0venv\\Scripts\\activate.bat"\n')
+                f.write(') else (\n')
+                f.write('    echo Error: Virtual environment not found!\n')
+                f.write('    echo Please run install.bat first.\n')
+                f.write('    pause\n')
+                f.write('    exit /b 1\n')
+                f.write(')\n\n')
+
+                # 检查依赖
+                f.write('python -c "import mysql.connector" >nul 2>&1\n')
+                f.write('if errorlevel 1 (\n')
+                f.write('    echo Error: MySQL Connector not found!\n')
+                f.write('    echo Please run install.bat to install dependencies.\n')
+                f.write('    pause\n')
+                f.write('    exit /b 1\n')
+                f.write(')\n\n')
+
+                # 运行主程序
+                f.write('echo Starting ZR Daily Report...\n')
+                f.write('echo =====================================\n')
+                f.write('python zr_daily_report.py\n')
+                f.write('echo =====================================\n')
+                f.write('echo.\n')
+                f.write('echo Program execution completed.\n')
+                f.write('echo Please review the output above.\n')
+                f.write('echo Press any key to close this window...\n')
+                f.write('pause >nul\n')
+                f.write('endlocal\n')
 
             # 创建PowerShell脚本
             ps_script = self.package_dir / "run_report.ps1"
@@ -201,55 +272,121 @@ class PackageBuilder:
                 f.write("Set-Location -Path \"zr_daily_report\"\n")
                 f.write("python zr_daily_report.py\n")
 
-            # 创建安装脚本
+            # 优化安装脚本的输出格式
             install_bat_script = self.package_dir / "install.bat"
             with open(install_bat_script, 'w', encoding=DEFAULT_ENCODING, newline='\r\n') as f:
-                f.write("@echo off\n")
-                f.write("chcp 65001 >nul\n")  # 设置代码页为UTF-8
-                f.write("echo 创建虚拟环境...\n")
-                f.write("python -m venv venv\n")
-                f.write("echo 激活虚拟环境...\n")
-                f.write("call venv\\Scripts\\activate.bat\n")
-                f.write("echo 设置编码环境变量...\n")
-                f.write("set PYTHONIOENCODING=utf-8\n")
-                f.write("set PYTHONLEGACYWINDOWSFSENCODING=1\n")
-                f.write("echo 升级pip...\n")
-                f.write("python -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/\n")
-                f.write("echo 安装本地依赖...\n")
-                f.write("pip install zr_daily_report/dependencies/*.whl --force-reinstall || pip install -r zr_daily_report/requirements.txt -i https://mirrors.aliyun.com/pypi/simple/\n")
-                f.write("echo 安装完成!\n")
-                f.write("pause\n")
+                f.write('@echo off\n')
+                f.write('chcp 65001 >nul\n')  # 确保使用UTF-8编码
+                f.write('title ZR Daily Report Installation\n\n')  # 使用英文标题
+                
+                # 使用 echo 创建分隔线的函数
+                f.write('set "line=echo ====================================="\n')
+                f.write('cls\n')
+                f.write('%line%\n')
+                f.write('echo    ZR Daily Report Environment Setup\n')
+                f.write('%line%\n')
+                f.write('echo.\n\n')
+                
+                # 1. 虚拟环境设置
+                f.write('echo [1/4] Configuring Virtual Environment\n')
+                f.write('%line%\n')
+                f.write('echo Creating virtual environment...\n')
+                f.write('python -m venv venv\n')
+                f.write('if errorlevel 1 goto error\n\n')
+                
+                f.write('echo Activating virtual environment...\n')
+                f.write('call venv\\Scripts\\activate.bat\n')
+                f.write('if errorlevel 1 goto error\n\n')
+                
+                # 2. 环境变量设置
+                f.write('echo [2/4] Setting System Environment\n')
+                f.write('%line%\n')
+                f.write('echo Setting encoding environment variables...\n')
+                f.write('set PYTHONIOENCODING=utf-8\n')
+                f.write('set PYTHONLEGACYWINDOWSFSENCODING=1\n\n')
+                
+                # 3. 升级pip
+                f.write('echo [3/4] Updating Package Manager\n')
+                f.write('%line%\n')
+                f.write('python -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ >nul 2>&1\n')
+                f.write('if errorlevel 1 goto error\n\n')
+                
+                # 4. 安装依赖
+                f.write('echo [4/4] Installing Project Dependencies\n')
+                f.write('%line%\n')
+                f.write('echo Checking installed dependencies...\n')
+                f.write('python -c "import mysql.connector; import openpyxl; import cryptography" >nul 2>&1\n')
+                f.write('if %errorlevel% equ 0 (\n')
+                f.write('    echo All dependencies are already installed correctly\n')
+                f.write('    goto success\n')
+                f.write(')\n\n')
+                
+                # 本地依赖安装
+                f.write('echo Starting dependency installation...\n')
+                f.write('dir /b zr_daily_report\\dependencies\\*.whl >nul 2>&1\n')
+                f.write('if %errorlevel% equ 0 (\n')
+                f.write('    echo * Installing from local wheel packages\n')
+                f.write('    for %%f in (zr_daily_report\\dependencies\\*.whl) do (\n')
+                f.write('        echo   - Installing: %%~nxf\n')
+                f.write('        pip install "%%f" --force-reinstall --disable-pip-version-check --no-warn-script-location >nul 2>&1\n')
+                f.write('        if errorlevel 1 goto error\n')
+                f.write('    )\n')
+                f.write(') else (\n')
+                f.write('    echo * Installing from online source\n')
+                f.write('    pip install -r zr_daily_report\\requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --disable-pip-version-check >nul 2>&1\n')
+                f.write('    if errorlevel 1 goto error\n')
+                f.write(')\n\n')
+                
+                # 成功处理
+                f.write(':success\n')
+                f.write('%line%\n')
+                f.write('echo Installation completed successfully!\n')
+                f.write('echo You can now run run_report.bat to start the program\n')
+                f.write('echo.\n')
+                f.write('goto end\n\n')
+                
+                # 错误处理
+                f.write(':error\n')
+                f.write('%line%\n')
+                f.write('echo An error occurred during installation!\n')
+                f.write('echo Please check the error message above and try again\n')
+                f.write('exit /b 1\n\n')
+                
+                # 结束处理
+                f.write(':end\n')
+                f.write('echo.\n')
+                f.write('echo Press any key to exit...\n')
+                f.write('pause >nul\n')
 
-            # 创建README.txt文件
+            # 更新README.txt文件内容
             readme_file = self.package_dir / "README.txt"
             with open(readme_file, 'w', encoding=DEFAULT_ENCODING, newline='\r\n') as f:
-                f.write("# ZR Daily Report 可移植包\n\n")
-                f.write("这是一个完整的可移植包，包含了运行ZR Daily Report所需的所有文件。\n\n")
-                f.write("## 安装步骤\n\n")
-                f.write("1. 在目标计算机上确保已安装Python 3.8或更高版本\n")
-                f.write("2. 双击运行 `install.bat` 脚本\n")
-                f.write("3. 按照提示完成环境安装\n\n")
-                f.write("## 运行程序\n\n")
-                f.write("安装完成后，可以通过以下方式运行程序：\n")
-                f.write("- 双击 `run_report.bat` 运行程序\n")
-                f.write("- 或在命令行中执行 `python zr_daily_report.py`\n\n")
-                f.write("## 项目结构\n")
-                f.write("- `zr_daily_report/` - 项目主目录\n")
-                f.write("- `venv/` - 虚拟环境目录（安装后创建）\n")
-                f.write("- `install.bat` - 安装脚本\n")
-                f.write("- `run_report.bat` - 启动脚本\n")
-                f.write("- `run_report.ps1` - PowerShell启动脚本\n\n")
-                f.write("## 系统要求\n")
+                f.write("# ZR Daily Report Portable Package\n\n")
+                f.write("This is a complete portable package containing all files needed to run ZR Daily Report.\n\n")
+                f.write("## Installation Steps\n\n")
+                f.write("1. Ensure Python 3.8 or higher is installed on the target computer\n")
+                f.write("2. Double-click `install.bat` to run the installation script\n")
+                f.write("3. Follow the prompts to complete environment setup\n\n")
+                f.write("## Running the Program\n\n")
+                f.write("After installation is complete, you can run the program by:\n")
+                f.write("- Double-clicking `run_report.bat`\n")
+                f.write("- Or executing `python zr_daily_report/zr_daily_report.py` in command line\n\n")
+                f.write("## Package Structure\n")
+                f.write("- `zr_daily_report/` - Main project directory\n")
+                f.write("- `venv/` - Virtual environment directory (created after installation)\n")
+                f.write("- `install.bat` - Installation script\n")
+                f.write("- `run_report.bat` - Launch script\n\n")
+                f.write("## System Requirements\n")
                 f.write("- Windows 7/8/10/11\n")
-                f.write("- Python 3.8或更高版本\n")
-                f.write("- 至少100MB可用磁盘空间\n\n")
-                f.write("## 注意事项\n")
-                f.write("- 请勿修改目录结构\n")
-                f.write("- 如需重新安装，请删除 `venv` 目录并重新运行 `install.bat`\n")
+                f.write("- Python 3.8 or higher\n")
+                f.write("- At least 100MB of free disk space\n\n")
+                f.write("## Notes\n")
+                f.write("- Do not modify the directory structure\n")
+                f.write("- To reinstall, delete the `venv` directory and run `install.bat` again\n")
+                f.write("- If installation issues occur, check network connectivity or firewall settings\n")
 
         except Exception as e:
             raise PackageError(f"创建启动脚本失败: {e}")
-
 
     def _create_zip_package(self):
         """创建ZIP压缩包"""
@@ -281,7 +418,7 @@ class PackageBuilder:
             # 执行打包步骤
             steps = [
                 (self._copy_project_files, "复制项目文件"),
-                (self._copy_dependencies, "复制依赖"),
+                (self._download_and_copy_dependencies, "下载并复制依赖"),
                 (self._create_startup_scripts, "创建启动脚本"),
                 (self._create_zip_package, "创建压缩包")
             ]
