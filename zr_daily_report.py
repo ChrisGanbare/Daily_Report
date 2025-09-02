@@ -19,7 +19,8 @@ from src.ui.mode_selector import show_mode_selection_dialog
 from src.core.report_controller import (
     generate_inventory_reports,
     generate_customer_statement,
-    generate_both_reports
+    generate_both_reports,
+    generate_refueling_details
 )
 
 
@@ -53,6 +54,9 @@ def main():
         elif mode == 'both':
             # 使用优化的综合报表生成功能
             generate_both_reports()
+        elif mode == 'refueling':
+            # 生成加注明细报表
+            generate_refueling_details()
                 
     except Exception as e:
         print(f"主程序执行过程中发生异常: {e}")

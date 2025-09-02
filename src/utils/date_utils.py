@@ -86,11 +86,11 @@ def validate_date_span(row):
     # 考虑到日期的具体天数，如果结束日期的天数小于开始日期的天数，
     # 实际月份跨度会比计算的月份数少一天到一个月不等
     # 因此，如果月份差为2时，还需要进一步检查具体的日期
-    if month_diff > 2:
-        print(f"日期跨度错误: 从 {row['start_date']} 到 {row['end_date']} 的日期范围超过了2个月")
+    if month_diff > 1:
+        print(f"日期跨度错误: 从 {row['start_date']} 到 {row['end_date']} 的日期范围超过了1个月")
         return False
-    elif month_diff == 2 and end_date.day >= start_date.day:
-        print(f"日期跨度错误: 从 {row['start_date']} 到 {row['end_date']} 的日期范围超过了2个月")
+    elif month_diff == 1 and end_date.day >= start_date.day:
+        print(f"日期跨度错误: 从 {row['start_date']} 到 {row['end_date']} 的日期范围超过了1个月")
         return False
     
     return True

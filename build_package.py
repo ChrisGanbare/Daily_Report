@@ -272,91 +272,133 @@ class PackageBuilder:
                 f.write("Set-Location -Path \"zr_daily_report\"\n")
                 f.write("python zr_daily_report.py\n")
 
+            # 创建安装脚本
             # 优化安装脚本的输出格式
             install_bat_script = self.package_dir / "install.bat"
             with open(install_bat_script, 'w', encoding=DEFAULT_ENCODING, newline='\r\n') as f:
                 f.write('@echo off\n')
-                f.write('chcp 65001 >nul\n')  # 确保使用UTF-8编码
-                f.write('title ZR Daily Report Installation\n\n')  # 使用英文标题
-                
-                # 使用 echo 创建分隔线的函数
+                f.write('chcp 65001 >nul\n')
+                f.write('setlocal EnableDelayedExpansion\n')  # 启用延迟变量扩展
+                f.write('title ZR Daily Report Installation\n\n')
+
+                # 检查 Python 版本
+                f.write('echo Checking Python version...\n')
+                f.write('python --version >nul 2>&1\n')
+                f.write('if errorlevel 1 (\n')
+                f.write('    echo Error: Python is not installed or not in PATH!\n')
+                f.write('    echo Please install Python 3.8 or higher and try again.\n')
+                f.write('    pause\n')
+                f.write('    exit /b 1\n')
+                f.write(')\n\n')
+
+                f.write('for /f "tokens=2" %%v in (\'python --version 2^>^&1\') do set PYTHON_VERSION=%%v\n')
+                f.write('for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (\n')
+                f.write('    set PYTHON_MAJOR=%%a\n')
+                f.write('    set PYTHON_MINOR=%%b\n')
+                f.write(')\n')
+                f.write('if %PYTHON_MAJOR% lss 3 (\n')
+                f.write('    echo Error: Python 3.8 or higher is required!\n')
+                f.write('    echo Current Python version: %PYTHON_VERSION%\n')
+                f.write('    pause\n')
+                f.write('    exit /b 1\n')
+                f.write(')\n')
+                f.write('if %PYTHON_MAJOR% equ 3 (\n')
+                f.write('    if %PYTHON_MINOR% lss 8 (\n')
+                f.write('        echo Error: Python 3.8 or higher is required!\n')
+                f.write('        echo Current Python version: %PYTHON_VERSION%\n')
+                f.write('        pause\n')
+                f.write('        exit /b 1\n')
+                f.write('    )\n')
+                f.write(')\n\n')
+
+                # 使用变量存储分隔线
                 f.write('set "line=echo ====================================="\n')
                 f.write('cls\n')
                 f.write('%line%\n')
                 f.write('echo    ZR Daily Report Environment Setup\n')
                 f.write('%line%\n')
                 f.write('echo.\n\n')
-                
+
+                # 检查是否已存在虚拟环境
+                f.write('if exist "venv" (\n')
+                f.write('    echo Found existing virtual environment.\n')
+                f.write('    choice /C YN /M "Do you want to remove it and create a new one?"\n')
+                f.write('    if errorlevel 2 goto :EOF\n')
+                f.write('    echo Removing existing virtual environment...\n')
+                f.write('    rmdir /S /Q venv\n')
+                f.write(')\n\n')
+
                 # 1. 虚拟环境设置
-                f.write('echo [1/4] Configuring Virtual Environment\n')
+                f.write('echo [1/4] Creating Virtual Environment\n')
                 f.write('%line%\n')
                 f.write('echo Creating virtual environment...\n')
                 f.write('python -m venv venv\n')
-                f.write('if errorlevel 1 goto error\n\n')
-                
+                f.write('if errorlevel 1 (\n')
+                f.write('    echo Error: Failed to create virtual environment!\n')
+                f.write('    pause\n')
+                f.write('    exit /b 1\n')
+                f.write(')\n\n')
+
                 f.write('echo Activating virtual environment...\n')
                 f.write('call venv\\Scripts\\activate.bat\n')
-                f.write('if errorlevel 1 goto error\n\n')
-                
+                f.write('if errorlevel 1 (\n')
+                f.write('    echo Error: Failed to activate virtual environment!\n')
+                f.write('    pause\n')
+                f.write('    exit /b 1\n')
+                f.write(')\n\n')
+
                 # 2. 环境变量设置
-                f.write('echo [2/4] Setting System Environment\n')
+                f.write('echo [2/4] Configuring Environment\n')
                 f.write('%line%\n')
-                f.write('echo Setting encoding environment variables...\n')
+                f.write('echo Setting environment variables...\n')
                 f.write('set PYTHONIOENCODING=utf-8\n')
                 f.write('set PYTHONLEGACYWINDOWSFSENCODING=1\n\n')
-                
+
                 # 3. 升级pip
-                f.write('echo [3/4] Updating Package Manager\n')
+                f.write('echo [3/4] Updating pip\n')
                 f.write('%line%\n')
-                f.write('python -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ >nul 2>&1\n')
-                f.write('if errorlevel 1 goto error\n\n')
-                
-                # 4. 安装依赖
-                f.write('echo [4/4] Installing Project Dependencies\n')
-                f.write('%line%\n')
-                f.write('echo Checking installed dependencies...\n')
-                f.write('python -c "import mysql.connector; import openpyxl; import cryptography" >nul 2>&1\n')
-                f.write('if %errorlevel% equ 0 (\n')
-                f.write('    echo All dependencies are already installed correctly\n')
-                f.write('    goto success\n')
+                f.write('echo Upgrading pip...\n')
+                f.write('python -m pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/\n')
+                f.write('if errorlevel 1 (\n')
+                f.write('    echo Error: Failed to upgrade pip!\n')
+                f.write('    pause\n')
+                f.write('    exit /b 1\n')
                 f.write(')\n\n')
-                
-                # 本地依赖安装
-                f.write('echo Starting dependency installation...\n')
+
+                # 4. 安装依赖
+                f.write('echo [4/4] Installing Dependencies\n')
+                f.write('%line%\n')
+                f.write('echo Checking for local wheel packages...\n')
                 f.write('dir /b zr_daily_report\\dependencies\\*.whl >nul 2>&1\n')
                 f.write('if %errorlevel% equ 0 (\n')
-                f.write('    echo * Installing from local wheel packages\n')
+                f.write('    echo Installing from local packages:\n')
                 f.write('    for %%f in (zr_daily_report\\dependencies\\*.whl) do (\n')
-                f.write('        echo   - Installing: %%~nxf\n')
-                f.write('        pip install "%%f" --force-reinstall --disable-pip-version-check --no-warn-script-location >nul 2>&1\n')
-                f.write('        if errorlevel 1 goto error\n')
+                f.write('        echo   - Installing %%~nxf...\n')
+                f.write('        pip install "%%f" --no-deps --force-reinstall\n')
+                f.write('        if errorlevel 1 (\n')
+                f.write('            echo Error: Failed to install %%~nxf\n')
+                f.write('            pause\n')
+                f.write('            exit /b 1\n')
+                f.write('        )\n')
                 f.write('    )\n')
                 f.write(') else (\n')
-                f.write('    echo * Installing from online source\n')
-                f.write('    pip install -r zr_daily_report\\requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --disable-pip-version-check >nul 2>&1\n')
-                f.write('    if errorlevel 1 goto error\n')
+                f.write('    echo Installing from online source...\n')
+                f.write(
+                    '    pip install -r zr_daily_report\\requirements.txt -i https://mirrors.aliyun.com/pypi/simple/\n')
+                f.write('    if errorlevel 1 (\n')
+                f.write('        echo Error: Failed to install dependencies!\n')
+                f.write('        pause\n')
+                f.write('        exit /b 1\n')
+                f.write('    )\n')
                 f.write(')\n\n')
-                
+
                 # 成功处理
                 f.write(':success\n')
                 f.write('%line%\n')
                 f.write('echo Installation completed successfully!\n')
-                f.write('echo You can now run run_report.bat to start the program\n')
-                f.write('echo.\n')
-                f.write('goto end\n\n')
-                
-                # 错误处理
-                f.write(':error\n')
-                f.write('%line%\n')
-                f.write('echo An error occurred during installation!\n')
-                f.write('echo Please check the error message above and try again\n')
-                f.write('exit /b 1\n\n')
-                
-                # 结束处理
-                f.write(':end\n')
-                f.write('echo.\n')
-                f.write('echo Press any key to exit...\n')
-                f.write('pause >nul\n')
+                f.write('echo You can now run run_report.bat to start the program.\n')
+                f.write('pause\n')
+                f.write('exit /b 0\n')
 
             # 更新README.txt文件内容
             readme_file = self.package_dir / "README.txt"

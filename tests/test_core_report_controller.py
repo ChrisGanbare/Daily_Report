@@ -283,8 +283,8 @@ class TestCoreReportController(BaseTestCase):
             (1002, 5002)   # 北京设备
         ]
         mock_db_instance.get_customer_name_by_device_code.side_effect = [
-            "深圳XX加油站", 
-            "北京XX加油站"
+            "深圳XX加注站", 
+            "北京XX加注站"
         ]
         
         # 模拟数据管理器
@@ -382,15 +382,15 @@ class TestCoreReportController(BaseTestCase):
                 
                 # 验证深圳设备数据
                 self.assertEqual(inventory_call_args[0][0][0]["device_code"], "SZ001")
-                self.assertEqual(inventory_call_args[0][0][0]["customer_name"], "深圳XX加油站")
+                self.assertEqual(inventory_call_args[0][0][0]["customer_name"], "深圳XX加注站")
                 self.assertEqual(statement_call_args[0][0][0]["device_code"], "SZ001")
-                self.assertEqual(statement_call_args[0][0][0]["customer_name"], "深圳XX加油站")
+                self.assertEqual(statement_call_args[0][0][0]["customer_name"], "深圳XX加注站")
                 
                 # 验证北京设备数据
                 self.assertEqual(inventory_call_args[1][0][0]["device_code"], "BJ002")
-                self.assertEqual(inventory_call_args[1][0][0]["customer_name"], "北京XX加油站")
+                self.assertEqual(inventory_call_args[1][0][0]["customer_name"], "北京XX加注站")
                 self.assertEqual(statement_call_args[1][0][0]["device_code"], "BJ002")
-                self.assertEqual(statement_call_args[1][0][0]["customer_name"], "北京XX加油站")
+                self.assertEqual(statement_call_args[1][0][0]["customer_name"], "北京XX加注站")
                 mock_inventory_instance.generate_report.assert_called_once()
                 mock_statement_instance.generate_report.assert_called_once()
         """测试generate_both_reports函数，验证完整报告生成流程"""
@@ -438,8 +438,8 @@ class TestCoreReportController(BaseTestCase):
             (1002, 5002)   # 北京设备
         ]
         mock_db_instance.get_customer_name_by_device_code.side_effect = [
-            "深圳XX加油站", 
-            "北京XX加油站"
+            "深圳XX加注站", 
+            "北京XX加注站"
         ]
         
         # 模拟数据管理器
@@ -537,15 +537,15 @@ class TestCoreReportController(BaseTestCase):
                 
                 # 验证深圳设备数据
                 self.assertEqual(inventory_call_args[0][0][0]["device_code"], "SZ001")
-                self.assertEqual(inventory_call_args[0][0][0]["customer_name"], "深圳XX加油站")
+                self.assertEqual(inventory_call_args[0][0][0]["customer_name"], "深圳XX加注站")
                 self.assertEqual(statement_call_args[0][0][0]["device_code"], "SZ001")
-                self.assertEqual(statement_call_args[0][0][0]["customer_name"], "深圳XX加油站")
+                self.assertEqual(statement_call_args[0][0][0]["customer_name"], "深圳XX加注站")
                 
                 # 验证北京设备数据
                 self.assertEqual(inventory_call_args[1][0][0]["device_code"], "BJ002")
-                self.assertEqual(inventory_call_args[1][0][0]["customer_name"], "北京XX加油站")
+                self.assertEqual(inventory_call_args[1][0][0]["customer_name"], "北京XX加注站")
                 self.assertEqual(statement_call_args[1][0][0]["device_code"], "BJ002")
-                self.assertEqual(statement_call_args[1][0][0]["customer_name"], "北京XX加油站")
+                self.assertEqual(statement_call_args[1][0][0]["customer_name"], "北京XX加注站")
                 mock_inventory_instance.generate_report.assert_called_once()
                 mock_statement_instance.generate_report.assert_called_once()
 
@@ -746,8 +746,8 @@ class TestCoreReportController(BaseTestCase):
             (1002, 5002)   # 北京设备
         ]
         mock_db_instance.get_customer_name_by_device_code.side_effect = [
-            "深圳XX加油站", 
-            "北京XX加油站"
+            "深圳XX加注站", 
+            "北京XX加注站"
         ]
         
         # 模拟数据管理器
@@ -845,15 +845,15 @@ class TestCoreReportController(BaseTestCase):
                 
                 # 验证深圳设备数据
                 self.assertEqual(inventory_call_args[0][0][0]["device_code"], "SZ001")
-                self.assertEqual(inventory_call_args[0][0][0]["customer_name"], "深圳XX加油站")
+                self.assertEqual(inventory_call_args[0][0][0]["customer_name"], "深圳XX加注站")
                 self.assertEqual(statement_call_args[0][0][0]["device_code"], "SZ001")
-                self.assertEqual(statement_call_args[0][0][0]["customer_name"], "深圳XX加油站")
+                self.assertEqual(statement_call_args[0][0][0]["customer_name"], "深圳XX加注站")
                 
                 # 验证北京设备数据
                 self.assertEqual(inventory_call_args[1][0][0]["device_code"], "BJ002")
-                self.assertEqual(inventory_call_args[1][0][0]["customer_name"], "北京XX加油站")
+                self.assertEqual(inventory_call_args[1][0][0]["customer_name"], "北京XX加注站")
                 self.assertEqual(statement_call_args[1][0][0]["device_code"], "BJ002")
-                self.assertEqual(statement_call_args[1][0][0]["customer_name"], "北京XX加油站")
+                self.assertEqual(statement_call_args[1][0][0]["customer_name"], "北京XX加注站")
                 mock_inventory_instance.generate_report.assert_called_once()
                 mock_statement_instance.generate_report.assert_called_once()
 

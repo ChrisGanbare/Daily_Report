@@ -334,7 +334,7 @@ class FileHandler:
             
         # 验证日期跨度是否超过2个月
         if not validate_date_span(row):
-            error_msg = f"错误：日期跨度超过2个月，第{line_num}行: {row}"
+            error_msg = f"\t错误：日期跨度超过1个月，第{line_num}行: {row}"
             print(error_msg)
             raise FileReadError(error_msg)
             

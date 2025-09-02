@@ -64,6 +64,8 @@ class ModeSelector(Selector):
                 result.set("inventory")
             elif selected_value == "生成对账单":
                 result.set("statement")
+            elif selected_value == "导出加注订单明细":
+                result.set("refueling")
             root.quit()
         
         def on_cancel():
@@ -96,7 +98,7 @@ class ModeSelector(Selector):
         label.pack(pady=(0, 10))
         
         # 添加下拉框
-        options = ["请选择", "同时生成库存表和对账单", "生成库存表", "生成对账单"]
+        options = ["请选择", "同时生成库存表和对账单", "生成库存表", "生成对账单", "导出加注订单明细"]
         combo = ttk.Combobox(main_frame, values=options, state="readonly", font=("Arial", 10), width=30)
         combo.set("请选择")
         combo.pack(pady=(0, 20))
@@ -133,7 +135,6 @@ class ModeSelector(Selector):
             pass
         
         return result.get()
-
 
 # 创建全局实例
 mode_selector = ModeSelector(width=400, height=200, topmost=True)

@@ -36,7 +36,8 @@ class ReportDataManager:
         cache_key = (device_id, query_template, start_date, end_date)
         if cache_key not in self._raw_data_cache:
             print("  正在获取设备原始数据...")
-            data, columns, raw_data = self.db_handler.fetch_inventory_data(
+            # 使用通用数据获取方法
+            data, columns, raw_data = self.db_handler.fetch_generic_data(
                 device_id, query_template, start_date, end_date
             )
             self._raw_data_cache[cache_key] = (data, columns, raw_data)
@@ -66,7 +67,7 @@ class ReportDataManager:
             list: 按日期排序的每日用量数据 [(date, usage), ...]
         """
         data, columns, raw_data_content = raw_data
-        # 按日期分组并累加油加注值
+        # 按日期分组并累加注加注值
         daily_usage = defaultdict(float)
         
         for i, row in enumerate(raw_data_content):
@@ -105,7 +106,7 @@ class ReportDataManager:
             list: 按月份排序的每月用量数据 [(month, usage), ...]
         """
         data, columns, raw_data_content = raw_data
-        # 按月份分组并累加油加注值
+        # 按月份分组并累加注加注值
         monthly_usage = defaultdict(float)
         
         for i, row in enumerate(raw_data_content):
