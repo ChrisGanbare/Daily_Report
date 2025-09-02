@@ -917,7 +917,7 @@ def generate_refueling_details(log_prefix="加注明细处理日志", devices_da
             if query_config is None:
                 query_config = _load_config()
             db_config = query_config['db_config']
-            refueling_query_template = query_config['sql_templates']['inventory_query']
+            refueling_query_template = query_config['sql_templates']['refueling_details_query']
             device_query_template = query_config['sql_templates']['device_id_query']
             customer_query_template = query_config['sql_templates']['customer_query']
         except Exception as e:
@@ -1647,6 +1647,12 @@ def _load_config():
             config_handler = ConfigHandler(CONFIG_DIR)
             config = config_handler.load_encrypted_config(config_file_encrypted)
             print("成功加载加密配置文件")
+            
+            # 检查是否包含refueling_details_query模板
+            if 'refueling_details_query' not in config.get('sql_templates', {}):
+                print("加密配置文件缺少refueling_details_query模板，尝试加载明文配置文件")
+                raise KeyError("refueling_details_query")
+                
             return config
         except Exception as e:
             print(f"加载加密配置文件失败: {e}")

@@ -59,6 +59,11 @@ class RefuelingDetailsReportGenerator(BaseReportGenerator):
             columns (list): 列名列表
         """
         try:
+            # 检查输出目录是否存在，如果不存在则创建
+            output_dir = os.path.dirname(output_file_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+            
             # 初始化工作簿
             wb = Workbook()
             ws = wb.active
@@ -74,10 +79,11 @@ class RefuelingDetailsReportGenerator(BaseReportGenerator):
                     '是否结算：1=待结算 2=待生效 3=已结算', '加注模式：1=近程自动 2=远程自动 3=手动'
                 ])
 
-            # 写入数据
+            # 写入数据，确保使用原始数据中的油品名称
             for row in refueling_data:
                 # 确保row是列表或元组格式
                 if isinstance(row, (list, tuple)):
+                    # 直接写入原始数据，不进行任何修改
                     ws.append(list(row))
                 else:
                     # 如果是字典格式，按列顺序提取值
@@ -88,31 +94,36 @@ class RefuelingDetailsReportGenerator(BaseReportGenerator):
                         ws.append([str(row)])
 
             # 调整列宽
-            for col_idx, col in enumerate(ws.columns, 1):
+            for column in ws.columns:
                 max_length = 0
-                # 获取列字母标识
-                column_letter = ws.cell(row=1, column=col_idx).column_letter
-                for cell in col:
+                column_letter = column[0].column_letter
+                for cell in column:
                     try:
-                        if cell.value and len(str(cell.value)) > max_length:
+                        if len(str(cell.value)) > max_length:
                             max_length = len(str(cell.value))
                     except:
                         pass
-                adjusted_width = (max_length + 2)
-                ws.column_dimensions[column_letter].width = min(adjusted_width, 50)
+                adjusted_width = min(max_length + 2, 50)
+                ws.column_dimensions[column_letter].width = adjusted_width
 
-            # 保存文件
-            wb.save(output_file_path)
-            # print(f"  成功生成加注明细报表: {output_file_path}")
-            return True
-            
+            # 保存文件，处理可能的权限问题
+            try:
+                wb.save(output_file_path)
+                print(f"加注明细报表已生成: {output_file_path}")
+                return True
+            except PermissionError:
+                # 如果是权限错误，尝试添加时间戳到文件名
+                import time
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                name, ext = os.path.splitext(output_file_path)
+                new_output_file_path = f"{name}_{timestamp}{ext}"
+                print(f"原文件可能正在被使用，保存到新文件: {new_output_file_path}")
+                wb.save(new_output_file_path)
+                print(f"加注明细报表已生成: {new_output_file_path}")
+                return True
+
         except Exception as e:
-            print(f"  生成加注明细报表失败: {e}")
-            raise
-        finally:
-            # 确保工作簿被关闭
-            if 'wb' in locals():
-                try:
-                    wb.close()
-                except:
-                    pass
+            print(f"生成加注明细报表时发生错误: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
