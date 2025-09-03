@@ -14,7 +14,6 @@ from src.core.refueling_details_handler import RefuelingDetailsReportGenerator
 from src.core.file_handler import FileHandler
 from src.core.data_manager import ReportDataManager,CustomerGroupingUtil
 from src.utils.date_utils import validate_csv_data
-from src.utils.config_handler import ConfigHandler
 from src.ui.filedialog_selector import file_dialog_selector
 
 import mysql.connector
@@ -1633,33 +1632,12 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
 
 def _load_config():
     """
-    加载配置文件，优先加载加密配置文件，如果不存在则加载明文配置文件
+    加载配置文件，只加载明文配置文件
     """
     CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
-    config_file_encrypted = os.path.join(CONFIG_DIR, 'query_config_encrypted.json')
     config_file_plain = os.path.join(CONFIG_DIR, 'query_config.json')
     
-    # 优先尝试加载加密配置文件
-    if os.path.exists(config_file_encrypted):
-        try:
-            print(f"尝试读取加密配置文件: {config_file_encrypted}")
-            # 使用ConfigHandler加载加密配置
-            config_handler = ConfigHandler(CONFIG_DIR)
-            config = config_handler.load_encrypted_config(config_file_encrypted)
-            print("成功加载加密配置文件")
-            
-            # 检查是否包含refueling_details_query模板
-            if 'refueling_details_query' not in config.get('sql_templates', {}):
-                print("加密配置文件缺少refueling_details_query模板，尝试加载明文配置文件")
-                raise KeyError("refueling_details_query")
-                
-            return config
-        except Exception as e:
-            print(f"加载加密配置文件失败: {e}")
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            # 如果加密配置加载失败，继续尝试加载明文配置
-    
-    # 如果加密配置文件不存在或加载失败，尝试加载明文配置文件
+    # 只尝试加载明文配置文件
     if os.path.exists(config_file_plain):
         try:
             print(f"尝试读取明文配置文件: {config_file_plain}")
@@ -1670,6 +1648,6 @@ def _load_config():
         except Exception as e:
             print(f"加载明文配置文件失败: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
-            raise Exception("无法加载任何配置文件")
+            raise Exception("无法加载配置文件")
     
     raise Exception("未找到有效的配置文件")
