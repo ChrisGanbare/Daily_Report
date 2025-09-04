@@ -78,7 +78,7 @@ class TestIntegration(BaseTestCase):
         mock_db_instance.connect.return_value = MagicMock()
         mock_db_instance.get_latest_device_id_and_customer_id.return_value = (1, 100)
         mock_db_instance.get_customer_name_by_device_code.return_value = "测试客户"
-        mock_db_instance.fetch_inventory_data.return_value = (
+        mock_db_instance.fetch_generic_data.return_value = (
             [(date(2025, 7, 1), 50.0)],
             ["加注时间", "原油剩余比例", "油品名称"],
             [(date(2025, 7, 1), 50.0, "测试油品")]
@@ -168,7 +168,7 @@ class TestIntegration(BaseTestCase):
         mock_db_instance.connect.return_value = MagicMock()
         mock_db_instance.get_latest_device_id_and_customer_id.return_value = (1, 100)
         mock_db_instance.get_customer_name_by_device_code.return_value = "测试客户"
-        mock_db_instance.fetch_inventory_data.return_value = (
+        mock_db_instance.fetch_generic_data.return_value = (
             [(date(2025, 7, 1), 50.0)],
             ["加注时间", "原油剩余比例", "油品名称"],
             [(date(2025, 7, 1), 50.0, "测试油品")]

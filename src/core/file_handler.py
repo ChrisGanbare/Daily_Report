@@ -147,6 +147,12 @@ class FileHandler:
                 # 重新打开文件用于CSV读取
                 f.seek(0)
                 reader = csv.DictReader(f)
+                
+                # 处理可能存在的BOM字符
+                fieldnames = [name.strip('\ufeff') if isinstance(name, str) else name for name in reader.fieldnames] if reader.fieldnames else None
+                # 更新reader.fieldnames以去除BOM
+                if fieldnames:
+                    reader.fieldnames = fieldnames
 
                 # 检查是否有列标题
                 if not reader.fieldnames:
@@ -179,7 +185,6 @@ class FileHandler:
                         error_msg = (
                             f"错误：设备数量超过最大限制 ({self.max_devices}台)\n"
                             f"当前设备数量: {len(devices)}台\n"
-                            "请减少设备数量或分批处理"
                         )
                         print(error_msg)
                         raise FileReadError(error_msg)

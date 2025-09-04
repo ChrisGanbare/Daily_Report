@@ -52,47 +52,63 @@ def format_date(date_obj):
 
 
 class TestUtilsDateUtils(BaseTestCase):
-    """
-    utils.date_utils 模块的单元测试
-    """
+    """utils.date_utils 模块的单元测试"""
 
-    def setUp(self):
-        """测试前准备"""
-        super().setUp()
+    def test_parse_date_with_valid_iso_format(self):
+        """
+        测试 parse_date 函数处理有效的ISO日期格式
+        """
+        date_str = "2025-07-01"
+        result = parse_date(date_str)
+        self.assertEqual(result.year, 2025)
+        self.assertEqual(result.month, 7)
+        self.assertEqual(result.day, 1)
 
-    def test_parse_date_with_valid_string(self):
+    def test_parse_date_with_valid_slash_format(self):
         """
-        测试 parse_date 函数处理有效的日期字符串
+        测试 parse_date 函数处理有效的斜杠日期格式
         """
-        result = parse_date("2025-07-01")
-        self.assertEqual(result, datetime(2025, 7, 1))
+        date_str = "2025/7/1"
+        result = parse_date(date_str)
+        self.assertEqual(result.year, 2025)
+        self.assertEqual(result.month, 7)
+        self.assertEqual(result.day, 1)
 
-    def test_parse_date_with_invalid_string(self):
+    def test_parse_date_with_invalid_format(self):
         """
-        测试 parse_date 函数处理无效的日期字符串
+        测试 parse_date 函数处理无效的日期格式
         """
+        date_str = "invalid-date"
         with self.assertRaises(ValueError):
-            parse_date("invalid-date")
+            parse_date(date_str)
 
-    def test_validate_csv_data_with_valid_data(self):
+    def test_parse_date_with_empty_string(self):
         """
-        测试 validate_csv_data 函数处理有效的CSV数据
+        测试 parse_date 函数处理空字符串
         """
-        row = {"start_date": "2025-07-01", "end_date": "2025-07-31"}
+        date_str = ""
+        with self.assertRaises(ValueError):
+            parse_date(date_str)
+
+    def test_validate_csv_data_with_valid_dates(self):
+        """
+        测试 validate_csv_data 函数处理有效日期
+        """
+        row = {"start_date": "2025-07-01", "end_date": "2025-07-10"}
         result = validate_csv_data(row)
         self.assertTrue(result)
 
-    def test_validate_csv_data_with_invalid_start_date(self):
+    def test_validate_csv_data_with_invalid_start_date_format(self):
         """
-        测试 validate_csv_data 函数处理无效的开始日期
+        测试 validate_csv_data 函数处理无效的开始日期格式
         """
-        row = {"start_date": "invalid-date", "end_date": "2025-07-31"}
+        row = {"start_date": "invalid-date", "end_date": "2025-07-10"}
         result = validate_csv_data(row)
         self.assertFalse(result)
 
-    def test_validate_csv_data_with_invalid_end_date(self):
+    def test_validate_csv_data_with_invalid_end_date_format(self):
         """
-        测试 validate_csv_data 函数处理无效的结束日期
+        测试 validate_csv_data 函数处理无效的结束日期格式
         """
         row = {"start_date": "2025-07-01", "end_date": "invalid-date"}
         result = validate_csv_data(row)
@@ -106,43 +122,43 @@ class TestUtilsDateUtils(BaseTestCase):
         result = validate_csv_data(row)
         self.assertFalse(result)
 
-    def test_validate_date_span_with_valid_span_less_than_2_months(self):
+    def test_validate_date_span_with_valid_span_less_than_1_month(self):
         """
-        测试 validate_date_span 函数处理有效日期跨度（小于2个月）
+        测试 validate_date_span 函数处理有效日期跨度（小于1个月）
+        """
+        row = {"start_date": "2025-07-01", "end_date": "2025-07-15"}
+        result = validate_date_span(row)
+        self.assertTrue(result)
+
+    def test_validate_date_span_with_valid_span_exactly_1_month(self):
+        """
+        测试 validate_date_span 函数处理有效日期跨度（正好1个月）
+        """
+        row = {"start_date": "2025-07-01", "end_date": "2025-07-31"}
+        result = validate_date_span(row)
+        self.assertTrue(result)
+
+    def test_validate_date_span_with_invalid_span_exceeds_1_month(self):
+        """
+        测试 validate_date_span 函数处理无效日期跨度（超过1个月）
+        """
+        row = {"start_date": "2025-07-01", "end_date": "2025-08-02"}
+        result = validate_date_span(row)
+        self.assertFalse(result)
+
+    def test_validate_date_span_with_invalid_span_exactly_1_month_and_one_day(self):
+        """
+        测试 validate_date_span 函数处理无效日期跨度（正好1个月零1天）
+        """
+        row = {"start_date": "2025-07-01", "end_date": "2025-08-02"}
+        result = validate_date_span(row)
+        self.assertFalse(result)
+
+    def test_validate_date_span_with_invalid_span_more_than_1_month(self):
+        """
+        测试 validate_date_span 函数处理无效日期跨度（超过1个月）
         """
         row = {"start_date": "2025-07-01", "end_date": "2025-08-15"}
-        result = validate_date_span(row)
-        self.assertTrue(result)
-
-    def test_validate_date_span_with_valid_span_exactly_2_months(self):
-        """
-        测试 validate_date_span 函数处理有效日期跨度（正好2个月）
-        """
-        row = {"start_date": "2025-07-01", "end_date": "2025-08-31"}
-        result = validate_date_span(row)
-        self.assertTrue(result)
-
-    def test_validate_date_span_with_invalid_span_exceeds_2_months(self):
-        """
-        测试 validate_date_span 函数处理无效日期跨度（超过2个月）
-        """
-        row = {"start_date": "2025-07-01", "end_date": "2025-09-01"}
-        result = validate_date_span(row)
-        self.assertFalse(result)
-
-    def test_validate_date_span_with_invalid_span_exactly_2_months_and_one_day(self):
-        """
-        测试 validate_date_span 函数处理无效日期跨度（正好2个月零1天）
-        """
-        row = {"start_date": "2025-07-01", "end_date": "2025-09-01"}
-        result = validate_date_span(row)
-        self.assertFalse(result)
-
-    def test_validate_date_span_with_invalid_span_more_than_2_months(self):
-        """
-        测试 validate_date_span 函数处理无效日期跨度（超过2个月）
-        """
-        row = {"start_date": "2025-07-01", "end_date": "2025-09-15"}
         result = validate_date_span(row)
         self.assertFalse(result)
 
@@ -182,36 +198,58 @@ class TestUtilsDateUtils(BaseTestCase):
         """
         测试 validate_date_span 函数处理闰年日期
         """
-        row = {"start_date": "2024-02-28", "end_date": "2024-04-28"}
+        row = {"start_date": "2024-02-28", "end_date": "2024-03-28"}
         result = validate_date_span(row)
-        # 2月28日到4月28日超过了2个月（2月28日到3月28日是1个月，到4月28日是2个月），应该返回False
-        self.assertFalse(result)
+        # 2月28日到3月28日正好1个月，应该返回True
+        self.assertTrue(result)
+        
+        # 测试超过1个月的情况
+        row2 = {"start_date": "2024-02-28", "end_date": "2024-03-29"}
+        result2 = validate_date_span(row2)
+        # 2月28日到3月29日超过1个月，应该返回False
+        self.assertFalse(result2)
 
     def test_validate_date_span_with_february_dates_edge_case(self):
         """
         测试 validate_date_span 函数处理2月边界情况
         """
-        row = {"start_date": "2024-02-28", "end_date": "2024-04-27"}
+        row = {"start_date": "2024-02-28", "end_date": "2024-03-27"}
         result = validate_date_span(row)
-        # 2月28日到4月27日未超过2个月（2月28日到3月28日是1个月，到4月27日不到2个月），应该返回True
+        # 2月28日到3月27日未超过1个月，应该返回True
         self.assertTrue(result)
 
     def test_validate_date_span_with_february_dates(self):
         """
         测试 validate_date_span 函数处理2月日期（非闰年）
         """
-        row = {"start_date": "2025-01-31", "end_date": "2025-03-31"}
+        row = {"start_date": "2025-01-31", "end_date": "2025-02-28"}
         result = validate_date_span(row)
-        # 1月31日到3月31日超过了2个月，应该返回False
-        self.assertFalse(result)
+        # 1月31日到2月28日未超过1个月，应该返回True
+        self.assertTrue(result)
+        
+        # 测试超过1个月的情况
+        row2 = {"start_date": "2025-01-31", "end_date": "2025-03-01"}
+        result2 = validate_date_span(row2)
+        # 1月31日到3月1日超过1个月，应该返回False
+        self.assertFalse(result2)
 
     def test_validate_date_span_with_year_crossing_dates(self):
         """
         测试 validate_date_span 函数处理跨年日期
         """
-        row = {"start_date": "2025-12-01", "end_date": "2026-01-31"}
+        row = {"start_date": "2025-12-01", "end_date": "2025-12-31"}
         result = validate_date_span(row)
         self.assertTrue(result)
+        
+        # 测试超过1个月的情况 - 从12月1日到次年1月31日，这超过了1个月
+        row2 = {"start_date": "2025-12-01", "end_date": "2026-01-31"}
+        result2 = validate_date_span(row2)
+        self.assertFalse(result2)
+        
+        # 测试正好1个月的情况 - 从12月1日到次年1月1日，这正好是1个月
+        row3 = {"start_date": "2025-12-01", "end_date": "2026-01-01"}
+        result3 = validate_date_span(row3)
+        self.assertTrue(result3)
 
     def test_get_date_range_with_valid_inputs(self):
         """

@@ -60,7 +60,7 @@ def validate_csv_data(row):
 
 def validate_date_span(row):
     """
-    验证CSV数据行中的日期字段跨度是否在2个月以内
+    验证CSV数据行中的日期字段跨度是否在1个月以内
 
     Args:
         row (dict): CSV数据行，应包含'start_date'和'end_date'字段
@@ -75,21 +75,62 @@ def validate_date_span(row):
         print(f"日期格式错误: {row}。{e}")
         return False
 
-    # 验证日期跨度是否超过2个月
-    # 通过将开始日期加2个月后与结束日期比较来实现
+    # 验证日期跨度是否超过1个月
+    # 通过将开始日期加1个月后与结束日期比较来实现
     # 需要考虑跨年和月末等情况
+    
+    # 计算月份差
     if start_date.year == end_date.year:
         month_diff = end_date.month - start_date.month
     else:
         month_diff = (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
     
-    # 考虑到日期的具体天数，如果结束日期的天数小于开始日期的天数，
-    # 实际月份跨度会比计算的月份数少一天到一个月不等
-    # 因此，如果月份差为2时，还需要进一步检查具体的日期
+    # 如果月份差超过1个月，直接返回False
     if month_diff > 1:
         print(f"日期跨度错误: 从 {row['start_date']} 到 {row['end_date']} 的日期范围超过了1个月")
         return False
-    elif month_diff == 1 and end_date.day >= start_date.day:
+    elif month_diff < 1:
+        # 如果月份差小于1个月，直接返回True
+        return True
+    
+    # 如果月份差正好是1个月，需要进一步检查具体的日期
+    # 在这种情况下，我们需要检查结束日期是否超过开始日期一个月后的日期
+    
+    # 计算开始日期一个月后的日期
+    try:
+        if start_date.month == 12:
+            # 如果开始日期是12月，一个月后应该是次年1月
+            one_month_later = start_date.replace(year=start_date.year + 1, month=1)
+        else:
+            # 其他情况正常加1个月
+            one_month_later = start_date.replace(month=start_date.month + 1)
+    except ValueError:
+        # 处理月末日期问题，比如1月31日加一个月会出错
+        # 在这种情况下，我们将日期设置为下一个月的最后一天
+        if start_date.month == 12:
+            # 如果是12月，需要跨年
+            year = start_date.year + 1
+            month = 1
+        else:
+            year = start_date.year
+            month = start_date.month + 1
+            
+        # 获取下一个月的最后一天
+        if month == 2:
+            # 2月需要考虑闰年
+            if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0):
+                day = 29
+            else:
+                day = 28
+        elif month in [4, 6, 9, 11]:
+            day = 30
+        else:
+            day = 31
+            
+        one_month_later = datetime(year, month, day)
+    
+    # 比较结束日期和一个月后的日期
+    if end_date > one_month_later:
         print(f"日期跨度错误: 从 {row['start_date']} 到 {row['end_date']} 的日期范围超过了1个月")
         return False
     
