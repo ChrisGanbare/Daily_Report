@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import warnings
 from openpyxl import load_workbook
 from openpyxl.chart import BarChart, LineChart, Reference
+from openpyxl.styles import Alignment
 
 # 修复导入语句，使用正确的相对导入
 from ..utils.date_utils import parse_date
@@ -78,6 +79,23 @@ class CustomerStatementGenerator(BaseReportGenerator):
             # 检查单元格是否为合并单元格，如果是则不进行写操作
             if cell.coordinate not in worksheet.merged_cells:
                 cell.value = value
+        except Exception as e:
+            print(f"写入单元格({row}, {column})时出错: {e}")
+
+    def _write_cell_or_merge(self, worksheet, row, column, value):
+        """
+        写入单元格值，适用于合并和非合并单元格
+        
+        Args:
+            worksheet: 工作表对象
+            row: 行号（从1开始）
+            column: 列号（从1开始）
+            value: 要写入的值
+        """
+        try:
+            cell = worksheet.cell(row=row, column=column)
+            # 直接写入值，保留格式
+            cell.value = value
         except Exception as e:
             print(f"写入单元格({row}, {column})时出错: {e}")
 
@@ -442,7 +460,7 @@ class CustomerStatementGenerator(BaseReportGenerator):
 
             # 最后更新中润对账单工作表（主页工作表）- 只更新最基本的信息
             self._update_homepage_sheet_minimal(
-                wb["中润对账单"], customer_name, start_date, end_date
+                wb["中润对账单"], customer_name, start_date, end_date, all_devices_data
             )
 
             # 更新图表数据源引用
@@ -548,15 +566,20 @@ class CustomerStatementGenerator(BaseReportGenerator):
             if date_span > 31:
                 raise ValueError(f"日期跨度不能超过31天，当前跨度为{date_span}天")
 
-            # 在G3单元格写入开始日期，格式：2025/7/1
+            # 在G3单元格写入开始日期，格式：2025年8月1日
             self._write_cell_safe(
-                ws, 3, 7, f"{start_date.year}/{start_date.month}/{start_date.day}"
+                ws, 3, 7, start_date
             )
+            # 设置单元格格式为"yyyy年m月d日"格式
+            ws.cell(row=3, column=7).number_format = 'yyyy"年"m"月"d"日"'
+            
             # 在H3单元格写入结束日期
             self._write_cell_safe(
-                ws, 3, 8, f"{end_date.year}/{end_date.month}/{end_date.day}"
+                ws, 3, 8, end_date
             )
-
+            # 设置单元格格式为"yyyy年m月d日"格式
+            ws.cell(row=3, column=8).number_format = 'yyyy"年"m"月"d"日"'
+            
             # 收集所有设备的油品信息，使用(device_code, oil_name)作为复合键
             # 确保每个设备的每种油品只出现一次
             daily_usage = defaultdict(lambda: defaultdict(float))
@@ -608,6 +631,21 @@ class CustomerStatementGenerator(BaseReportGenerator):
                 row_index += 1
 
             print(f"日期列表长度: {len(date_list)}")
+            
+            # 合并A列单元格从A6到A(5+len(date_list))，并写入结束日期（只显示年月）
+            if len(date_list) > 0:
+                # 合并单元格
+                merge_start_row = 6
+                merge_end_row = 5 + len(date_list)
+                ws.merge_cells(start_row=merge_start_row, start_column=1, end_row=merge_end_row, end_column=1)
+                
+                # 在合并后的单元格中写入结束日期（只显示年月）
+                cell = ws.cell(row=6, column=1)  # 合并区域的左上角单元格
+                cell.value = end_date
+                # 设置单元格格式为"yyyy年m月"格式
+                cell.number_format = 'yyyy"年"m"月"'
+                # 设置单元格居中对齐
+                cell.alignment = Alignment(horizontal='center', vertical='center')
 
             # 清除模板中可能存在的旧数据（C列及之后的列）
             # 从第5行开始清除表头
@@ -659,9 +697,12 @@ class CustomerStatementGenerator(BaseReportGenerator):
             # 构建显示日期范围的字符串
             # 在A1单元格写入截止日期信息
             cell = ws.cell(row=1, column=1)
-            cell.value = f"截止日期：{end_date.strftime('%Y年%m月%d日')}"
+            cell.value = end_date
+            # 设置单元格格式为"yyyy年m月d日"格式
+            cell.number_format = 'yyyy"年"m"月"d"日"'
+            # 添加前缀文本
+            cell.value = f"截止日期：{cell.value}"
             # 设置对齐方式为靠右居中
-            from openpyxl.styles import Alignment
             cell.alignment = Alignment(horizontal='right', vertical='center')
             # 合并A1到I1单元格
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
@@ -742,7 +783,7 @@ class CustomerStatementGenerator(BaseReportGenerator):
             print(f"更新每月用量对比工作表时出错: {e}")
             raise
 
-    def _update_homepage_sheet_minimal(self, ws, customer_name, start_date, end_date):
+    def _update_homepage_sheet_minimal(self, ws, customer_name, start_date, end_date, all_devices_data):
         """
         最小化更新中润对账单工作表（主页），只更新最基本的信息
         
@@ -751,17 +792,83 @@ class CustomerStatementGenerator(BaseReportGenerator):
             customer_name: 客户名称
             start_date: 开始日期
             end_date: 结束日期
+            all_devices_data: 所有设备数据
         """
         try:
             # 只更新客户名称和统计日期等最基本的信息
             self._write_cell_safe(ws, 5, 1, f"客户名称：{customer_name}")
-            self._write_cell_safe(
+            # 修改列号为7，写入内容格式："月份：7月份（2025.7.1-2025.7.31）"
+            month_str = f"{start_date.month}月份"
+            # 使用标准的日期格式化方法
+            start_date_str = f"{start_date.year}.{start_date.month}.{start_date.day}"
+            end_date_str = f"{end_date.year}.{end_date.month}.{end_date.day}"
+            date_range_str = f"{start_date_str}-{end_date_str}"
+            # 使用_write_cell_or_merge方法处理可能的合并单元格
+            self._write_cell_or_merge(
                 ws,
                 5,
-                5,
-                f"统计日期：{start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}",
+                7,
+                f"月份：{month_str}（{date_range_str}）",
             )
             
+            # 更新A22单元格中的日期为程序执行时的日期
+            # now = datetime.now()
+            # current_date_str = f"日期：{now.year}年{now.month}月{now.day}日"
+            # self._write_cell_or_merge(ws, 22, 1, current_date_str)
+            
+            # 清理模板中旧的设备数据（第9行到第16行）
+            # 为了最大程度保护模板中的样式和元素，对于非合并单元格直接清除，对于合并单元格只清空左上角单元格
+            for row in range(9, 17):  # 第9行到第16行
+                # 需要清除的列: A(序号), B(油品名称/型号), E(设备编码), F(本月总升数计量), H(备注)
+                columns_to_clear = [1, 2, 5, 6, 8]
+                for col in columns_to_clear:
+                    cell = ws.cell(row=row, column=col)
+                    # 检查单元格是否为合并单元格的一部分
+                    if cell.coordinate in ws.merged_cells:
+                        # 对于合并单元格，只清空单元格值，保留格式
+                        cell.value = ""
+                    else:
+                        # 对于非合并单元格，直接清除值
+                        cell.value = None
+            
+            # 更新主页表格的设备信息（从第9行开始）
+            current_row = 9
+            device_count = len(all_devices_data)
+            
+            # 检查设备数量是否超过限制
+            if device_count > 8:  # 9到16行，共8行
+                raise ValueError(f"设备数量超过限制（{device_count} > 8），无法在主页显示")
+            
+            # 遍历设备数据并写入表格
+            for index, device_data in enumerate(all_devices_data, start=1):
+                if current_row > 16:  # 限制最多到第16行
+                    raise ValueError("设备行数超过限制（最多8行）")
+                
+                # A列：序号
+                self._write_cell_or_merge(ws, current_row, 1, index)
+                
+                # B列：油品名称/型号
+                # 根据代码中的其他部分，实际字段名为"oil_name"
+                oil_model = device_data.get("oil_name", "")
+                # 添加调试信息
+                # print(f"设备 {device_data.get('device_code', '')} 的油品名称: {oil_model}")
+                self._write_cell_or_merge(ws, current_row, 2, oil_model)
+                
+                # E列：设备编码
+                device_code = device_data.get("device_code", "")
+                self._write_cell_or_merge(ws, current_row, 5, device_code)
+                
+                # F列：本月总升数计量（该周期内的总量）
+                # 从monthly_usage_data计算总用量
+                monthly_usage_data = device_data.get("monthly_usage_data", [])
+                total_usage = sum(usage for month, usage in monthly_usage_data)
+                self._write_cell_or_merge(ws, current_row, 6, round(float(total_usage), 2))
+                
+                # H列：备注字段（插入该设备的导出明细报表附件）
+                self._write_cell_or_merge(ws, current_row, 8, "详见明细报表")
+                
+                current_row += 1
+
             # 不再进行其他操作，最大程度保护模板中的样式和元素
 
         except Exception as e:
