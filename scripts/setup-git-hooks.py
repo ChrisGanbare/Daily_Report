@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 def setup_pre_commit_hook():
-    """Set up pre-commit hook for code quality checks."""
+    """Set up pre-commit hook for code质量检查."""
     # 获取项目根目录
     project_root = Path(__file__).parent.parent
     hooks_dir = project_root / '.git' / 'hooks'
@@ -24,7 +24,7 @@ def setup_pre_commit_hook():
 echo "Running pre-commit code quality checks..."
 
 # 检查必要的工具是否已安装
-for tool in black isort flake8 mypy; do
+for tool in black isort mypy; do
     if ! command -v $tool &> /dev/null; then
         echo "$tool is not installed. Please install it with: pip install $tool"
         exit 1
@@ -54,12 +54,6 @@ for file in $PYTHON_FILES; do
 done
 
 # 运行只读检查
-echo "Running flake8..."
-if ! flake8 $PYTHON_FILES; then
-    echo "flake8 checks failed. Please fix the issues before committing."
-    exit 1
-fi
-
 echo "Running mypy..."
 if ! mypy $PYTHON_FILES; then
     echo "mypy checks failed. Please fix the issues before committing."

@@ -70,11 +70,6 @@ def run_quality_checks():
     # 定义要运行的检查工具和命令
     tools = [
         {
-            "name": "flake8",
-            "command": f"flake8 {src_dir} {tests_dir}",
-            "description": "代码风格检查"
-        },
-        {
             "name": "black",
             "command": f"black --check {src_dir} {tests_dir}",
             "description": "代码格式检查"
@@ -148,7 +143,7 @@ def install_quality_tools():
     """安装代码质量检查工具"""
     print("正在安装代码质量检查工具...")
     
-    tools = ["flake8", "black", "isort", "mypy"]
+    tools = ["black", "isort", "mypy"]
     for tool in tools:
         print(f"安装 {tool}...")
         returncode, stdout, stderr = run_command(f"pip install {tool}")

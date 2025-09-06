@@ -22,7 +22,6 @@ ZR Daily Report 是一个用于生成切削液设备日常库存报告的Python�
 - openpyxl == 3.1.0 (Excel处理)
 - mysql-connector-python >= 8.0.33, < 9.0.0 (MySQL数据库连接)
 - pandas >= 1.5.0 (数据处理)
-- cryptography == 43.0.1 (配置文件加密)
 
 Web框架依赖：
 - fastapi == 0.104.1 (Web API框架)
@@ -47,15 +46,10 @@ Web框架依赖：
 - tox >= 3.25.0
 
 开发工具依赖：
-- flake8 == 7.1.1
 - black == 24.8.0
 - mypy >= 0.971
 - isort == 5.12.0
 - pre-commit >= 3.3.0
-
-构建工具依赖：
-- build >= 0.10.0
-- twine >= 4.0.0
 
 文档生成依赖：
 - mkdocs == 1.5.3
@@ -178,10 +172,9 @@ zr_daily_report/
 
 项目使用多种工具来确保代码质量：
 
-1. **flake8**: 代码风格检查工具，用于检查代码是否符合PEP 8规范
-2. **black**: 代码格式化工具，确保代码风格一致性
-3. **mypy**: 静态类型检查工具，发现潜在的类型错误
-4. **isort**: 导入语句排序工具，保持导入语句的一致性
+1. **black**: 代码格式化工具，确保代码风格一致性
+2. **mypy**: 静态类型检查工具，发现潜在的类型错误
+3. **isort**: 导入语句排序工具，保持导入语句的一致性
 
 ### 本地运行代码质量检查
 
@@ -191,8 +184,6 @@ zr_daily_report/
 # 运行所有测试环境
 tox
 
-# 只运行代码风格检查
-tox -e lint
 
 # 只运行类型检查
 tox -e typecheck
@@ -211,7 +202,6 @@ make quality
 make quality-fast
 
 # 分别运行特定检查
-make lint
 make typecheck
 ```
 
@@ -236,8 +226,7 @@ python scripts/setup-git-hooks.py
 
 设置后，每次提交时会自动运行：
 1. 代码格式化 (black 和 isort)
-2. 代码风格检查 (flake8)
-3. 类型检查 (mypy)
+2. 类型检查 (mypy)
 
 如果任何检查失败，提交将被中止。
 

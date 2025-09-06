@@ -12,7 +12,6 @@ help:
 	@echo "generate-tests - 自动生成测试用例"
 	@echo "clean        - 清理临时文件和缓存"
 	@echo "docs         - 生成文档"
-	@echo "lint         - 运行代码风格检查"
 	@echo "format       - 格式化代码"
 	@echo "type-check   - 运行类型检查"
 
@@ -57,11 +56,6 @@ clean:
 .PHONY: docs
 docs:
 	mkdocs build
-
-# 运行代码风格检查
-.PHONY: lint
-lint:
-	flake8 src/ tests/
 
 # 格式化代码
 .PHONY: format

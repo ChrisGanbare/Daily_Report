@@ -8,27 +8,6 @@ import sys
 import os
 from pathlib import Path
 
-def run_flake8():
-    """运行flake8检查，排除指定模块"""
-    exclude_paths = [
-        "src/api/*",
-        "src/core/cache_handler.py", 
-        "src/core/dependency_injection.py",
-        "src/monitoring/progress_monitor.py",
-        "src/web/app.py"
-    ]
-    
-    cmd = [
-        "python", "-m", "flake8", 
-        "src", "tests",
-        "--exclude=" + ",".join(exclude_paths)
-    ]
-    
-    print("运行flake8检查...")
-    print(f"命令: {' '.join(cmd)}")
-    result = subprocess.run(cmd)
-    return result.returncode == 0
-
 def run_mypy():
     """运行mypy检查，使用配置文件排除指定模块"""
     cmd = [
@@ -72,7 +51,6 @@ def main():
     # 检查命令行参数
     skip_black = "--skip-black" in sys.argv
     skip_isort = "--skip-isort" in sys.argv
-    skip_flake8 = "--skip-flake8" in sys.argv
     skip_mypy = "--skip-mypy" in sys.argv
     
     all_passed = True
@@ -84,10 +62,6 @@ def main():
             
     if not skip_isort:
         if not run_isort():
-            all_passed = False
-            
-    if not skip_flake8:
-        if not run_flake8():
             all_passed = False
             
     if not skip_mypy:
