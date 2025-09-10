@@ -706,6 +706,15 @@ def generate_customer_statement(log_prefix="对账单处理日志", devices_data
                 print(f"\n为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
                 log_messages.append(f"为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
 
+                # 检查设备日期范围一致性
+                is_consistent, error_msg = _check_device_dates_consistency(customer_devices)
+                if not is_consistent:
+                    error_msg = f"客户 {customer_name} (ID: {customer_id}) 的设备日期范围不一致，无法生成对账单:\n{error_msg}"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.extend([device['device_code'] for device in customer_devices])
+                    continue
+
                 # 获取日期范围（使用第一个设备的日期范围）
                 first_device = customer_devices[0]
                 start_date = first_device['start_date']
@@ -1500,6 +1509,15 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
                 print(f"\n为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
                 log_messages.append(f"为客户 {customer_name} (ID: {customer_id}) 生成对账单...")
 
+                # 检查设备日期范围一致性
+                is_consistent, error_msg = _check_device_dates_consistency(customer_devices)
+                if not is_consistent:
+                    error_msg = f"客户 {customer_name} (ID: {customer_id}) 的设备日期范围不一致，无法生成对账单:\n{error_msg}"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.extend([device['device_code'] for device in customer_devices])
+                    continue
+
                 # 获取日期范围（使用第一个设备的日期范围）
                 first_device = customer_devices[0]
                 start_date = first_device['start_date']
@@ -1629,6 +1647,43 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
             pass
         
         exit(1)
+
+
+def _check_device_dates_consistency(devices_data):
+    """
+    检查设备日期范围一致性
+    
+    Args:
+        devices_data: 设备数据列表
+        
+    Returns:
+        tuple: (是否一致, 错误信息)
+    """
+    if not devices_data:
+        return True, ""
+    
+    # 获取第一个设备的日期范围作为基准
+    first_device = devices_data[0]
+    expected_start_date = first_device['start_date']
+    expected_end_date = first_device['end_date']
+    
+    # 检查所有设备的日期范围是否一致
+    inconsistent_devices = []
+    for device in devices_data:
+        if device['start_date'] != expected_start_date or device['end_date'] != expected_end_date:
+            inconsistent_devices.append({
+                'device_code': device['device_code'],
+                'start_date': device['start_date'],
+                'end_date': device['end_date']
+            })
+    
+    if inconsistent_devices:
+        error_msg = f"设备日期范围不一致。基准日期范围: {expected_start_date} 到 {expected_end_date}。不一致的设备:\n"
+        for device in inconsistent_devices:
+            error_msg += f"  设备 {device['device_code']}: {device['start_date']} 到 {device['end_date']}\n"
+        return False, error_msg
+    
+    return True, ""
 
 def _load_config():
     """
