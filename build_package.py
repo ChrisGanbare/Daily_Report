@@ -109,7 +109,8 @@ class PackageBuilder:
             "zr_daily_report.py",
             "config",
             "src",
-            "template"
+            "template",
+            "test_data"
         ]
 
         for item in items_to_copy:

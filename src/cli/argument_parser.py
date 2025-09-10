@@ -39,4 +39,7 @@ def print_usage():
     print("  python zr_daily_report.py --mode inventory")
     print("  python zr_daily_report.py --mode statement")
     print("  python zr_daily_report.py --mode refueling")
+    print()
+    print("设备信息文件模板位于: test_data/devices_test.csv")
+    print("请按照模板格式填写设备编码、起止日期信息")
     print("=" * 50)
