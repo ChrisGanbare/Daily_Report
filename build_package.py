@@ -284,7 +284,16 @@ chcp 65001 >nul
 @echo 运行ZR Daily Report程序...
 @echo.
 
-@python zr_daily_report\zr_daily_report.py
+
+@if not exist "venv\Scripts\python.exe" (
+    @echo 错误: 未找到虚拟环境，请先运行 install_report.bat 安装程序
+    @echo.
+    @echo 按任意键退出当前窗口
+    @pause >nul
+    @exit /b 1
+)
+
+@venv\Scripts\python.exe zr_daily_report\zr_daily_report.py
 @echo.
 @echo 程序已退出
 @echo.
@@ -314,12 +323,6 @@ ZR Daily Report 使用说明
 1. 双击运行 "run_report.bat" 启动程序
 2. 根据提示选择操作模式
 
-配置文件设置:
-安装完成后，配置文件位于 zr_daily_report/config 目录中:
-1. 复制 "zr_daily_report/config/.env.example" 文件并重命名为 ".env"
-2. 编辑 ".env" 文件，配置数据库连接信息
-3. 复制 "zr_daily_report/config/query_config.json.example" 文件并重命名为 "query_config.json"
-4. 根据实际需求修改查询语句
 
 注意事项:
 - 请勿修改目录结构

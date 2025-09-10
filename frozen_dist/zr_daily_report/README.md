@@ -58,9 +58,9 @@ Web框架依赖：
 ## 安装步骤
 
 ### 1. 克隆项目
-
+演示仓库地址（实际地址请联系开发者获取）
 ```bash
-git clone https://github.com/ChrisGanbare/Daily_Report.git
+git clone https://github.com/example-organization/zr-daily-report-demo.git
 ```
 
 ### 2. 创建虚拟环境并激活

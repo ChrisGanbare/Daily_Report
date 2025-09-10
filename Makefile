@@ -12,8 +12,6 @@ help:
 	@echo "generate-tests - 自动生成测试用例"
 	@echo "clean        - 清理临时文件和缓存"
 	@echo "docs         - 生成文档"
-	@echo "format       - 格式化代码"
-	@echo "type-check   - 运行类型检查"
 
 # 安装项目依赖
 .PHONY: install
