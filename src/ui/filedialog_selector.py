@@ -50,24 +50,15 @@ class FileDialogSelector(Selector):
                 
                 def resize_window():
                     # 增加初始等待时间，确保窗口完全初始化
-                    time.sleep(0.1)
+                    time.sleep(0.2)
                     attempts = 0
-                    max_attempts = 30  # 增加尝试次数
+                    max_attempts = 10  # 增加尝试次数
                     
                     # 扩展窗口标题匹配列表，包括常见的中文和英文标题
                     common_titles = [
                         title,
                         "选择设备信息CSV文件",
-                        "选择保存目录",
-                        "打开",
-                        "选择文件夹",
-                        "选择文件",
-                        "浏览文件夹",
-                        "文件打开",
-                        "Folder Selection",
-                        "File Selection",
-                        "Open File",
-                        "Select Folder"
+                        "选择保存目录"
                     ]
                     
                     # 循环尝试查找窗口，增加成功率

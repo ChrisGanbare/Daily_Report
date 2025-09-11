@@ -2,7 +2,7 @@
 
 ## 1. 项目概述
 
-ZR Daily Report 是一个用于生成切削液设备日常库存报告和客户对账单的Python应用程序。该项目主要服务于工业设备管理领域，特别是针对切削液设备的库存监控和客户对账需求。
+ZR Daily Report 是一个用于生成切削液设备日常库存报告、客户对账单和加注订单明细的Python应用程序。该项目主要服务于工业设备管理领域，特别是针对切削液设备的库存监控和客户对账需求。
 
 ## 2. 核心功能
 
@@ -15,11 +15,12 @@ ZR Daily Report 是一个用于生成切削液设备日常库存报告和客户�
 - 自动连接MySQL数据库
 - 支持双数据库驱动（mysql-connector-python和PyMySQL）
 - 根据设备编码查询设备ID、客户ID等信息
-- 获取设备库存数据
+- 获取设备库存数据和加注订单明细
 
 ### 2.3 Excel报表生成
 - 生成设备库存报表（包含图表）
 - 生成客户对账单（基于模板）
+- 生成加注订单明细报表
 - 支持动态列数调整，适应不同油品数量
 - 支持多种日期格式解析
 
@@ -50,7 +51,22 @@ ZR Daily Report 是一个用于生成切削液设备日常库存报告和客户�
 5. 基于模板生成客户对账单Excel文件
 6. 保存处理日志
 
-### 3.3 数据处理流程
+### 3.3 加注订单明细生成流程
+1. 用户选择设备信息CSV文件
+2. 程序读取并验证设备信息
+3. 连接数据库并查询设备加注订单明细
+4. 为每个设备生成加注订单明细报表
+5. 保存处理日志
+
+### 3.4 综合报表生成流程
+1. 用户选择设备信息CSV文件
+2. 程序读取并验证设备信息
+3. 连接数据库并查询设备库存数据和加注订单明细
+4. 为每个设备生成库存报表和加注订单明细报表
+5. 按客户分组整理数据并生成客户对账单
+6. 保存处理日志
+
+### 3.5 数据处理流程
 ```uml
 @startuml
 actor User
@@ -59,6 +75,7 @@ database MySQL
 file "设备信息CSV" as CSV
 file "库存报表" as InventoryReport
 file "客户对账单" as Statement
+file "加注订单明细" as RefuelingDetails
 file "处理日志" as Log
 
 User -> App: 启动程序
@@ -74,10 +91,14 @@ loop 每个设备
     MySQL --> App: 返回设备ID、客户ID
     App -> MySQL: 查询库存数据
     MySQL --> App: 返回库存数据
+    App -> MySQL: 查询加注订单明细
+    MySQL --> App: 返回加注订单明细
     App -> App: 处理库存数据
+    App -> App: 处理加注订单明细
 end
 App -> User: 选择输出目录
 App -> InventoryReport: 生成库存报表(可选)
+App -> RefuelingDetails: 生成加注订单明细(可选)
 App -> Statement: 生成客户对账单(可选)
 App -> Log: 生成处理日志
 @enduml
@@ -87,40 +108,50 @@ App -> Log: 生成处理日志
 
 ### 4.1 核心模块
 
-#### 4.1.1 主程序模块 (ZR_Daily_Report.py)
+#### 4.1.1 主程序模块 (zr_daily_report.py)
 - 程序入口点
 - 协调各模块工作
 - 处理命令行参数和用户交互
 
-#### 4.1.2 数据库处理模块 (src/core/db_handler.py)
+#### 4.1.2 报表控制模块 (src/core/report_controller.py)
+- 控制整个报表生成流程
+- 协调文件读取、数据库查询和报表生成
+- 处理异常和错误
+
+#### 4.1.3 数据库处理模块 (src/core/db_handler.py)
 - 负责数据库连接和数据查询
-- 提供设备信息、客户信息和库存数据查询接口
+- 提供设备信息、客户信息、库存数据和加注订单明细查询接口
 - 支持连接池管理
 
-#### 4.1.3 文件处理模块 (src/core/file_handler.py)
+#### 4.1.4 文件处理模块 (src/core/file_handler.py)
 - 读取设备信息CSV文件
 - 支持多种编码格式
 - 验证数据完整性
 
-#### 4.1.4 库存报表处理模块 (src/core/inventory_handler.py)
+#### 4.1.5 库存报表处理模块 (src/core/inventory_handler.py)
 - 生成设备库存报表
 - 创建库存变化趋势图表
-- 支持Excel和CSV格式导出
+- 支持Excel格式导出
 
-#### 4.1.5 对账单处理模块 (src/core/statement_handler.py)
+#### 4.1.6 对账单处理模块 (src/core/statement_handler.py)
 - 生成客户对账单
 - 基于Excel模板进行数据填充
 - 更新图表数据源
 
-#### 4.1.6 配置处理模块 (src/utils/config_handler.py)
-- 加载和解密配置文件
-- 管理数据库连接配置和SQL模板
+#### 4.1.7 加注订单明细处理模块 (src/core/refueling_details_handler.py)
+- 生成加注订单明细报表
+- 处理加注订单数据
 
-#### 4.1.7 数据验证模块 (src/utils/data_validator.py)
+#### 4.1.8 配置处理模块 (src/utils/config_handler.py)
+- 加载和解密配置文件
+- 管理数据库连接配置和SQL查询模板
+
+#### 4.1.9 数据验证模块 (src/utils/date_utils.py)
 - 验证日期格式和逻辑关系
 - 验证CSV数据完整性
 
-#### 4.1.8 UI工具模块 (src/utils/ui_utils.py)
+#### 4.1.10 UI工具模块 (src/ui/mode_selector.py, src/ui/filedialog_selector.py)
+- 提供模式选择对话框
 - 提供文件和目录选择对话框
 - 统一用户界面交互体验
 
@@ -152,10 +183,11 @@ App -> Log: 生成处理日志
 ```json
 {
   "sql_templates": {
-    "device_id_query": "设备ID查询SQL",
-    "device_id_fallback_query": "备用设备ID查询SQL",
+    "device_id_query": "设备ID和客户ID查询SQL",
+    "device_id_fallback_query": "备用设备ID查询SQL（当主查询失败时使用）",
     "inventory_query": "库存数据查询SQL",
-    "customer_query": "客户信息查询SQL"
+    "customer_query": "客户信息查询SQL",
+    "refueling_query": "加注订单明细查询SQL"
   }
 }
 ```
@@ -165,6 +197,7 @@ App -> Log: 生成处理日志
 - `device_id_fallback_query`: 备用设备ID查询SQL（当主查询失败时使用）
 - `inventory_query`: 根据设备ID和日期范围查询库存数据
 - `customer_query`: 根据客户ID查询客户名称
+- `refueling_query`: 根据设备ID和日期范围查询加注订单明细
 
 ### 5.5 库存查询模板占位符
 - `{device_id}`: 设备ID
@@ -183,6 +216,12 @@ python zr_daily_report.py --mode inventory
 
 # 只生成客户对账单
 python zr_daily_report.py --mode statement
+
+# 生成加注订单明细
+python zr_daily_report.py --mode refueling
+
+# 同时生成库存报表、加注订单明细和客户对账单
+python zr_daily_report.py --mode both
 ```
 
 ### 6.2 CSV文件格式
@@ -214,3 +253,4 @@ DEV002,2025/08/01,2025/08/31
 - 各功能模块职责清晰，遵循单一职责原则
 - 通过接口抽象实现松耦合
 - 支持配置化管理，便于适应不同环境
+- 支持依赖注入，便于测试和扩展

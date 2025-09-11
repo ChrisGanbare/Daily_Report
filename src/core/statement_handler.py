@@ -831,9 +831,9 @@ class CustomerStatementGenerator(BaseReportGenerator):
             )
             
             # 更新A22单元格中的日期为程序执行时的日期
-            # now = datetime.now()
-            # current_date_str = f"日期：{now.year}年{now.month}月{now.day}日"
-            # self._write_cell_or_merge(ws, 22, 1, current_date_str)
+            now = datetime.now()
+            current_date_str = f"\n\n日期：{now.year}年{now.month}月{now.day}日{' ':>50}制单人：XXX"
+            self._write_cell_or_merge(ws, 22, 1, current_date_str)
             
             # 清理模板中旧的设备数据（第9行到第16行）
             # 为了最大程度保护模板中的样式和元素，对于非合并单元格直接清除，对于合并单元格只清空左上角单元格

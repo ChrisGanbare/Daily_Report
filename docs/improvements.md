@@ -88,13 +88,20 @@ def get_inventory_data(device_id: int, start_date: str, end_date: str):
 
 **使用示例**:
 ```python
+import asyncio
+from src.core.async_processor import AsyncContext
+
 async def main():
+    # 初始化异步上下文
     async with AsyncContext() as context:
-        # 初始化异步组件
-        context.db_handler = AsyncDatabaseHandler(db_config)
-        context.file_processor = AsyncFileProcessor()
+        # 获取数据库处理器
+        db_handler = context.get_handler("db")
         
         # 并发处理多个设备
+        devices = [{"id": 1, "name": "设备1"}, {"id": 2, "name": "设备2"}]
+        output_dir = "/path/to/output"
+        
+        # 并发处理设备数据
         results = await context.report_generator.generate_inventory_reports_async(
             devices, output_dir
         )
@@ -206,7 +213,10 @@ POST   /api/v1/system/cache/clear   # 清空缓存
 
 **使用示例**:
 ```python
-from src.monitoring.progress_monitor import ProgressTracker
+from src.monitoring.progress_monitor import ProgressTracker, ProgressMonitor
+
+# 创建进度监控器
+monitor = ProgressMonitor()
 
 # 使用进度跟踪器
 with ProgressTracker(monitor, "task_001", 100) as tracker:
@@ -238,10 +248,9 @@ with ProgressTracker(monitor, "task_001", 100) as tracker:
 ### 3.2 配置更新
 
 **缓存配置**:
-```python
-# config/cache_config.json
+```json
 {
-    "cache_type": "redis",  # "memory" 或 "redis"
+    "cache_type": "redis",
     "redis": {
         "host": "localhost",
         "port": 6379,
@@ -255,8 +264,7 @@ with ProgressTracker(monitor, "task_001", 100) as tracker:
 ```
 
 **Web配置**:
-```python
-# config/web_config.json
+```json
 {
     "host": "0.0.0.0",
     "port": 8000,
