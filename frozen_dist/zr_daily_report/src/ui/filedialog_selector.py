@@ -49,24 +49,38 @@ class FileDialogSelector(Selector):
                 import win32con
                 
                 def resize_window():
-                    # 更精确的等待时间
-                    time.sleep(0.05)  # 初始等待时间减少到0.05秒
+                    # 增加初始等待时间，确保窗口完全初始化
+                    time.sleep(0.2)
                     attempts = 0
-                    max_attempts = 20  # 尝试次数增加到20次
+                    max_attempts = 10  # 增加尝试次数
+                    
+                    # 扩展窗口标题匹配列表，包括常见的中文和英文标题
+                    common_titles = [
+                        title,
+                        "选择设备信息CSV文件",
+                        "选择保存目录"
+                    ]
                     
                     # 循环尝试查找窗口，增加成功率
                     while attempts < max_attempts:
-                        hwnd = win32gui.FindWindow(None, title)
+                        hwnd = None
+                        # 尝试匹配所有可能的标题
+                        for possible_title in common_titles:
+                            hwnd = win32gui.FindWindow(None, possible_title)
+                            if hwnd:
+                                break
+                        
+                        # 如果通过标题找不到，尝试通过类名查找
                         if not hwnd:
-                            # 针对特定标题进行优化匹配
-                            if "选择设备信息CSV文件" in title:
-                                hwnd = win32gui.FindWindow(None, "选择设备信息CSV文件")
-                                if not hwnd:
-                                    hwnd = win32gui.FindWindow(None, "打开")
-                            elif "选择保存目录" in title:
-                                hwnd = win32gui.FindWindow(None, "选择保存目录")
-                                if not hwnd:
-                                    hwnd = win32gui.FindWindow(None, "选择文件夹")
+                            # 查找常见的文件对话框类名
+                            common_classes = [
+                                "#32770",  # 标准Windows对话框类名
+                                "TOpenDialog",  # Delphi对话框类名
+                            ]
+                            for class_name in common_classes:
+                                hwnd = win32gui.FindWindow(class_name, None)
+                                if hwnd:
+                                    break
                         
                         if hwnd:
                             # 获取屏幕尺寸
@@ -79,8 +93,8 @@ class FileDialogSelector(Selector):
                             win32gui.MoveWindow(hwnd, x, y, self.dialog_width, self.dialog_height, True)
                             break
                         else:
-                            # 查找间隔减少到0.05秒
-                            time.sleep(0.05)
+                            # 增加等待时间
+                            time.sleep(0.1)
                             attempts += 1
                 
                 # 在单独的线程中调整窗口大小
@@ -89,6 +103,11 @@ class FileDialogSelector(Selector):
                 resize_thread.start()
             except ImportError:
                 # 如果没有win32gui库，则使用默认大小
+                logging.warning("未安装pywin32库，无法调整对话框大小")
+                pass
+            except Exception as e:
+                # 捕获其他可能的异常
+                logging.warning(f"调整对话框大小时出现异常: {e}")
                 pass
 
     def choose_file(self, title: str = "选择文件", 
