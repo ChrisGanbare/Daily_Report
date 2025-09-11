@@ -705,7 +705,7 @@ class CustomerStatementGenerator(BaseReportGenerator):
             # 设置对齐方式为靠右居中
             cell.alignment = Alignment(horizontal='right', vertical='center')
             # 合并A1到I1单元格
-            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=15)
 
             # 收集月度数据
             # 修改数据结构，使用(设备ID, 油品名称)作为键，确保不同设备的相同油品创建独立列
@@ -744,19 +744,34 @@ class CustomerStatementGenerator(BaseReportGenerator):
             # 按照新要求写入数据
             # A列从A7开始写入设备编码
             # B列从B7开始写入油品名称
-            # C列从C6开始写入月份（格式如：7月），从C7开始写入该行设备该月用量之和
+            # C列从C6开始写入月份（格式如：1月），从C7开始写入该行设备该月用量之和
             current_row = 7
+            
+            # 获取对账单年份
+            report_year = end_date.year
+            
+            # 在C5单元格合并区域写入年份，格式为"{year}年"
+            # 首先合并C5到N5单元格
+            ws.merge_cells(start_row=5, start_column=3, end_row=5, end_column=14)
+            # 在合并后的单元格中写入年份
+            year_cell = ws.cell(row=5, column=3)
+            year_cell.value = f"{report_year}年"
+            # 设置居中对齐
+            year_cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            # 在C6到N6单元格分别写入1月到12月
+            for i in range(1, 13):
+                month_cell = ws.cell(row=6, column=2+i)  # 从第3列(C)开始
+                month_cell.value = f"{i}月"
+            
+            # 获取对账单对应的月份（基于end_date）
+            report_month = end_date.month
+            
+            # 找到对账单对应月份的列索引（相对于C列的位置）
+            report_month_column_index = 2 + report_month  # C列是第3列，所以是2+month
             
             # 获取所有月份并排序
             sorted_months = sorted(monthly_stats.keys())
-            
-            # 写入月份标题到C6单元格开始
-            for i, month in enumerate(sorted_months):
-                # 从C6开始写入月份，格式化为"7月"这样的形式
-                month_cell = ws.cell(row=6, column=3+i)
-                # 从"2023-07"格式提取月份并添加"月"字
-                month_name = str(int(month.split("-")[1])) + "月"
-                month_cell.value = month_name
             
             # 为每个设备和油品组合写入数据
             for device_code, oil_name in oil_columns:
@@ -774,7 +789,11 @@ class CustomerStatementGenerator(BaseReportGenerator):
                 for i, month in enumerate(sorted_months):
                     month_data = monthly_stats[month]
                     value = month_data.get(oil_key, 0)
-                    data_cell = ws.cell(row=current_row, column=3+i)
+                    # 从"2023-07"格式提取月份
+                    month_number = int(month.split("-")[1])
+                    # 计算该月份应该写入的列索引
+                    column_index = 2 + month_number  # C列是第3列
+                    data_cell = ws.cell(row=current_row, column=column_index)
                     data_cell.value = round(float(value), 2)
                     
                 current_row += 1
