@@ -49,3 +49,5 @@ def print_usage():
     print("示例:")
     print("  device_code        start_date      end_date")
     print("  MO24032700700019   2025/7/1        2025/7/31")
+    print("  MO24032700700019   2025-7-1        2025-7-31")
+    print()
