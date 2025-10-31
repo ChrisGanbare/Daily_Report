@@ -146,6 +146,125 @@ class ReportDataManager:
         
         return sorted(monthly_usage.items())
 
+    def calculate_daily_errors(self, raw_data):
+        """
+        计算每日消耗误差数据
+
+        Args:
+            raw_data: 原始数据元组 (data, columns, raw_data)
+
+        Returns:
+            dict: 包含每日订单累积总量、亏空误差和超额误差的数据
+        """
+        data, columns, raw_data_content = raw_data
+
+        # 按日期分组数据
+        daily_data = defaultdict(list)
+
+        for row in raw_data_content:
+            row_dict = dict(zip(columns, row))
+            order_time = row_dict.get("加注时间")
+            oil_val = float(row_dict.get("油加注值", 0) or 0)
+            avai_oil = float(row_dict.get("原油剩余量", 0) or 0)
+
+            if isinstance(order_time, datetime.datetime):
+                order_date = order_time.date()
+                daily_data[order_date].append({
+                    'oil_val': oil_val,
+                    'avai_oil': avai_oil,
+                    'order_time': order_time
+                })
+            elif isinstance(order_time, str):
+                # 处理字符串格式的日期
+                parsed_datetime = None
+                for fmt in ["%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"]:
+                    try:
+                        parsed_datetime = datetime.datetime.strptime(order_time, fmt)
+                        break
+                    except ValueError:
+                        continue
+                if parsed_datetime:
+                    order_date = parsed_datetime.date()
+                    daily_data[order_date].append({
+                        'oil_val': oil_val,
+                        'avai_oil': avai_oil,
+                        'order_time': parsed_datetime
+                    })
+
+        # 计算每日数据
+        result = {
+            'daily_order_totals': {},  # 每日订单累积总量
+            'daily_shortage_errors': {},  # 每日库存误差（消耗量>订单量）
+            'daily_excess_errors': {},   # 每日订单误差（订单量>消耗量）
+            'daily_inventory_changes': {}, # 每日库存变化量
+            'daily_consumption': {}  # 每日消耗量
+        }
+
+        # 按日期排序处理
+        sorted_dates = sorted(daily_data.keys())
+
+        for i, date in enumerate(sorted_dates):
+            day_data = daily_data[date]
+
+            # 计算每日订单累积总量
+            daily_order_total = sum(item['oil_val'] for item in day_data)
+            result['daily_order_totals'][date] = daily_order_total
+
+            # 获取当日开始和结束的原油剩余量
+            if day_data:
+                # 按照时间排序获取开始和结束的原油剩余量
+                sorted_day_data = sorted(day_data, key=lambda x: x['order_time'])
+                start_avai_oil = sorted_day_data[-1]['avai_oil']  # 最晚时间的原油剩余量作为当日开始值
+                end_avai_oil = sorted_day_data[0]['avai_oil']    # 最早时间的原油剩余量作为当日结束值
+
+                # 计算库存变化量 (修正计算方式)
+                # 正确的计算应该是: 结束值 - 开始值
+                # 如果结果为正，表示库存增加(加油)；如果为负，表示库存减少(消耗)
+                inventory_change = end_avai_oil - start_avai_oil
+                result['daily_inventory_changes'][date] = inventory_change
+
+                # 根据新的逻辑计算每日消耗量
+                daily_consumption = 0
+
+                # 如果原油剩余量上升（说明加油了）
+                if inventory_change > 0:
+                    # 如果当日有订单，则消耗量等于订单总量
+                    if daily_order_total > 0:
+                        daily_consumption = daily_order_total
+                    # 如果当日没有订单，则消耗量为0
+                    else:
+                        daily_consumption = 0
+                # 如果原油剩余量下降或持平（正常消耗）
+                else:
+                    # 消耗量应该是库存减少的绝对值
+                    daily_consumption = abs(inventory_change)
+
+                # 存储每日消耗量
+                result['daily_consumption'][date] = {
+                    'value': daily_consumption,
+                    'inventory_change': inventory_change,
+                    'order_total': daily_order_total
+                }
+
+                # 计算误差
+                difference = daily_consumption - daily_order_total
+
+                if difference > 0:  # 库存误差（消耗量>订单量）
+                    result['daily_shortage_errors'][date] = {
+                        'value': difference,
+                        'inventory_change': inventory_change,
+                        'order_total': daily_order_total
+                    }
+                elif difference < 0:  # 订单误差（订单量>消耗量）
+                    result['daily_excess_errors'][date] = {
+                        'value': abs(difference),
+                        'inventory_change': inventory_change,
+                        'order_total': daily_order_total
+                    }
+
+        return result
+
+
 
 class CustomerGroupingUtil:
     """客户分组工具类，用于按客户维度对设备进行分组"""

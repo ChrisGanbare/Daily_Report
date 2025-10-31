@@ -12,8 +12,8 @@ def parse_arguments():
         argparse.Namespace: 解析后的命令行参数
     """
     parser = argparse.ArgumentParser(description='ZR Daily Report Generator')
-    parser.add_argument('--mode', choices=['inventory', 'statement', 'both', 'refueling'], 
-                        default='both', help='选择执行模式: inventory(库存报表), statement(客户对账单), both(两者都执行), refueling(加注明细)')
+    parser.add_argument('--mode', choices=['inventory', 'statement', 'both', 'refueling', 'consumption'], 
+                        default='both', help='选择执行模式: inventory(库存报表), statement(客户对账单), both(两者都执行), refueling(加注明细), consumption(每日消耗误差)')
     return parser.parse_args()
 
 
@@ -32,6 +32,7 @@ def print_usage():
     print("  --mode inventory    只生成库存报表")
     print("  --mode statement    只生成客户对账单")
     print("  --mode refueling    只生成加注明细报表")
+    print("  --mode consumption  只生成每日消耗误差报表")
     print()
     print("示例:")
     print("  python zr_daily_report.py (空)   (启动图形界面模式选择)")
@@ -39,6 +40,7 @@ def print_usage():
     print("  python zr_daily_report.py --mode inventory")
     print("  python zr_daily_report.py --mode statement")
     print("  python zr_daily_report.py --mode refueling")
+    print("  python zr_daily_report.py --mode consumption")
     print()
     print("=" * 50)
     print("填写设备信息文件要求")

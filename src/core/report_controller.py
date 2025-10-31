@@ -13,6 +13,7 @@ from src.core.statement_handler import CustomerStatementGenerator
 from src.core.refueling_details_handler import RefuelingDetailsReportGenerator
 from src.core.file_handler import FileHandler
 from src.core.data_manager import ReportDataManager,CustomerGroupingUtil
+from src.core.consumption_error_handler import DailyConsumptionErrorReportGenerator
 from src.utils.date_utils import validate_csv_data
 from src.ui.filedialog_selector import file_dialog_selector
 
@@ -72,6 +73,417 @@ def _handle_db_connection_error(log_messages, error, error_type="MySQL错误"):
         error_details['error_code'] = error.errno
     
     _save_error_log(log_messages, error_details, "数据库连接错误日志")
+
+
+def _check_device_dates_consistency(devices_data):
+    """
+    检查设备日期范围一致性
+    
+    Args:
+        devices_data: 设备数据列表
+        
+    Returns:
+        tuple: (是否一致, 错误信息)
+    """
+    if not devices_data:
+        return True, ""
+    
+    # 获取第一个设备的日期范围作为基准
+    first_device = devices_data[0]
+    expected_start_date = first_device['start_date']
+    expected_end_date = first_device['end_date']
+    
+    # 检查所有设备的日期范围是否一致
+    inconsistent_devices = []
+    for device in devices_data:
+        if device['start_date'] != expected_start_date or device['end_date'] != expected_end_date:
+            inconsistent_devices.append({
+                'device_code': device['device_code'],
+                'start_date': device['start_date'],
+                'end_date': device['end_date']
+            })
+    
+    if inconsistent_devices:
+        error_msg = f"设备日期范围不一致。基准日期范围: {expected_start_date} 到 {expected_end_date}。不一致的设备:\n"
+        for device in inconsistent_devices:
+            error_msg += f"  设备 {device['device_code']}: {device['start_date']} 到 {device['end_date']}\n"
+        return False, error_msg
+    
+    return True, ""
+
+
+def _load_config():
+    """
+    加载配置文件，只加载明文配置文件
+    """
+    CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
+    config_file_plain = os.path.join(CONFIG_DIR, 'query_config.json')
+    
+    # 只尝试加载明文配置文件
+    if os.path.exists(config_file_plain):
+        try:
+            print(f"尝试读取明文配置文件: {config_file_plain}")
+            with open(config_file_plain, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            print("成功加载明文配置文件")
+            return config
+        except Exception as e:
+            print(f"加载明文配置文件失败: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            raise Exception("无法加载配置文件")
+    
+    raise Exception("未找到有效的配置文件")
+
+
+def generate_daily_consumption_error_reports(log_prefix="每日消耗误差处理日志", query_config=None):
+    """
+    专门用于生成每日消耗误差报表
+    
+    Args:
+        log_prefix (str): 日志前缀
+        query_config (dict): 查询配置
+        
+    Returns:
+        list: 有效设备列表
+    """
+    # 初始化日志列表
+    log_messages = []
+    failed_devices = []
+    
+    # 记录程序开始时间
+    start_time = datetime.datetime.now()
+    log_messages.append(f"程序开始执行时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    log_messages.append("")  # 添加空行分隔
+    
+    print("=" * 50)
+    print("ZR Daily Report - 每日消耗误差报表生成功能")
+    print("=" * 50)
+    
+    try:
+        # 初始化处理器
+        file_handler = FileHandler()
+        
+        # 如果没有传入配置，则读取查询配置文件
+        if query_config is None:
+            query_config = _load_config()
+        
+        # 提取数据库配置和SQL模板
+        db_config = query_config.get('db_config', {})
+        sql_templates = query_config.get('sql_templates', {})
+        
+        # 获取SQL查询模板
+        device_query_template = sql_templates.get('device_id_query')
+        customer_query_template = sql_templates.get('customer_query')
+        inventory_query_template = sql_templates.get('inventory_query')
+        
+        # 如果某些模板未在配置文件中定义，则使用默认值
+        if not device_query_template:
+            device_query_template = "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s ORDER BY create_time DESC LIMIT 1"
+        
+        if not customer_query_template:
+            customer_query_template = "SELECT customer_name FROM oil.t_customer WHERE id = %s"
+            
+        if not inventory_query_template:
+            inventory_query_template = "SELECT * FROM oil.t_inventory WHERE device_id = %s AND create_time BETWEEN %s AND %s ORDER BY create_time DESC"
+        
+        # 显示文件选择对话框，让用户选择设备信息CSV文件
+        csv_file = file_dialog_selector.choose_file(
+            title="选择设备信息CSV文件",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            initialdir=os.path.join(os.path.expanduser("~"), "Desktop")  # 修改为桌面路径
+        )
+        
+        if not csv_file:
+            print("未选择设备信息文件，程序退出。")
+            return None
+        
+        # 读取设备信息
+        try:
+            devices = file_handler.read_devices_from_csv(csv_file)
+        except Exception as e:
+            print(f"读取设备信息文件失败: {csv_file}")
+            # 不再重复打印错误详情，因为FileHandler已经打印过了
+            return None
+            
+        if not devices:
+            print("未能读取设备信息。")
+            return None
+        
+        # 验证设备信息
+        valid_devices = []
+        for device in devices:
+            if validate_csv_data(device):
+                valid_devices.append(device)
+            else:
+                print(f"设备信息验证失败: {device}")
+        
+        if not valid_devices:
+            print("没有有效的设备信息，请检查设备文件内容。")
+            return None
+        
+        print(f"成功读取 {len(valid_devices)} 个有效设备信息。")
+        log_messages.append(f"成功读取 {len(valid_devices)} 个有效设备信息。")
+        log_messages.append("")  # 添加空行分隔
+        
+        # 初始化数据库连接
+        db_handler = DatabaseHandler(db_config)
+        connection = None
+        try:
+            print("开始数据库连接...")
+            connection = db_handler.connect()
+            print("数据库连接对象创建成功")
+        except mysql.connector.Error as err:
+            _handle_db_connection_error(log_messages, err, "MySQL错误")
+            exit(1)
+        except Exception as e:
+            _handle_db_connection_error(log_messages, e, "未知错误")
+            exit(1)
+        except BaseException as e:
+            error_msg = f"数据库连接过程中发生严重错误: {e}"
+            print(error_msg)
+            print(f"错误类型: {type(e)}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            log_messages.append(error_msg)
+            log_messages.append("")
+            
+            # 生成错误日志文件
+            error_details = {
+                'error': e,
+                'error_type': '严重错误',
+                'traceback': traceback.format_exc(),
+                'log_description': '数据库连接严重错误日志'
+            }
+            _save_error_log(log_messages, error_details, "数据库连接严重错误日志")
+            
+            exit(1)
+
+        # 显示目录选择对话框，让用户选择输出目录
+        output_dir = file_dialog_selector.choose_directory(title="选择保存目录（每日消耗误差报表）", initialdir=os.path.join(os.path.expanduser("~"), "Desktop"))
+        if not output_dir:
+            print("未选择输出目录，程序退出。")
+            connection.close()
+            return None
+        
+        # 确保输出目录存在
+        os.makedirs(output_dir, exist_ok=True)
+        
+        print("\n" + "-" * 50)
+        print("步骤2：生成每日消耗误差报表")
+        print("-" * 50)
+        
+        # 用于存储处理失败的设备
+        failed_devices = []
+        
+        # 创建数据管理器
+        data_manager = ReportDataManager(db_handler)
+        
+        # 处理每个设备
+        for i, device in enumerate(valid_devices, 1):
+            device_code = device['device_code']
+            start_date = device['start_date']
+            end_date = device['end_date']
+            
+            print(f"\n处理第 {i} 个设备 ({device_code})...")
+            log_messages.append(f"处理设备 {device_code}...")
+            
+            try:
+                # 获取设备ID和客户ID
+                device_info = db_handler.get_latest_device_id_and_customer_id(device_code, device_query_template)
+                if not device_info:
+                    error_msg = f"  无法找到设备 {device_code} 的信息"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
+                    
+                device_id, customer_id = device_info
+                print(f"  设备ID: {device_id}, 客户ID: {customer_id}")
+                
+                # 获取客户名称
+                customer_name = db_handler.get_customer_name_by_device_code(device_code)
+                print(f"  客户名称: {customer_name}")
+                
+                # 生成查询语句
+                end_condition = f"{end_date} 23:59:59"
+                query = inventory_query_template.format(
+                    device_id=device_id,
+                    start_date=start_date,
+                    end_condition=end_condition
+                )
+                
+                # 通过数据管理器一次性获取设备原始数据（仅一次数据库查询）
+                raw_data = data_manager.fetch_raw_data(device_id, inventory_query_template, start_date, end_date)
+                
+                # 从原始数据中提取库存表所需数据
+                inventory_data = data_manager.extract_inventory_data(raw_data)
+                
+                # 计算误差数据
+                error_data = data_manager.calculate_daily_errors(raw_data)
+                
+                if not inventory_data:
+                    print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
+                    log_messages.append(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
+                
+                # 保存设备数据供后续使用
+                # 检查是否存在油品名称列
+                if not raw_data[2] or '油品名称' not in raw_data[1]:
+                    error_msg = f"  错误：设备 {device_code} 的数据中未找到油品名称列，请检查数据库查询结果"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
+                
+                # 获取第一条记录的油品名称作为该设备的油品名称
+                # 注意：这里假设一个设备只使用一种油品，这是业务上的合理假设
+                first_row = raw_data[2][0]
+                if isinstance(first_row, dict):
+                    oil_name = first_row.get('油品名称')
+                else:
+                    # 如果是元组或列表形式，根据列名索引获取油品名称
+                    oil_name_index = raw_data[1].index('油品名称')
+                    oil_name = first_row[oil_name_index] if oil_name_index < len(first_row) else None
+                
+                # 检查油品名称是否有效
+                if not oil_name:
+                    error_msg = f"  错误：设备 {device_code} 的数据中油品名称为空，请检查数据库数据完整性"
+                    print(error_msg)
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
+                
+                # 生成Excel文件
+                error_handler = DailyConsumptionErrorReportGenerator()
+                # 替换日期中的非法字符，确保文件名合法
+                safe_start_date = start_date.replace("/", "-").replace("\\", "-")
+                safe_end_date = end_date.replace("/", "-").replace("\\", "-")
+                output_filename = f"{customer_name}_{device_code}_{safe_start_date}_to_{safe_end_date}_每日消耗误差报表.xlsx"
+                output_filepath = os.path.join(output_dir, output_filename)
+                
+                try:
+                    # 处理不同格式的日期字符串
+                    def parse_date(date_string):
+                        # 尝试多种日期格式
+                        formats = ['%Y-%m-%d', '%Y/%m/%d']
+                        for fmt in formats:
+                            try:
+                                parsed_date = datetime.datetime.strptime(date_string, fmt).date()
+                                return parsed_date
+                            except ValueError:
+                                continue
+                        # 如果所有格式都失败，则抛出异常
+                        raise ValueError(f"无法解析日期格式: {date_string}")
+                    
+                    # 使用重构后的generate_report方法
+                    error_handler.generate_report(
+                        inventory_data=inventory_data,
+                        error_data=error_data,
+                        output_file_path=output_filepath,
+                        device_code=device_code,
+                        start_date=parse_date(start_date),
+                        end_date=parse_date(end_date),
+                        oil_name=oil_name
+                    )
+                    success_msg = f"  成功生成每日消耗误差报表: {output_filepath}"
+                    print(success_msg)
+                    log_messages.append(success_msg)
+                except Exception as e:
+                    error_msg = f"  生成每日消耗误差报表失败: {e}"
+                    print(error_msg)
+                    print(f"详细错误信息:\n{traceback.format_exc()}")
+                    log_messages.append(error_msg)
+                    failed_devices.append(device_code)
+                    continue
+
+            except Exception as e:
+                error_msg = f"  处理设备 {device_code} 时发生错误: {e}"
+                print(error_msg)
+                print(f"详细错误信息:\n{traceback.format_exc()}")
+                log_messages.append(error_msg)
+                failed_devices.append(device_code)
+                continue
+        
+        # 记录程序结束时间
+        end_time = datetime.datetime.now()
+        duration = end_time - start_time
+        log_messages.append("")
+        log_messages.append(f"程序结束执行时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        log_messages.append(f"总执行时间: {duration}")
+        
+        # 记录失败设备
+        if failed_devices:
+            log_messages.append("")
+            log_messages.append("生成每日消耗误差报表失败列表:")
+            
+            # 按客户分组显示失败设备
+            # 创建一个映射：设备代码 -> 客户信息
+            device_to_customer = {}
+            for device_data in valid_devices:  # 注意：这里使用原始设备数据
+                device_code = device_data['device_code']
+                if device_code in failed_devices:
+                    device_to_customer[device_code] = {
+                        'customer_name': device_data.get('customer_name', '未知客户'),
+                        'customer_id': device_data.get('customer_id', '未知ID')
+                    }
+            
+            # 按客户分组失败设备
+            customers_with_failures = {}
+            for device_code in failed_devices:
+                if device_code in device_to_customer:
+                    customer_info = device_to_customer[device_code]
+                    customer_key = (customer_info['customer_id'], customer_info['customer_name'])
+                    if customer_key not in customers_with_failures:
+                        customers_with_failures[customer_key] = []
+                    customers_with_failures[customer_key].append(device_code)
+            
+            # 打印分组后的失败设备信息
+            for (customer_id, customer_name), devices in customers_with_failures.items():
+                log_messages.append(f"  客户名称: {customer_name}, 客户ID: {customer_id}")
+                log_messages.append(f"    失败设备: {', '.join(devices)}")
+        
+        # 生成日志文件
+        log_file = os.path.join(output_dir, f"{log_prefix}_{start_time.strftime('%Y%m%d_%H%M%S')}.txt")
+        try:
+            with open(log_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(log_messages))
+            print(f"\n日志文件已保存到: {log_file}")
+        except Exception as e:
+            print(f"保存日志文件失败: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+        
+        print("\n每日消耗误差报表生成功能执行完毕！")
+        try:
+            if connection and connection.is_connected():
+                connection.close()
+                print("数据库连接已关闭")
+        except Exception as e:
+            print(f"关闭数据库连接时发生错误: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+        
+        # 返回有效的设备数据，供后续使用
+        return valid_devices
+        
+    except Exception as e:
+        error_msg = f"每日消耗误差报表生成过程中发生未处理异常: {e}"
+        print(error_msg)
+        print(f"详细错误信息:\n{traceback.format_exc()}")
+        log_messages.append(error_msg)
+        
+        # 生成错误日志文件
+        error_details = {
+            'error': e,
+            'traceback': traceback.format_exc(),
+            'log_description': '错误日志'
+        }
+        _save_error_log(log_messages, error_details, "错误日志")
+        
+        # 确保数据库连接关闭
+        try:
+            if 'connection' in locals() and connection.is_connected():
+                connection.close()
+        except:
+            pass
+        
+        exit(1)
 
 
 def generate_inventory_reports(log_prefix="库存表处理日志", query_config=None):
@@ -1647,6 +2059,15 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
             pass
         
         exit(1)
+        
+def generate_daily_consumption_error_report(log_prefix="每日消耗误差处理日志", query_config=None):
+    """
+    专门用于生成每日消耗误差报表
+    """
+    # 复用现有逻辑读取设备信息和连接数据库
+    # 添加调用新的数据处理和报表生成逻辑
+    pass
+
 
 
 def _check_device_dates_consistency(devices_data):
