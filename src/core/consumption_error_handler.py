@@ -3,12 +3,10 @@ import os
 from datetime import timedelta
 from collections import defaultdict
 
-<<<<<<< Updated upstream
 from dateutil.relativedelta import relativedelta
-=======
->>>>>>> Stashed changes
 from openpyxl import Workbook
 from openpyxl.chart import LineChart, Reference
+from openpyxl.chart.axis import ChartLines
 from openpyxl.chart.marker import Marker
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
@@ -18,16 +16,12 @@ from .base_report import BaseReportGenerator
 
 
 class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
-<<<<<<< Updated upstream
     """每日消耗误差报表生成器，专门负责生成设备每日消耗误差报表和图表。
     
     报表基于油桶的原油剩余量计算真实的消耗量，并与订单累积量进行对比，
     以发现消耗误差。计算公式：
     真实消耗量 = 前一天结束库存 - 当天结束库存 + 当天加油量
     """
-=======
-    """每日消耗误差报表生成器，专门负责生成设备每日消耗误差报表和图表"""
->>>>>>> Stashed changes
 
     def __init__(self):
         """初始化每日消耗误差报表生成器"""
@@ -36,14 +30,10 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
     def generate_report(self, inventory_data, error_data, output_file_path, **kwargs):
         """
         生成每日消耗误差报表的实现方法
-        
-<<<<<<< Updated upstream
         报表基于油桶的原油剩余量计算真实的消耗量，并与订单累积量进行对比，
         以发现消耗误差。计算公式：
         真实消耗量 = 前一天结束库存 - 当天结束库存 + 当天加油量
 
-=======
->>>>>>> Stashed changes
         Args:
             inventory_data (list): 库存数据列表
             error_data (dict): 误差数据字典
@@ -79,13 +69,10 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
     ):
         """
         生成包含库存数据和误差分析的Excel报告文件
-<<<<<<< Updated upstream
-        
+
         报表基于油桶的原油剩余量计算真实的消耗量，并与订单累积量进行对比，
         以发现消耗误差。计算公式：
         真实消耗量 = 前一天结束库存 - 当天结束库存 + 当天加油量
-=======
->>>>>>> Stashed changes
 
         Args:
             inventory_data (list): 库存数据列表，格式为[(date, value), ...]
@@ -99,12 +86,9 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
             export_format (str): 导出格式，支持xlsx和csv
         """
         try:
-<<<<<<< Updated upstream
             # 确保输出文件路径不重复，如果重复则添加序号
             output_file_path = self._get_unique_filename(output_file_path)
             
-=======
->>>>>>> Stashed changes
             # 验证并清理库存数据
             cleaned_inventory_data = []
             invalid_records = []
@@ -130,9 +114,6 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
 
             # 初始化工作簿
             wb = Workbook()
-<<<<<<< Updated upstream
-            
-=======
 
             # 处理不同导出格式
             if export_format.lower() == "csv":
@@ -141,7 +122,7 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
                 ) as f:
                     writer = csv.writer(f)
                     # 写入标题行
-                    writer.writerow(["日期", "原油剩余量(L)", "订单累积总量(L)", "亏空误差(L)", "超额误差(L)"])
+                    writer.writerow(["日期", "原油剩余量(L)", "订单累积总量(L)", "中润亏损(L)", "客户亏损(L)"])
                     
                     # 补全数据并写入
                     data_dict = dict(cleaned_inventory_data)
@@ -178,7 +159,6 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
                 wb.close()
                 return True
 
->>>>>>> Stashed changes
             # 补全库存数据
             data_dict = dict(cleaned_inventory_data)
             complete_inventory_data = []
@@ -201,7 +181,6 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
                 current_date += timedelta(days=1)
 
             # Excel处理
-            wb = Workbook()
             ws = wb.active
             ws.title = "消耗误差分析"
 
@@ -211,36 +190,23 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
             ws.append([title])
             # 将合并单元格的宽度增加到18列
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=20)
-<<<<<<< Updated upstream
-            ws.cell(row=1, column=1).alignment = Alignment(horizontal="center", wrap_text=True)  # 修复换行参数
-            ws.cell(row=1, column=1).font = Font(size=14, bold=True)
-
-            # 添加数据列标题（删除了原油剩余量(L)列）
-            ws.append(["日期", "订单累积总量(L)", "库存消耗总量(L)","库存误差(L)\n(消耗量>订单量)", "订单误差(L)\n(订单量>消耗量)"])
-=======
-            ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
+            ws.cell(row=1, column=1).alignment = Alignment(horizontal="center", wrap_text=True)
             ws.cell(row=1, column=1).font = Font(size=14, bold=True)
 
             # 添加数据列标题
-            ws.append(["日期", "原油剩余量(L)", "订单累积总量(L)", "库存消耗总量(L)","库存误差(L)\n(消耗量>订单量)" ])
->>>>>>> Stashed changes
+            ws.append(["日期", "原油剩余量(L)", "订单累积总量(L)", "库存消耗总量(L)","中润亏损(L)", "客户亏损(L)"])
 
             # 准备误差数据
             daily_order_totals = error_data.get('daily_order_totals', {})  # 每日订单累计总量数据
-            daily_shortage_errors = error_data.get('daily_shortage_errors', {})  # 每日亏空误差数据（消耗量超过订单量的部分）
-            daily_excess_errors = error_data.get('daily_excess_errors', {})  # 每日超额误差数据（订单量超过消耗量的部分）
+            daily_shortage_errors = error_data.get('daily_shortage_errors', {})  # 每日中润亏损数据
+            daily_excess_errors = error_data.get('daily_excess_errors', {})  # 每日客户亏损数据
             daily_consumption = error_data.get('daily_consumption', {})  # 获取每日消耗量数据
 
-<<<<<<< Updated upstream
-            # 写入补全后的数据（删除了原油剩余量列）
-            for row in complete_inventory_data:
-                date = row[0]
-=======
             # 写入补全后的数据
             for row in complete_inventory_data:
                 date = row[0]
                 inventory_value = row[1]
->>>>>>> Stashed changes
+
                 order_total = daily_order_totals.get(date, 0)
                 # 处理可能为字典格式的误差数据
                 shortage_data = daily_shortage_errors.get(date, 0)
@@ -262,106 +228,65 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
                     consumption_value = consumption_data.get('value', 0)
                 else:
                     consumption_value = consumption_data
-<<<<<<< Updated upstream
                     
-                ws.append([date, order_total, consumption_value, shortage_error, excess_error])
-
-            # 调整列宽
-            ws.column_dimensions["A"].width = 12  # 日期列宽度
-            ws.column_dimensions["B"].width = 15  # 订单累积总量列宽度
-            ws.column_dimensions["C"].width = 15  # 库存消耗总量列宽度
-            ws.column_dimensions["D"].width = 12  # 亏空误差列宽度
-            ws.column_dimensions["E"].width = 12  # 订单误差列宽度
-=======
-                
-                ws.append([date, inventory_value, order_total, shortage_error, consumption_value])
+                ws.append([date, inventory_value, order_total, consumption_value, shortage_error, excess_error])
 
             # 调整列宽
             ws.column_dimensions["A"].width = 12  # 日期列宽度
             ws.column_dimensions["B"].width = 15  # 原油剩余量列宽度
             ws.column_dimensions["C"].width = 15  # 订单累积总量列宽度
-            ws.column_dimensions["D"].width = 12  # 亏空误差列宽度
-            ws.column_dimensions["E"].width = 12  # 超额误差列宽度
->>>>>>> Stashed changes
+            ws.column_dimensions["D"].width = 15  # 库存消耗总量列宽度
+            ws.column_dimensions["E"].width = 12  # 中润亏损列宽度
+            ws.column_dimensions["F"].width = 12  # 客户亏损列宽度
 
             # 创建图表
             chart = LineChart()
             chart.title = "每日消耗误差分析"
             chart.style = 13
-            chart.y_axis.title = "值(L)"
-            chart.y_axis.titleLayout = None  # 垂直显示Y轴标题
+            chart.y_axis.title = "值 (L)"
+            chart.y_axis.majorGridlines = ChartLines(spPr=GraphicalProperties(noFill=True))
             chart.x_axis.title = "日期"
 
             # 设置图表显示数据标签
-            # 添加这部分配置来调整x轴日期显示
-<<<<<<< Updated upstream
-            chart.x_axis.tickLblSkip = 5  # 每隔5个标签显示一个
-            chart.x_axis.tickLblPos = "low"  # 将标签位置调整到底部
-            chart.x_axis.textRotation = 0  # 将文本旋转角度设为0度（水平显示）
-
-            # 设置数据范围（现在只有4列数据）
-=======
             chart.x_axis.tickLblSkip = 3  # 每隔3个标签显示一个
             chart.x_axis.tickLblPos = "low"  # 将标签位置调整到底部
             chart.x_axis.textRotation = 0  # 将文本旋转角度设为0度（水平显示）
 
-            # 设置数据范围（包含所有4列数据）
->>>>>>> Stashed changes
-            data_range = Reference(
-                ws, min_col=2, min_row=2, max_col=5, max_row=len(complete_inventory_data) + 2
-            )
+            # 设置数据范围
             dates = Reference(ws, min_col=1, min_row=3, max_row=len(complete_inventory_data) + 2)
-
-            # 添加数据到图表
-            chart.add_data(data_range, titles_from_data=True)
             chart.set_categories(dates)
 
-            # 修改数据系列的名称，添加注释说明
-            # 由于openpyxl的限制，我们不能直接修改已存在的series的title
-            # 所以我们保留原来的标题，仅在图例说明中提供详细解释
+            # 添加图表数据系列（不包括"原油剩余量"）
+            data_range = Reference(ws, min_col=3, min_row=2, max_col=6, max_row=len(complete_inventory_data) + 2)
+            chart.add_data(data_range, titles_from_data=True)
 
             # 为不同数据系列设置不同的颜色
-<<<<<<< Updated upstream
-            # 订单累积总量 - 淡绿色（与库存报表保持一致）
+            # 订单累积总量 - 绿色
             chart.series[0].graphicalProperties = GraphicalProperties()
-            chart.series[0].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="90EE90")
+            chart.series[0].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="00FF00") # 设置线条属性
             chart.series[0].marker = Marker(symbol="circle", size=8)
             
             # 库存消耗总量 - 紫色
             chart.series[1].graphicalProperties = GraphicalProperties()
-            chart.series[1].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="800080")
-=======
-            # 原油剩余量 - 蓝色
-            chart.series[0].graphicalProperties = GraphicalProperties()
-            chart.series[0].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="0000FF")
-            chart.series[0].marker = Marker(symbol="circle", size=8)
-            
-            # 订单累积总量 - 绿色
-            chart.series[1].graphicalProperties = GraphicalProperties()
-            chart.series[1].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="00FF00")
->>>>>>> Stashed changes
+            chart.series[1].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="800080") # 设置线条属性
             chart.series[1].marker = Marker(symbol="circle", size=8)
             
-            # 亏空误差 - 红色
+            # 中润亏损 - 红色
             chart.series[2].graphicalProperties = GraphicalProperties()
-            chart.series[2].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FF0000")
+            chart.series[2].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FF0000") # 设置线条属性
             chart.series[2].marker = Marker(symbol="circle", size=8)
-            
-<<<<<<< Updated upstream
-            # 订单误差 - 橙色
-=======
-            # 超额误差 - 橙色
->>>>>>> Stashed changes
+
+            # 客户亏损 - 橙色
             chart.series[3].graphicalProperties = GraphicalProperties()
-            chart.series[3].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FFA500")
+            chart.series[3].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FFA500") # 设置线条属性
             chart.series[3].marker = Marker(symbol="circle", size=8)
 
             # 恢复图表到初始大小
             chart.width = 30
             chart.height = 15
 
-            # 添加图表到工作表，从F5开始绘制
-            ws.add_chart(chart, "F5")
+            # 添加图表到工作表，从G5开始绘制
+            ws.add_chart(chart, "G5")
             
             # 在图表下方添加注释说明
             # 计算注释的起始行（数据行数 + 标题行 + 适当间隔）
@@ -372,37 +297,23 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
             ws.cell(row=annotation_row, column=1).value = "图例说明："
             ws.cell(row=annotation_row, column=1).font = Font(bold=True)
             
-<<<<<<< Updated upstream
-            # 添加库存误差定义
+            # 添加中润亏损定义
             annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "库存误差(L)："
+            ws.cell(row=annotation_row, column=1).value = "中润亏损(L)："
             ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "当月原油消耗量超过当月订单累积总量的部分"
-            
-            # 添加订单误差定义
+            ws.cell(row=annotation_row, column=2).value = "当日库存消耗总量超过当日订单累积总量的部分"
+
+            # 添加客户亏损定义
             annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "订单误差(L)："
+            ws.cell(row=annotation_row, column=1).value = "客户亏损(L)："
             ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "当月订单累积总量超过当月原油消耗量的部分"
+            ws.cell(row=annotation_row, column=2).value = "当日订单累积总量超过当日库存消耗总量的部分"
             
             # 添加库存消耗总量定义
             annotation_row += 1
             ws.cell(row=annotation_row, column=1).value = "库存消耗总量(L)："
             ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "基于原油剩余量变化计算出的真实消耗量"
-=======
-            # 添加亏空误差定义
-            annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "库存误差(L)："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "当日原油消耗量超过当日订单累积总量的部分"
-            
-            # 添加超额误差定义
-            annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "库存消耗总量(L)："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True)
             ws.cell(row=annotation_row, column=2).value = "每日实际消耗的原油总量"
->>>>>>> Stashed changes
 
             try:
                 wb.save(output_file_path)
@@ -441,8 +352,7 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
             return float_value
         except (ValueError, TypeError):
             raise ValueError(f"无效的原油剩余量值: {value}")
-<<<<<<< Updated upstream
-            
+
     def _get_unique_filename(self, file_path):
         """
         生成唯一的文件名，如果文件已存在，则添加序号
@@ -588,10 +498,10 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             ws.cell(row=1, column=1).alignment = Alignment(horizontal="center", wrap_text=True)  # 修复换行参数
             ws.cell(row=1, column=1).font = Font(size=14, bold=True)
 
-            # 添加数据列标题（删除了原油剩余量(L)列）
-            ws.append(["月份", "订单累积总量(L)", "库存消耗总量(L)","库存误差(L)\n(消耗量>订单量)", "订单误差(L)\n(订单量>消耗量)"])
+            # 添加数据列标题
+            ws.append(["月份", "订单累积总量(L)", "库存消耗总量(L)","中润亏损(L)", "客户亏损(L)"])
 
-            # 写入补全后的数据（删除了原油剩余量列）
+            # 写入补全后的数据
             for row in complete_inventory_data:
                 month_str = row[0]
                 
@@ -625,8 +535,8 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             ws.column_dimensions["A"].width = 12  # 月份列宽度
             ws.column_dimensions["B"].width = 15  # 订单累积总量列宽度
             ws.column_dimensions["C"].width = 15  # 库存消耗总量列宽度
-            ws.column_dimensions["D"].width = 12  # 亏空误差列宽度
-            ws.column_dimensions["E"].width = 12  # 订单误差列宽度
+            ws.column_dimensions["D"].width = 12  # 中润亏损列宽度
+            ws.column_dimensions["E"].width = 12  # 客户亏损列宽度
 
             # 创建图表
             chart = LineChart()
@@ -655,22 +565,22 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             # 为不同数据系列设置不同的颜色
             # 订单累积总量 - 淡绿色（与库存报表保持一致）
             chart.series[0].graphicalProperties = GraphicalProperties()
-            chart.series[0].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="90EE90")
+            chart.series[0].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="90EE90") # 设置线条属性
             chart.series[0].marker = Marker(symbol="circle", size=8)
             
             # 库存消耗总量 - 紫色
             chart.series[1].graphicalProperties = GraphicalProperties()
-            chart.series[1].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="800080")
+            chart.series[1].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="800080") # 设置线条属性
             chart.series[1].marker = Marker(symbol="circle", size=8)
             
-            # 亏空误差 - 红色
+            # 中润亏损 - 红色
             chart.series[2].graphicalProperties = GraphicalProperties()
-            chart.series[2].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FF0000")
+            chart.series[2].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FF0000") # 设置线条属性
             chart.series[2].marker = Marker(symbol="circle", size=8)
             
-            # 订单误差 - 橙色
+            # 客户亏损 - 橙色
             chart.series[3].graphicalProperties = GraphicalProperties()
-            chart.series[3].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FFA500")
+            chart.series[3].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FFA500") # 设置线条属性
             chart.series[3].marker = Marker(symbol="circle", size=8)
 
             # 恢复图表到初始大小
@@ -689,17 +599,17 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             ws.cell(row=annotation_row, column=1).value = "图例说明："
             ws.cell(row=annotation_row, column=1).font = Font(bold=True)
             
-            # 添加库存误差定义
+            # 添加中润亏损定义
             annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "库存误差(L)："
+            ws.cell(row=annotation_row, column=1).value = "中润亏损(L)："
             ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "当月原油消耗量超过当月订单累积总量的部分"
+            ws.cell(row=annotation_row, column=2).value = "当月库存消耗总量超过当月订单累积总量的部分"
             
-            # 添加订单误差定义
+            # 添加客户亏损定义
             annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "订单误差(L)："
+            ws.cell(row=annotation_row, column=1).value = "客户亏损(L)："
             ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "当月订单累积总量超过当月原油消耗量的部分"
+            ws.cell(row=annotation_row, column=2).value = "当月订单累积总量超过当月库存消耗总量的部分"
             
             # 添加库存消耗总量定义
             annotation_row += 1
@@ -771,5 +681,3 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             return float_value
         except (ValueError, TypeError):
             raise ValueError(f"无效的原油剩余量值: {value}")
-=======
->>>>>>> Stashed changes

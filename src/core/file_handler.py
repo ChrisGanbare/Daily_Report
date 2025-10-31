@@ -337,12 +337,6 @@ class FileHandler:
             print(error_msg)
             raise FileReadError(error_msg)
             
-        # 验证日期跨度是否超过2个月
-        if not validate_date_span(row):
-            error_msg = f"\t错误：日期跨度超过1个月，第{line_num}行: {row}"
-            print(error_msg)
-            raise FileReadError(error_msg)
-            
         return True
 
     def _check_duplicate_device(self, device_code, start_date, end_date, devices, line_num, row):

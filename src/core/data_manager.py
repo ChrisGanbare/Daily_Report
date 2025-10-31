@@ -4,7 +4,9 @@
 """
 import datetime
 from collections import defaultdict
-from ..utils.date_utils import parse_date
+#from ..utils.date_utils import parse_date
+# 改为绝对导入：
+from src.utils.date_utils import parse_date
 
 
 class ReportDataManager:
@@ -148,13 +150,24 @@ class ReportDataManager:
 
     def calculate_daily_errors(self, raw_data):
         """
-        计算每日消耗误差数据
+        计算每日消耗误差数据。
+
+        核心业务逻辑:
+        1.  **订单总量 (流量计读数)**: 累加当天所有记录的 `油加注值`。
+        2.  **库存消耗总量 (液位计推算)**: 根据液位变化和推断的加油量计算得出。
+            -   **当天总加油量**: 通过比较当天内连续记录的库存，如果后一条记录的库存 > 前一条记录的库存，
+                则差值被视为一次加油（入库），累加得到当天总加油量。
+            -   **库存消耗总量公式**: 
+                `库存消耗总量 = (上一日结束库存 - 当日结束库存) + 当天总加油量`
+        3.  **误差**: `误差 = 库存消耗总量 - 订单总量`。
+            -   正数表示库存消耗大于订单记录，记为“中润亏损”。
+            -   负数表示订单记录大于库存消耗，记为“客户亏损”。
 
         Args:
             raw_data: 原始数据元组 (data, columns, raw_data)
 
         Returns:
-            dict: 包含每日订单累积总量、亏空误差和超额误差的数据
+            dict: 包含每日订单累积总量、中润亏损和客户亏损的数据
         """
         data, columns, raw_data_content = raw_data
 
@@ -194,72 +207,176 @@ class ReportDataManager:
         # 计算每日数据
         result = {
             'daily_order_totals': {},  # 每日订单累积总量
-            'daily_shortage_errors': {},  # 每日库存误差（消耗量>订单量）
-            'daily_excess_errors': {},   # 每日订单误差（订单量>消耗量）
+            'daily_shortage_errors': {},  # 每日中润亏损
+            'daily_excess_errors': {},   # 每日客户亏损
             'daily_inventory_changes': {}, # 每日库存变化量
             'daily_consumption': {}  # 每日消耗量
         }
 
         # 按日期排序处理
         sorted_dates = sorted(daily_data.keys())
+        previous_day_end_inventory = 0
 
-        for i, date in enumerate(sorted_dates):
-            day_data = daily_data[date]
+        # 初始化第一天的上日结束库存
+        if sorted_dates:
+            first_day_data = sorted(daily_data[sorted_dates[0]], key=lambda x: x['order_time'])
+            if first_day_data:
+                previous_day_end_inventory = first_day_data[0]['avai_oil']
 
-            # 计算每日订单累积总量
-            daily_order_total = sum(item['oil_val'] for item in day_data)
-            result['daily_order_totals'][date] = daily_order_total
+        for date in sorted_dates:
+            day_data = sorted(daily_data[date], key=lambda x: x['order_time'])
+            
+            # 当天开始库存 = 上一天结束库存
+            start_inventory = previous_day_end_inventory
+            # 当天结束库存 = 当天最晚记录的库存
+            end_inventory = day_data[-1]['avai_oil']
 
-            # 获取当日开始和结束的原油剩余量
-            if day_data:
+            # 计算当天总加油量（推断）
+            total_refill_today = 0
+            last_inventory_point = start_inventory
+            for record in day_data:
+                current_inventory_point = record['avai_oil']
+                if current_inventory_point > last_inventory_point:
+                    total_refill_today += (current_inventory_point - last_inventory_point)
+                last_inventory_point = current_inventory_point
+
+            # 计算库存消耗总量
+            inventory_consumption = (start_inventory - end_inventory) + total_refill_today
+
+            # 计算订单总量
+            order_total = sum(item['oil_val'] for item in day_data)
+
+            # 存储结果
+            result['daily_order_totals'][date] = order_total
+            result['daily_consumption'][date] = inventory_consumption
+
+            # 计算误差
+            difference = inventory_consumption - order_total
+            if difference > 0:
+                result['daily_shortage_errors'][date] = difference
+            elif difference < 0:
+                result['daily_excess_errors'][date] = abs(difference)
+
+            # 更新上一天结束库存，为下一天做准备
+            previous_day_end_inventory = end_inventory
+
+        return result
+
+
+    def calculate_monthly_errors(self, raw_data, start_date=None, end_date=None):
+        """
+        计算每月消耗误差数据
+
+        Args:
+            raw_data: 原始数据元组 (data, columns, raw_data)
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            dict: 包含每月订单累积总量、中润亏损和客户亏损的数据
+        """
+        data, columns, raw_data_content = raw_data
+
+        # 按月份分组数据
+        monthly_data = defaultdict(list)
+
+        for row in raw_data_content:
+            row_dict = dict(zip(columns, row))
+            order_time = row_dict.get("加注时间")
+            oil_val = float(row_dict.get("油加注值", 0) or 0)
+            avai_oil = float(row_dict.get("原油剩余量", 0) or 0)
+
+            if isinstance(order_time, datetime.datetime):
+                order_month = order_time.strftime("%Y-%m")
+                monthly_data[order_month].append({
+                    'oil_val': oil_val,
+                    'avai_oil': avai_oil,
+                    'order_time': order_time
+                })
+            elif isinstance(order_time, str):
+                # 处理字符串格式的日期
+                parsed_datetime = None
+                for fmt in ["%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"]:
+                    try:
+                        parsed_datetime = datetime.datetime.strptime(order_time, fmt)
+                        break
+                    except ValueError:
+                        continue
+                if parsed_datetime:
+                    order_month = parsed_datetime.strftime("%Y-%m")
+                    monthly_data[order_month].append({
+                        'oil_val': oil_val,
+                        'avai_oil': avai_oil,
+                        'order_time': parsed_datetime
+                    })
+
+        # 计算每月数据
+        result = {
+            'monthly_order_totals': {},  # 每月订单累积总量
+            'monthly_shortage_errors': {},  # 每月中润亏损
+            'monthly_excess_errors': {},   # 每月客户亏损
+            'monthly_consumption': {}  # 每月消耗量
+        }
+
+        # 按月份排序处理
+        sorted_months = sorted(monthly_data.keys())
+
+        for i, month in enumerate(sorted_months):
+            month_data = monthly_data[month]
+
+            # 计算每月订单累积总量
+            monthly_order_total = sum(item['oil_val'] for item in month_data)
+            result['monthly_order_totals'][month] = monthly_order_total
+
+            # 获取当月开始和结束的原油剩余量
+            if month_data:
                 # 按照时间排序获取开始和结束的原油剩余量
-                sorted_day_data = sorted(day_data, key=lambda x: x['order_time'])
-                start_avai_oil = sorted_day_data[-1]['avai_oil']  # 最晚时间的原油剩余量作为当日开始值
-                end_avai_oil = sorted_day_data[0]['avai_oil']    # 最早时间的原油剩余量作为当日结束值
+                sorted_month_data = sorted(month_data, key=lambda x: x['order_time'])
+                start_avai_oil = sorted_month_data[0]['avai_oil']    # 最早时间的原油剩余量作为当月开始值
+                end_avai_oil = sorted_month_data[-1]['avai_oil']  # 最晚时间的原油剩余量作为当月结束值
 
-                # 计算库存变化量 (修正计算方式)
+                # 计算库存变化量
                 # 正确的计算应该是: 结束值 - 开始值
                 # 如果结果为正，表示库存增加(加油)；如果为负，表示库存减少(消耗)
                 inventory_change = end_avai_oil - start_avai_oil
-                result['daily_inventory_changes'][date] = inventory_change
 
-                # 根据新的逻辑计算每日消耗量
-                daily_consumption = 0
+                # 根据新的逻辑计算每月消耗量
+                monthly_consumption = 0
 
                 # 如果原油剩余量上升（说明加油了）
                 if inventory_change > 0:
-                    # 如果当日有订单，则消耗量等于订单总量
-                    if daily_order_total > 0:
-                        daily_consumption = daily_order_total
-                    # 如果当日没有订单，则消耗量为0
+                    # 如果当月有订单，则消耗量等于订单总量
+                    if monthly_order_total > 0:
+                        monthly_consumption = monthly_order_total
+                    # 如果当月没有订单，则消耗量为0
                     else:
-                        daily_consumption = 0
+                        monthly_consumption = 0
                 # 如果原油剩余量下降或持平（正常消耗）
                 else:
                     # 消耗量应该是库存减少的绝对值
-                    daily_consumption = abs(inventory_change)
+                    monthly_consumption = abs(inventory_change)
 
-                # 存储每日消耗量
-                result['daily_consumption'][date] = {
-                    'value': daily_consumption,
+                # 存储每月消耗量
+                result['monthly_consumption'][month] = {
+                    'value': monthly_consumption,
                     'inventory_change': inventory_change,
-                    'order_total': daily_order_total
+                    'order_total': monthly_order_total
                 }
 
                 # 计算误差
-                difference = daily_consumption - daily_order_total
+                difference = monthly_consumption - monthly_order_total
 
                 if difference > 0:  # 库存误差（消耗量>订单量）
-                    result['daily_shortage_errors'][date] = {
+                    result['monthly_shortage_errors'][month] = {
                         'value': difference,
                         'inventory_change': inventory_change,
-                        'order_total': daily_order_total
+                        'order_total': monthly_order_total
                     }
                 elif difference < 0:  # 订单误差（订单量>消耗量）
-                    result['daily_excess_errors'][date] = {
+                    result['monthly_excess_errors'][month] = {
                         'value': abs(difference),
                         'inventory_change': inventory_change,
-                        'order_total': daily_order_total
+                        'order_total': monthly_order_total
                     }
 
         return result

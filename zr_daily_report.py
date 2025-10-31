@@ -11,7 +11,11 @@ import traceback
 import tkinter as tk
 
 # 添加项目根目录到sys.path，确保能正确导入模块
-sys.path.insert(0, os.path.dirname(__file__))
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
+
+# 使用绝对导入路径
+from src.core.consumption_error_handler import MonthlyConsumptionErrorReportGenerator, DailyConsumptionErrorReportGenerator
 
 # 导入项目模块
 from src.cli.argument_parser import parse_arguments, print_usage
@@ -21,7 +25,8 @@ from src.core.report_controller import (
     generate_customer_statement,
     generate_both_reports,
     generate_refueling_details,
-    generate_daily_consumption_error_reports
+    generate_daily_consumption_error_reports,
+    generate_monthly_consumption_error_reports
 )
 
 
@@ -58,9 +63,12 @@ def main():
         elif mode == 'refueling':
             # 生成加注明细报表
             generate_refueling_details()
-        elif mode == 'consumption':
+        elif mode == 'daily_consumption':
             # 生成每日消耗误差报表
             generate_daily_consumption_error_reports()
+        elif mode == 'monthly_consumption':
+            # 调用每月消耗误差报表生成
+            generate_monthly_consumption_error_reports()
                 
     except Exception as e:
         print(f"主程序执行过程中发生异常: {e}")
