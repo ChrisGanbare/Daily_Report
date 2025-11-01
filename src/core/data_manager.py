@@ -148,7 +148,7 @@ class ReportDataManager:
         
         return sorted(monthly_usage.items())
 
-    def calculate_daily_errors(self, raw_data):
+    def calculate_daily_errors(self, raw_data, barrel_count=1):
         """
         计算每日消耗误差数据。
 
@@ -165,6 +165,7 @@ class ReportDataManager:
 
         Args:
             raw_data: 原始数据元组 (data, columns, raw_data)
+            barrel_count (int): 油桶数量，默认为1
 
         Returns:
             dict: 包含每日订单累积总量、中润亏损和客户亏损的数据
@@ -217,11 +218,25 @@ class ReportDataManager:
         sorted_dates = sorted(daily_data.keys())
         previous_day_end_inventory = 0
 
-        # 初始化第一天的上日结束库存
+        # 关键修复：正确初始化第一天的“上日结束库存”
+        # 应该获取查询开始日期前一天的最后一条库存记录
         if sorted_dates:
-            first_day_data = sorted(daily_data[sorted_dates[0]], key=lambda x: x['order_time'])
-            if first_day_data:
-                previous_day_end_inventory = first_day_data[0]['avai_oil']
+            first_day_in_data = sorted_dates[0]
+            # 查找在 first_day_in_data 之前的所有记录
+            previous_day_records = [
+                dict(zip(columns, r)) for r in raw_data_content 
+                if (isinstance(dict(zip(columns, r)).get("加注时间"), datetime.datetime) and 
+                    dict(zip(columns, r)).get("加注时间").date() < first_day_in_data)
+            ]
+            if previous_day_records:
+                # 如果有前一天的数据，取前一天最晚的一条记录作为基准库存
+                previous_day_records.sort(key=lambda x: x['加注时间'])
+                previous_day_end_inventory = float(previous_day_records[-1].get("原油剩余量", 0) or 0)
+            else:
+                # 如果没有前一天的数据，则使用第一天最早的一条记录作为基准库存（作为备用方案）
+                first_day_data = sorted(daily_data[first_day_in_data], key=lambda x: x['order_time'])
+                if first_day_data:
+                    previous_day_end_inventory = first_day_data[0]['avai_oil']
 
         for date in sorted_dates:
             day_data = sorted(daily_data[date], key=lambda x: x['order_time'])
@@ -241,7 +256,7 @@ class ReportDataManager:
                 last_inventory_point = current_inventory_point
 
             # 计算库存消耗总量
-            inventory_consumption = (start_inventory - end_inventory) + total_refill_today
+            inventory_consumption = ((start_inventory - end_inventory) + total_refill_today) * barrel_count
 
             # 计算订单总量
             order_total = sum(item['oil_val'] for item in day_data)
@@ -263,12 +278,13 @@ class ReportDataManager:
         return result
 
 
-    def calculate_monthly_errors(self, raw_data, start_date=None, end_date=None):
+    def calculate_monthly_errors(self, raw_data, start_date=None, end_date=None, barrel_count=1):
         """
         计算每月消耗误差数据
 
         Args:
             raw_data: 原始数据元组 (data, columns, raw_data)
+            barrel_count (int): 油桶数量，默认为1
             start_date: 开始日期
             end_date: 结束日期
 
@@ -354,7 +370,7 @@ class ReportDataManager:
                 # 如果原油剩余量下降或持平（正常消耗）
                 else:
                     # 消耗量应该是库存减少的绝对值
-                    monthly_consumption = abs(inventory_change)
+                    monthly_consumption = abs(inventory_change) * barrel_count
 
                 # 存储每月消耗量
                 result['monthly_consumption'][month] = {

@@ -37,7 +37,11 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
         Args:
             inventory_data (list): 库存数据列表
             error_data (dict): 误差数据字典
-            output_file_path (str): 输出文件路径
+            output_file_path (str): 输出文件路径# D:/Daily_Report/src/core/data_manager.py (错误的代码)
+    if sorted_dates:
+        first_day_data = sorted(daily_data[sorted_dates[0]], key=lambda x: x['order_time'])
+        if first_day_data:
+            previous_day_end_inventory = first_day_data[0]['avai_oil'] # 使用第一天的数据初始化“前一天”的库存
             **kwargs: 其他参数
             
         Returns:
@@ -48,11 +52,12 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
         end_date = kwargs.get('end_date')
         oil_name = kwargs.get('oil_name')
         chart_style = kwargs.get('chart_style')
+        barrel_count = int(kwargs.get('barrel_count', 1))
         export_format = kwargs.get('export_format', 'xlsx')
         
         return self.generate_daily_consumption_error_report_with_chart(
             inventory_data, error_data, output_file_path, device_code, start_date, end_date,
-            oil_name, chart_style, export_format
+            oil_name, chart_style, barrel_count, export_format
         )
 
     def generate_daily_consumption_error_report_with_chart(
@@ -65,6 +70,7 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
         end_date,
         oil_name=None,
         chart_style=None,
+        barrel_count=1,
         export_format="xlsx",
     ):
         """
@@ -83,6 +89,7 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
             end_date (date): 结束日期
             oil_name (str): 油品名称
             chart_style (dict): 图表样式配置
+            barrel_count (int): 油桶数量
             export_format (str): 导出格式，支持xlsx和csv
         """
         try:
@@ -246,6 +253,7 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
             chart.y_axis.title = "值 (L)"
             chart.y_axis.majorGridlines = ChartLines(spPr=GraphicalProperties(noFill=True))
             chart.x_axis.title = "日期"
+            chart.x_axis.number_format = 'yyyy-mm-dd'
 
             # 设置图表显示数据标签
             chart.x_axis.tickLblSkip = 3  # 每隔3个标签显示一个
@@ -254,32 +262,27 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
 
             # 设置数据范围
             dates = Reference(ws, min_col=1, min_row=3, max_row=len(complete_inventory_data) + 2)
+            data_range = Reference(ws, min_col=2, min_row=2, max_col=4, max_row=len(complete_inventory_data) + 2)
+
+            # 添加数据到图表
+            chart.add_data(data_range, titles_from_data=True)
             chart.set_categories(dates)
 
-            # 添加图表数据系列（不包括"原油剩余量"）
-            data_range = Reference(ws, min_col=3, min_row=2, max_col=6, max_row=len(complete_inventory_data) + 2)
-            chart.add_data(data_range, titles_from_data=True)
-
             # 为不同数据系列设置不同的颜色
-            # 订单累积总量 - 绿色
+            # 原油剩余量 - 蓝色
             chart.series[0].graphicalProperties = GraphicalProperties()
-            chart.series[0].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="00FF00") # 设置线条属性
+            chart.series[0].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="0000FF")
             chart.series[0].marker = Marker(symbol="circle", size=8)
             
-            # 库存消耗总量 - 紫色
+            # 订单累积总量 - 绿色
             chart.series[1].graphicalProperties = GraphicalProperties()
-            chart.series[1].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="800080") # 设置线条属性
+            chart.series[1].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="00FF00")
             chart.series[1].marker = Marker(symbol="circle", size=8)
             
-            # 中润亏损 - 红色
+            # 库存消耗总量 - 紫色
             chart.series[2].graphicalProperties = GraphicalProperties()
-            chart.series[2].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FF0000") # 设置线条属性
+            chart.series[2].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="800080")
             chart.series[2].marker = Marker(symbol="circle", size=8)
-
-            # 客户亏损 - 橙色
-            chart.series[3].graphicalProperties = GraphicalProperties()
-            chart.series[3].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FFA500") # 设置线条属性
-            chart.series[3].marker = Marker(symbol="circle", size=8)
 
             # 恢复图表到初始大小
             chart.width = 30
@@ -288,56 +291,53 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
             # 添加图表到工作表，从G5开始绘制
             ws.add_chart(chart, "G5")
             
-            # 在图表下方添加注释说明
-            # 计算注释的起始行（数据行数 + 标题行 + 适当间隔）
-            data_end_row = len(complete_inventory_data) + 2  # 数据结束行
-            annotation_row = data_end_row + 3  # 在数据下方留出一些空间
+            # 在H34单元格开始添加计算规则说明，确保位于图表下方
+            annotation_row = 34
+            annotation_col = 8  # H列
             
-            # 添加图例说明标题
-            ws.cell(row=annotation_row, column=1).value = "图例说明："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True)
+            # 添加标题
+            ws.cell(row=annotation_row, column=annotation_col).value = "计算规则说明："
+            ws.cell(row=annotation_row, column=annotation_col).font = Font(bold=True)
             
-            # 添加中润亏损定义
+            # 将每个计算规则分别写入单独的行，并合并单元格以确保完整显示
             annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "中润亏损(L)："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "当日库存消耗总量超过当日订单累积总量的部分"
-
-            # 添加客户亏损定义
-            annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "客户亏损(L)："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "当日订单累积总量超过当日库存消耗总量的部分"
+            consumption_formula = "库存消耗总量(L) = (前日库存 - 当日库存 + 当日加油（入库）量)"
+            if barrel_count > 1:
+                consumption_formula += f" * {barrel_count} (桶数)"
+            ws.cell(row=annotation_row, column=annotation_col).value = consumption_formula
+            ws.merge_cells(start_row=annotation_row, start_column=annotation_col, end_row=annotation_row, end_column=annotation_col + 7) # 合并8个单元格
             
-            # 添加库存消耗总量定义
             annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "库存消耗总量(L)："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "每日实际消耗的原油总量"
-
-            try:
-                wb.save(output_file_path)
-                print(f"  每日消耗误差图表已生成并保存为{export_format.upper()}格式")
-                return True
-            except PermissionError:
-                print(
-                    f"错误：无法保存文件 '{output_file_path}'，可能是文件正在被其他程序占用。"
-                )
-                print("请关闭相关文件后重试。")
-                raise
-            finally:
-                # 确保工作簿被关闭
-                if wb is not None:
-                    try:
-                        wb.close()
-                    except:
-                        pass
+            ws.cell(row=annotation_row, column=annotation_col).value = "中润亏损(L) = MAX(0, 库存消耗总量 - 订单累积总量)"
+            ws.merge_cells(start_row=annotation_row, start_column=annotation_col, end_row=annotation_row, end_column=annotation_col + 7)
+            
+            annotation_row += 1
+            ws.cell(row=annotation_row, column=annotation_col).value = "客户亏损(L) = MAX(0, 订单累积总量 - 库存消耗总量)"
+            ws.merge_cells(start_row=annotation_row, start_column=annotation_col, end_row=annotation_row, end_column=annotation_col + 7)
+            
         except Exception as e:
             print("发生错误：")
             print(str(e))
             import traceback
             traceback.print_exc()
             raise
+
+        # 将保存和关闭操作移到主try块之外，以确保文件句柄被正确释放
+        try:
+            wb.save(output_file_path)
+            print(f"  每日消耗误差图表已生成并保存为{export_format.upper()}格式")
+            return True
+        except PermissionError:
+            print(f"错误：无法保存文件 '{output_file_path}'，可能是文件正在被其他程序占用。")
+            print("请关闭相关文件后重试。")
+            raise
+        finally:
+            # 确保工作簿总能被关闭
+            if 'wb' in locals() and wb is not None:
+                try:
+                    wb.close()
+                except Exception as close_exc:
+                    print(f"关闭工作簿时发生错误: {close_exc}")
 
     def _validate_inventory_value(self, value):
         """
@@ -415,11 +415,12 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
         end_date = kwargs.get('end_date')
         oil_name = kwargs.get('oil_name')
         chart_style = kwargs.get('chart_style')
+        barrel_count = int(kwargs.get('barrel_count', 1))
         export_format = kwargs.get('export_format', 'xlsx')
         
         return self.generate_monthly_consumption_error_report_with_chart(
             inventory_data, error_data, output_file_path, device_code, start_date, end_date,
-            oil_name, chart_style, export_format
+            oil_name, chart_style, barrel_count, export_format
         )
 
     def generate_monthly_consumption_error_report_with_chart(
@@ -432,6 +433,7 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
         end_date,
         oil_name=None,
         chart_style=None,
+        barrel_count=1,
         export_format="xlsx",
     ):
         """
@@ -450,6 +452,7 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             end_date (date): 结束日期
             oil_name (str): 油品名称
             chart_style (dict): 图表样式配置
+            barrel_count (int): 油桶数量
             export_format (str): 导出格式，支持xlsx和csv
         """
         try:
@@ -614,32 +617,31 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             # 添加库存消耗总量定义
             annotation_row += 1
             ws.cell(row=annotation_row, column=1).value = "库存消耗总量(L)："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "基于原油剩余量变化计算出的真实消耗量"
+            ws.cell(row=annotation_row, column=1).font = Font(bold=True, color="800080")
+            consumption_formula = "基于原油剩余量变化计算出的真实消耗量"
+            if barrel_count > 1:
+                consumption_formula += f" (已乘以桶数 {barrel_count})"
+            ws.cell(row=annotation_row, column=2).value = consumption_formula
 
-            try:
-                wb.save(output_file_path)
-                print(f"  每月消耗误差图表已生成并保存为{export_format.upper()}格式")
-                return True
-            except PermissionError:
-                print(
-                    f"错误：无法保存文件 '{output_file_path}'，可能是文件正在被其他程序占用。"
-                )
-                print("请关闭相关文件后重试。")
-                raise
-            finally:
-                # 确保工作簿被关闭
-                if wb is not None:
-                    try:
-                        wb.close()
-                    except:
-                        pass
         except Exception as e:
             print("发生错误：")
             print(str(e))
             import traceback
             traceback.print_exc()
             raise
+
+        # 将保存和关闭操作移到主try块之外
+        try:
+            wb.save(output_file_path)
+            print(f"  每月消耗误差图表已生成并保存为{export_format.upper()}格式")
+            return True
+        except PermissionError:
+            print(f"错误：无法保存文件 '{output_file_path}'，可能是文件正在被其他程序占用。")
+            print("请关闭相关文件后重试。")
+            raise
+        finally:
+            if 'wb' in locals() and wb is not None:
+                wb.close()
 
     def _get_unique_filename(self, file_path):
         """

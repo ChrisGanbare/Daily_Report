@@ -298,11 +298,18 @@ class FileHandler:
             raise FileReadError(error_msg)
 
         # 返回有效设备数据
-        return {
+        device_data = {
             'device_code': device_code,
             'start_date': start_date,
             'end_date': end_date,
         }
+        
+        # 添加额外的字段（如barrel_count）
+        for key, value in row.items():
+            if key not in ['device_code', 'start_date', 'end_date']:
+                device_data[key] = value.strip()
+        
+        return device_data
 
     def _validate_device_code(self, device_code, line_num):
         """验证设备编码格式"""

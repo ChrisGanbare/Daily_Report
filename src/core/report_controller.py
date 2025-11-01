@@ -277,6 +277,19 @@ def generate_daily_consumption_error_reports(log_prefix="每日消耗误差处�
         # 创建数据管理器
         data_manager = ReportDataManager(db_handler)
         
+        # 将 parse_date 函数移到循环外部，避免重复定义和作用域问题
+        def parse_date(date_string):
+            # 尝试多种日期格式
+            formats = ['%Y-%m-%d', '%Y/%m/%d']
+            for fmt in formats:
+                try:
+                    parsed_date = datetime.datetime.strptime(date_string, fmt).date()
+                    return parsed_date
+                except ValueError:
+                    continue
+            # 如果所有格式都失败，则抛出异常
+            raise ValueError(f"无法解析日期格式: {date_string}")
+
         # 处理每个设备
         for i, device in enumerate(valid_devices, 1):
             device_code = device['device_code']
@@ -286,6 +299,10 @@ def generate_daily_consumption_error_reports(log_prefix="每日消耗误差处�
             print(f"\n处理第 {i} 个设备 ({device_code})...")
             log_messages.append(f"处理设备 {device_code}...")
             
+            # 在循环开始时就转换日期，避免在循环中污染变量类型
+            parsed_start_date = parse_date(start_date)
+            parsed_end_date = parse_date(end_date)
+
             try:
                 # 获取设备ID和客户ID
                 device_info = db_handler.get_latest_device_id_and_customer_id(device_code, device_query_template)
@@ -306,7 +323,7 @@ def generate_daily_consumption_error_reports(log_prefix="每日消耗误差处�
                 # 生成查询语句
                 end_condition = f"{end_date} 23:59:59"
                 query = inventory_query_template.format(
-                    device_id=device_id,
+                    device_id=device_id, # type: ignore
                     start_date=start_date,
                     end_condition=end_condition
                 )
@@ -318,7 +335,8 @@ def generate_daily_consumption_error_reports(log_prefix="每日消耗误差处�
                 inventory_data = data_manager.extract_inventory_data(raw_data)
                 
                 # 计算误差数据
-                error_data = data_manager.calculate_daily_errors(raw_data)
+                barrel_count = int(device.get('barrel_count', 1))
+                error_data = data_manager.calculate_daily_errors(raw_data, barrel_count)
                 
                 if not inventory_data:
                     print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
@@ -359,40 +377,20 @@ def generate_daily_consumption_error_reports(log_prefix="每日消耗误差处�
                 output_filename = f"{customer_name}_{device_code}_{safe_start_date}_to_{safe_end_date}_每日消耗误差报表.xlsx"
                 output_filepath = os.path.join(output_dir, output_filename)
                 
-                try:
-                    # 处理不同格式的日期字符串
-                    def parse_date(date_string):
-                        # 尝试多种日期格式
-                        formats = ['%Y-%m-%d', '%Y/%m/%d']
-                        for fmt in formats:
-                            try:
-                                parsed_date = datetime.datetime.strptime(date_string, fmt).date()
-                                return parsed_date
-                            except ValueError:
-                                continue
-                        # 如果所有格式都失败，则抛出异常
-                        raise ValueError(f"无法解析日期格式: {date_string}")
-                    
-                    # 使用重构后的generate_report方法
-                    error_handler.generate_report(
-                        inventory_data=inventory_data,
-                        error_data=error_data,
-                        output_file_path=output_filepath,
-                        device_code=device_code,
-                        start_date=parse_date(start_date),
-                        end_date=parse_date(end_date),
-                        oil_name=oil_name
-                    )
-                    success_msg = f"  成功生成每日消耗误差报表: {output_filepath}"
-                    print(success_msg)
-                    log_messages.append(success_msg)
-                except Exception as e:
-                    error_msg = f"  生成每日消耗误差报表失败: {e}"
-                    print(error_msg)
-                    print(f"详细错误信息:\n{traceback.format_exc()}")
-                    log_messages.append(error_msg)
-                    failed_devices.append(device_code)
-                    continue
+                # 使用重构后的generate_report方法
+                error_handler.generate_report(
+                    inventory_data=inventory_data,
+                    error_data=error_data,
+                    output_file_path=output_filepath,
+                    device_code=device_code,
+                    start_date=parsed_start_date,
+                    end_date=parsed_end_date,
+                    oil_name=oil_name,
+                    barrel_count=barrel_count
+                )
+                success_msg = f"  成功生成每日消耗误差报表: {output_filepath}"
+                print(success_msg)
+                log_messages.append(success_msg)
 
             except Exception as e:
                 error_msg = f"  处理设备 {device_code} 时发生错误: {e}"
@@ -669,7 +667,8 @@ def generate_monthly_consumption_error_reports(log_prefix="每月消耗误差处
                 inventory_data = data_manager.extract_inventory_data(raw_data)
                 
                 # 计算误差数据
-                error_data = data_manager.calculate_monthly_errors(raw_data, start_date, end_date)
+                barrel_count = int(device.get('barrel_count', 1))
+                error_data = data_manager.calculate_monthly_errors(raw_data, start_date, end_date, barrel_count)
                 
                 if not inventory_data:
                     print(f"  警告：设备 {device_code} 在指定时间范围内没有数据")
@@ -732,7 +731,8 @@ def generate_monthly_consumption_error_reports(log_prefix="每月消耗误差处
                         device_code=device_code,
                         start_date=parse_date(start_date),
                         end_date=parse_date(end_date),
-                        oil_name=oil_name
+                        oil_name=oil_name,
+                        barrel_count=barrel_count
                     )
                     success_msg = f"  成功生成每月消耗误差报表: {output_filepath}"
                     print(success_msg)
@@ -2420,14 +2420,6 @@ def generate_both_reports(log_prefix="综合处理日志", query_config=None):
             pass
         
         exit(1)
-        
-def generate_daily_consumption_error_report(log_prefix="每日消耗误差处理日志", query_config=None):
-    """
-    专门用于生成每日消耗误差报表
-    """
-    # 复用现有逻辑读取设备信息和连接数据库
-    # 添加调用新的数据处理和报表生成逻辑
-    pass
 
 
 def _check_device_dates_consistency(devices_data):
