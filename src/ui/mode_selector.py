@@ -70,6 +70,8 @@ class ModeSelector(Selector):
                 result.set("daily_consumption")
             elif selected_value == "生成每月消耗误差报表":
                 result.set("monthly_consumption")
+            elif selected_value == "生成误差汇总报表":
+                result.set("error_summary")
             root.quit()
         
         def on_cancel():
@@ -102,7 +104,7 @@ class ModeSelector(Selector):
         label.pack(pady=(0, 10))
         
         # 添加下拉框
-        options = ["请选择", "同时生成库存表和对账单", "生成库存表", "生成对账单", "导出加注订单明细", "生成每日消耗误差报表", "生成每月消耗误差报表"]
+        options = ["请选择", "同时生成库存表和对账单", "生成库存表", "生成对账单", "导出加注订单明细", "生成每日消耗误差报表", "生成每月消耗误差报表", "生成误差汇总报表"]
         combo = ttk.Combobox(main_frame, values=options, state="readonly", font=("Arial", 10), width=30)
         combo.set("请选择")
         combo.pack(pady=(0, 20))

@@ -14,10 +14,10 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='ZR Daily Report Generator')
 
     parser.add_argument('--mode',
-                        choices=['inventory', 'statement', 'both', 'refueling', 'daily_consumption',
-                                 'monthly_consumption'],
+                        choices=['inventory', 'statement', 'both', 'refueling', 'daily_consumption', 'monthly_consumption',
+                                 'error_summary'],
                         default='both',
-                        help='选择执行模式: inventory(库存报表), statement(客户对账单), both(两者都执行), refueling(加注明细), daily_consumption(每日消耗误差), monthly_consumption(每月消耗误差)')
+                        help='选择执行模式: inventory(库存报表), statement(客户对账单), both(两者都执行), refueling(加注明细), daily_consumption(每日消耗误差), monthly_consumption(每月消耗误差), error_summary(误差汇总报表)')
     return parser.parse_args()
 
 

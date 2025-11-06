@@ -13,7 +13,7 @@ from src.core.statement_handler import CustomerStatementGenerator
 from src.core.refueling_details_handler import RefuelingDetailsReportGenerator
 from src.core.file_handler import FileHandler
 from src.core.data_manager import ReportDataManager,CustomerGroupingUtil
-from src.core.consumption_error_handler import DailyConsumptionErrorReportGenerator, MonthlyConsumptionErrorReportGenerator
+from src.core.consumption_error_handler import DailyConsumptionErrorReportGenerator, MonthlyConsumptionErrorReportGenerator, ConsumptionErrorSummaryGenerator
 from src.utils.date_utils import validate_csv_data
 from src.ui.filedialog_selector import file_dialog_selector
 
@@ -133,6 +133,236 @@ def _load_config():
             raise Exception("无法加载配置文件")
     
     raise Exception("未找到有效的配置文件")
+
+
+def generate_error_summary_report(log_prefix="误差汇总处理日志", query_config=None):
+    """
+    生成所有设备的消耗误差汇总报表 (SQL核心版)。
+    """
+    log_messages = []
+    start_time = datetime.datetime.now()
+    log_messages.append(f"程序开始执行时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    print("=" * 50)
+    print("ZR Daily Report - 设备消耗误差汇总报表生成功能")
+    print("=" * 50)
+
+    try:
+        if query_config is None:
+            query_config = _load_config()
+
+        db_config = query_config.get('db_config', {})
+
+        # 提示用户输入日期范围
+        from src.ui.date_dialog import get_date_range
+        date_range = get_date_range()
+        if not date_range:
+            print("未选择日期范围，程序退出。")
+            return
+        start_date_str, end_date_str = date_range
+        start_date_obj = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date_obj = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        days_in_range = (end_date_obj - start_date_obj).days + 1
+
+        db_handler = DatabaseHandler(db_config)
+        connection = db_handler.connect()
+        
+        print("正在执行数据库查询以计算所有设备误差...")
+
+        # --- 核心SQL查询 ---
+        # 注意：此查询适用于 MySQL 8.0+
+        sql_query = f"""
+        WITH LatestDevices AS (
+            -- 步骤1: 找出每个device_code对应的最新的、有效的device_id
+            SELECT 
+                id as device_id, 
+                device_code,
+                customer_id
+            FROM (
+                SELECT 
+                    id, 
+                    device_code, 
+                    customer_id,
+                    ROW_NUMBER() OVER (PARTITION BY device_code ORDER BY create_time DESC, id DESC) as rn
+                FROM t_device
+                WHERE del_status = 1 AND device_code IS NOT NULL AND device_code != ''
+            ) AS RankedDevices
+            WHERE rn = 1
+        ),
+        OrderData AS (
+            -- 步骤2: 只获取与最新device_id相关的订单数据，并计算上一条库存
+            SELECT
+                ld.device_code,
+                o.device_id,
+                o.order_time,
+                o.oil_val,
+                o.avai_oil,
+                LAG(o.avai_oil, 1, o.avai_oil) OVER (PARTITION BY o.device_id ORDER BY o.order_time) AS prev_avai_oil
+            FROM
+                t_device_oil_order o
+            JOIN
+                LatestDevices ld ON o.device_id = ld.device_id
+            WHERE
+                order_time >= '{start_date_str} 00:00:00' AND order_time <= '{end_date_str} 23:59:59'
+                AND status = 1 -- 正常订单
+        ),
+        DailyMetrics AS (
+            -- 步骤3.1: 按天聚合计算订单量和推断加油量
+            SELECT
+                device_id,
+                DATE(order_time) AS report_date,
+                SUM(oil_val) AS daily_order_total,
+                SUM(GREATEST(0, avai_oil - prev_avai_oil)) AS daily_refill
+            FROM
+                OrderData
+            GROUP BY
+                device_id, DATE(order_time)
+        ),
+        DailyEndInventory AS (
+            -- 步骤3.2: 获取每日的最后库存值
+            SELECT
+                device_id,
+                DATE(order_time) AS report_date,
+                avai_oil AS end_of_day_inventory
+            FROM (
+                SELECT
+                    device_id,
+                    order_time,
+                    avai_oil,
+                    ROW_NUMBER() OVER (PARTITION BY device_id, DATE(order_time) ORDER BY order_time DESC) as rn
+                FROM OrderData
+            ) AS RankedData
+            WHERE rn = 1
+        ),
+        DailyConsumption AS (
+            -- 步骤4: 聚合每日数据，并计算每日库存消耗
+            SELECT
+                dm.device_id,
+                dm.report_date,
+                SUM(dm.daily_order_total) AS daily_order_volume,
+                LAG(MAX(dei.end_of_day_inventory), 1, MAX(dei.end_of_day_inventory)) OVER (PARTITION BY dm.device_id ORDER BY dm.report_date) AS prev_day_end_inventory,
+                MAX(dei.end_of_day_inventory) AS current_day_end_inventory,
+                SUM(dm.daily_refill) AS daily_refill_volume
+            FROM
+                DailyMetrics dm
+            JOIN 
+                DailyEndInventory dei ON dm.device_id = dei.device_id AND dm.report_date = dei.report_date
+            GROUP BY
+                dm.device_id, dm.report_date
+        )
+        SELECT
+            ld.device_code,
+            c.customer_name,
+            SUM(dc.daily_order_volume) AS total_order_volume,
+            SUM(
+                (dc.prev_day_end_inventory - dc.current_day_end_inventory) + dc.daily_refill_volume
+            ) AS total_inventory_consumption
+        FROM
+            DailyConsumption dc
+        JOIN
+            LatestDevices ld ON dc.device_id = ld.device_id
+        JOIN
+            t_customer c ON ld.customer_id = c.id
+        WHERE c.status = 1 -- 筛选正常客户
+        GROUP BY
+            ld.device_code, c.customer_name
+        HAVING
+            (total_order_volume != 0 OR total_inventory_consumption != 0) AND -- 有订单或有消耗
+            ABS(total_inventory_consumption - total_order_volume) > 0.01 -- 筛选出有误差的设备
+        """
+
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(sql_query)
+        summary_data = cursor.fetchall()
+
+        # --- 单独查询离线事件 ---
+        offline_query = """
+        WITH LatestDevices AS (
+            -- 步骤1: 找出每个device_code对应的最新的、有效的device_id
+            SELECT 
+                id as device_id, 
+                device_code,
+                customer_id
+            FROM (
+                SELECT 
+                    id, 
+                    device_code, 
+                    customer_id,
+                    ROW_NUMBER() OVER (PARTITION BY device_code ORDER BY create_time DESC, id DESC) as rn
+                FROM t_device
+                WHERE del_status = 1 AND device_code IS NOT NULL AND device_code != ''
+            ) AS RankedDevices
+            WHERE rn = 1
+        )
+        SELECT
+            ld.device_code,
+            f.create_time,
+            f.recovery_time
+        FROM
+            t_device_fault_detail f
+        JOIN
+            LatestDevices ld ON f.device_id = ld.device_id
+        WHERE
+            f.fault_type = 9999
+            AND f.biz_type = 1
+            AND f.create_time <= %s
+            AND (f.recovery_time IS NULL OR f.recovery_time >= %s)
+        """
+        cursor.execute(offline_query, (f"{end_date_str} 23:59:59", f"{start_date_str} 00:00:00"))
+        offline_events = cursor.fetchall()
+        cursor.close()
+
+        # 将离线事件按device_code分组
+        from collections import defaultdict
+        offline_data_map = defaultdict(list)
+        for event in offline_events:
+            offline_data_map[event['device_code']].append(event)
+
+        if not summary_data:
+            print("\n分析完成，在指定日期范围内未发现任何存在消耗误差的设备。")
+            return
+
+        print(f"\n查询完成，共找到 {len(summary_data)} 个存在误差的设备。")
+
+        # 为每条记录添加查询天数和离线事件
+        for item in summary_data:
+            item['days_in_range'] = days_in_range
+            device_code = item.get('device_code')
+            item['offline_events'] = offline_data_map.get(device_code, [])
+
+        # 选择输出目录
+        output_dir = file_dialog_selector.choose_directory(title="选择保存目录（误差汇总报表）", initialdir=os.path.join(os.path.expanduser("~"), "Desktop"))
+        if not output_dir:
+            print("未选择输出目录，程序退出。")
+            return
+
+        # 生成报表
+        summary_generator = ConsumptionErrorSummaryGenerator()
+        output_filename = f"安卓设备消耗误差汇总_{start_date_str}_to_{end_date_str}.xlsx"
+        output_filepath = os.path.join(output_dir, output_filename)
+
+        summary_generator.generate_report(
+            summary_data=summary_data,
+            output_file_path=output_filepath,
+            start_date=start_date_str,
+            end_date=end_date_str
+        )
+
+    except mysql.connector.Error as db_err:
+        print(f"数据库查询执行失败: {db_err}")
+        print("请确认您的MySQL版本是否为 8.0 或更高。")
+        log_messages.append(f"数据库错误: {db_err}")
+    except Exception as e:
+        error_msg = f"生成误差汇总报表过程中发生未处理异常: {e}"
+        print(error_msg)
+        print(f"详细错误信息:\n{traceback.format_exc()}")
+        log_messages.append(error_msg)
+        _save_error_log(log_messages, {'error': e, 'traceback': traceback.format_exc()}, "错误日志")
+    finally:
+        if 'connection' in locals() and connection and connection.is_connected():
+            connection.close()
+            print("数据库连接已关闭。")
+        print("\n误差汇总报表生成功能执行完毕！")
 
 
 def generate_daily_consumption_error_reports(log_prefix="每日消耗误差处理日志", query_config=None):

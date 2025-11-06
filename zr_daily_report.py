@@ -25,7 +25,8 @@ from src.core.report_controller import (
     generate_customer_statement,
     generate_both_reports,
     generate_refueling_details,
-    generate_daily_consumption_error_reports,
+    generate_daily_consumption_error_reports, 
+    generate_error_summary_report,
     generate_monthly_consumption_error_reports
 )
 
@@ -69,6 +70,9 @@ def main():
         elif mode == 'monthly_consumption':
             # 调用每月消耗误差报表生成
             generate_monthly_consumption_error_reports()
+        elif mode == 'error_summary':
+            # 生成误差汇总报表
+            generate_error_summary_report()
                 
     except Exception as e:
         print(f"主程序执行过程中发生异常: {e}")
