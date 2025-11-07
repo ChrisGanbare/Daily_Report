@@ -98,7 +98,7 @@ data/
 
 # 配置文件（敏感信息）
 config/.env
-config/query_config.json
+frozen_dist/query_config.json
 
 # 错误日志文件
 错误日志_*.txt

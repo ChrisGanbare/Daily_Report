@@ -11,6 +11,137 @@
         "device_id_fallback_query": "SELECT id, customer_id FROM oil.t_device WHERE device_no = %s ORDER BY create_time DESC LIMIT 1",
         "inventory_query": "SELECT a.id AS '订单序号', a.order_time AS '加注时间', a.oil_type_id AS '油品序号', b.oil_model AS '油品名称', a.water AS '水油比：水值', a.oil AS '水油比：油值', a.water_val AS '水加注值', a.oil_val AS '油加注值', a.avai_oil AS '原油剩余量', a.avai_oil / 1000 AS '原油剩余比例', a.oil_set_val AS '油加设量', a.is_settlement AS '是否结算：1=待结算 2=待生效 3=已结算', a.fill_mode AS '加注模式：1=近程自动 2=远程自动 3=手动' FROM oil.t_device_oil_order a LEFT JOIN oil.t_oil_type b ON a.oil_type_id = b.id WHERE a.device_id = '{device_id}' AND a.status = 1 AND a.order_time >= '{start_date}' AND a.order_time < '{end_condition}' ORDER BY a.order_time DESC;",
         "customer_query": "SELECT customer_name FROM oil.t_customer WHERE id = %s",
-        "refueling_details_query": "SELECT a.id AS '订单序号', a.order_time AS '加注时间', a.oil_type_id AS '油品序号', b.oil_model AS '油品名称', a.water AS '水油比：水值', a.oil AS '水油比：油值', a.water_val AS '水加注值', a.oil_val AS '油加注值', a.avai_oil AS '原油剩余量', a.avai_oil / 1000 AS '原油剩余比例', a.oil_set_val AS '油加设量', a.is_settlement AS '是否结算：1=待结算 2=待生效 3=已结算', a.fill_mode AS '加注模式：1=近程自动 2=远程自动 3=手动' FROM oil.t_device_oil_order a LEFT JOIN oil.t_oil_type b ON a.oil_type_id = b.id WHERE a.device_id = '{device_id}' AND a.status = 1 AND a.order_time >= '{start_date}' AND a.order_time < '{end_condition}' ORDER BY a.order_time DESC;"
+        "refueling_details_query": "SELECT a.id AS '订单序号', a.order_time AS '加注时间', a.oil_type_id AS '油品序号', b.oil_model AS '油品名称', a.water AS '水油比：水值', a.oil AS '水油比：油值', a.water_val AS '水加注值', a.oil_val AS '油加注值', a.avai_oil AS '原油剩余量', a.avai_oil / 1000 AS '原油剩余比例', a.oil_set_val AS '油加设量', a.is_settlement AS '是否结算：1=待结算 2=待生效 3=已结算', a.fill_mode AS '加注模式：1=近程自动 2=远程自动 3=手动' FROM oil.t_device_oil_order a LEFT JOIN oil.t_oil_type b ON a.oil_type_id = b.id WHERE a.device_id = '{device_id}' AND a.status = 1 AND a.order_time >= '{start_date}' AND a.order_time < '{end_condition}' ORDER BY a.order_time DESC;",
+        "error_summary_main_query": """
+        WITH LatestDevices AS (
+            -- 步骤1: 找出每个device_code对应的最新的、有效的device_id
+            SELECT 
+                id as device_id, 
+                device_code,
+                customer_id
+            FROM (
+                SELECT 
+                    id, 
+                    device_code, 
+                    customer_id,
+                    ROW_NUMBER() OVER (PARTITION BY device_code ORDER BY create_time DESC, id DESC) as rn
+                FROM t_device
+                WHERE del_status = 1 AND device_code IS NOT NULL AND device_code != ''
+            ) AS RankedDevices
+            WHERE rn = 1
+        ),
+        OrderData AS (
+            -- 步骤2: 只获取与最新device_id相关的订单数据，并计算上一条库存
+            SELECT
+                ld.device_code,
+                o.device_id,
+                o.order_time,
+                o.oil_val,
+                o.avai_oil,
+                LAG(o.avai_oil, 1, o.avai_oil) OVER (PARTITION BY o.device_id ORDER BY o.order_time) AS prev_avai_oil
+            FROM
+                t_device_oil_order o
+            JOIN
+                LatestDevices ld ON o.device_id = ld.device_id
+            WHERE
+                order_time >= '{start_date_str} 00:00:00' AND order_time <= '{end_date_str} 23:59:59'
+                AND status = 1 -- 正常订单
+        ),
+        DailyMetrics AS (
+            -- 步骤3.1: 按天聚合计算订单量和推断加油量
+            SELECT
+                device_id,
+                DATE(order_time) AS report_date,
+                SUM(oil_val) AS daily_order_total,
+                SUM(GREATEST(0, avai_oil - prev_avai_oil)) AS daily_refill
+            FROM
+                OrderData
+            GROUP BY
+                device_id, DATE(order_time)
+        ),
+        DailyEndInventory AS (
+            -- 步骤3.2: 获取每日的最后库存值
+            SELECT
+                device_id,
+                DATE(order_time) AS report_date,
+                avai_oil AS end_of_day_inventory
+            FROM (
+                SELECT
+                    device_id,
+                    order_time,
+                    avai_oil,
+                    ROW_NUMBER() OVER (PARTITION BY device_id, DATE(order_time) ORDER BY order_time DESC) as rn
+                FROM OrderData
+            ) AS RankedDevices
+            WHERE rn = 1
+        ),
+        DailyConsumption AS (
+            -- 步骤4: 聚合每日数据，并计算每日库存消耗
+            SELECT
+                dm.device_id,
+                dm.report_date,
+                SUM(dm.daily_order_total) AS daily_order_volume,
+                LAG(MAX(dei.end_of_day_inventory), 1, MAX(dei.end_of_day_inventory)) OVER (PARTITION BY dm.device_id ORDER BY dm.report_date) AS prev_day_end_inventory,
+                MAX(dei.end_of_day_inventory) AS current_day_end_inventory,
+                SUM(dm.daily_refill) AS daily_refill_volume
+            FROM
+                DailyMetrics dm
+            JOIN 
+                DailyEndInventory dei ON dm.device_id = dei.device_id AND dm.report_date = dei.report_date
+            GROUP BY
+                dm.device_id, dm.report_date
+        )
+        SELECT
+            ld.device_code,
+            c.customer_name,
+            SUM(dc.daily_order_volume) AS total_order_volume,
+            SUM(
+                (dc.prev_day_end_inventory - dc.current_day_end_inventory) + dc.daily_refill_volume
+            ) AS total_inventory_consumption
+        FROM
+            DailyConsumption dc
+        JOIN
+            LatestDevices ld ON dc.device_id = ld.device_id
+        JOIN
+            t_customer c ON ld.customer_id = c.id
+        WHERE c.status = 1 -- 筛选正常客户
+        GROUP BY
+            ld.device_code, c.customer_name
+        HAVING
+            (total_order_volume != 0 OR total_inventory_consumption != 0) AND -- 有订单或有消耗
+            ABS(total_inventory_consumption - total_order_volume) > 0.01 -- 筛选出有误差的设备
+        """,
+        "error_summary_offline_query": """
+        WITH LatestDevices AS (
+            -- 步骤1: 找出每个device_code对应的最新的、有效的device_id
+            SELECT 
+                id as device_id, 
+                device_code,
+                customer_id
+            FROM (
+                SELECT 
+                    id, 
+                    device_code, 
+                    customer_id,
+                    ROW_NUMBER() OVER (PARTITION BY device_code ORDER BY create_time DESC, id DESC) as rn
+                FROM t_device
+                WHERE del_status = 1 AND device_code IS NOT NULL AND device_code != ''
+            ) AS RankedDevices
+            WHERE rn = 1
+        )
+        SELECT
+            ld.device_code,
+            f.create_time,
+            f.recovery_time,
+            f.biz_type
+        FROM
+            t_device_fault_detail f
+        JOIN
+            LatestDevices ld ON f.device_id = ld.device_id
+        WHERE
+            f.fault_type = 9999
+            AND f.create_time <= %s
+            AND (f.recovery_time IS NULL OR f.recovery_time >= %s)
+        """
     }
 }

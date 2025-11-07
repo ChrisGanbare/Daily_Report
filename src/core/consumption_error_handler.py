@@ -1,6 +1,6 @@
 import csv
 import os
-from datetime import timedelta
+from datetime import timedelta, datetime # 引入 datetime 类
 from collections import defaultdict
 
 from dateutil.relativedelta import relativedelta
@@ -682,7 +682,7 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
             ws.title = "设备误差汇总" # 主Sheet
 
             # 添加数据列标题
-            headers = [
+            headers = [ "序号",
                 "设备编码", "客户名称", "设备桶数", "订单总量(L)",
                 "[单桶]库存消耗(L)", "库存消耗总量(L)", "误差值总数(L)", "平均每日误差(L)", "误差百分比(%)",
                 "累计离线时长(小时)", "备注"
@@ -691,7 +691,7 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
             # --- 调整：先写入所有行内容，再设置格式 ---
             # 1. 准备所有行内容
             title_text = f"安卓设备消耗误差汇总报表 ({start_date} - {end_date})"
-            hint_text_1 = "1. 提示：C列【设备桶数】默认为1。如需更新，请在【非单桶设备编码】Sheet中填写设备编码和对应的桶数，此处的桶数将自动更新。"
+            hint_text_1 = "1. 提示：D列【设备桶数】默认为1。如需更新，请在【非单桶设备编码】Sheet中填写设备编码和对应的桶数，此处的桶数将自动更新。"
             explanation_text = "2. 误差百分比解读：正数(%)表示`库存消耗 > 订单总量`，可能为公司亏损；负数(%)表示`库存消耗 < 订单总量`，可能为客户亏损。"
             hint_text = f"{hint_text_1}\n{explanation_text}"
 
@@ -701,13 +701,13 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
             ws.append(headers)
 
             # 3. 设置标题行格式
-            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=11)
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=12)
             title_cell = ws.cell(row=1, column=1)
             title_cell.alignment = Alignment(horizontal="center")
             title_cell.font = title_font
 
             # 4. 设置提示行格式
-            ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=11)
+            ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=12)
             hint_cell = ws.cell(row=2, column=1)
             hint_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
             hint_cell.font = hint_font
@@ -722,28 +722,32 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
             data_start_row = 4 # 数据从第4行开始
             # 写入数据和公式
             for row_idx, device_data in enumerate(summary_data, start=data_start_row):
-                row_num = row_idx
-                ws.cell(row=row_num, column=1, value=device_data.get('device_code'))
-                ws.cell(row=row_num, column=2, value=device_data.get('customer_name'))
-                # C列: 设备桶数 - 使用VLOOKUP自动查找，找不到则默认为1
-                ws.cell(row=row_num, column=3, value=f"=IFERROR(VLOOKUP(A{row_num},'非单桶设备编码'!A:B,2,FALSE),1)")
-                ws.cell(row=row_num, column=4, value=device_data.get('total_order_volume'))
-                ws.cell(row=row_num, column=5, value=device_data.get('total_inventory_consumption'))
+                row_num = row_idx # 当前行号
+                # A列: 序号
+                seq_cell = ws.cell(row=row_num, column=1, value=row_idx - data_start_row + 1)
+                seq_cell.alignment = Alignment(horizontal="center", vertical="center")
+                ws.cell(row=row_num, column=2, value=device_data.get('device_code'))
+                ws.cell(row=row_num, column=3, value=device_data.get('customer_name'))
+                # D列: 设备桶数 - 使用VLOOKUP自动查找，找不到则默认为1
+                ws.cell(row=row_num, column=4, value=f"=IFERROR(VLOOKUP(B{row_num},'非单桶设备编码'!A:B,2,FALSE),1)")
+                ws.cell(row=row_num, column=5, value=device_data.get('total_order_volume'))
+                ws.cell(row=row_num, column=6, value=device_data.get('total_inventory_consumption'))
 
                 # --- 写入Excel公式 ---
-                # F列: 库存消耗总量 = C * E
-                ws.cell(row=row_num, column=6, value=f"=C{row_num}*E{row_num}")
-                # G列: 误差值总数 = F - D
-                ws.cell(row=row_num, column=7, value=f"=F{row_num}-D{row_num}")
-                # H列: 平均每日误差 = G / (查询天数)
+                # G列: 库存消耗总量 = D * F
+                ws.cell(row=row_num, column=7, value=f"=D{row_num}*F{row_num}")
+                # H列: 误差值总数 = G - E
+                ws.cell(row=row_num, column=8, value=f"=G{row_num}-E{row_num}")
+                # I列: 平均每日误差 = H / (查询天数)
                 days_in_range = device_data.get('days_in_range', 1)
-                ws.cell(row=row_num, column=8, value=f"=G{row_num}/{days_in_range}")
-                # I列: 误差百分比 = G / D
-                ws.cell(row=row_num, column=9, value=f'=IF(D{row_num}=0, 0, G{row_num}/D{row_num})')
-                ws.cell(row=row_num, column=9).number_format = '0.00%' # 设置为百分比格式
+                avg_error_cell = ws.cell(row=row_num, column=9, value=f"=H{row_num}/{days_in_range}")
+                avg_error_cell.number_format = '0.00'
+                # J列: 误差百分比 = H / E
+                ws.cell(row=row_num, column=10, value=f'=IF(E{row_num}=0, 0, H{row_num}/E{row_num})')
+                ws.cell(row=row_num, column=10).number_format = '0.00%' # 设置为百分比格式
 
                 # --- 处理离线时长和备注 ---
-                from datetime import datetime
+                # from datetime import datetime # 已在文件顶部引入，此处不再重复
                 offline_events = device_data.get('offline_events', [])
                 total_offline_hours = 0
                 remarks = []
@@ -751,14 +755,20 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
                 # 将日期字符串转换为datetime对象
                 start_date_dt = datetime.strptime(start_date, '%Y-%m-%d')
                 end_date_dt = datetime.strptime(end_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
+                
+                # 获取当前实际时间，用于精确计算“离线至今”
+                current_real_time = datetime.now()
 
                 for event in offline_events:
                     create_time = event.get('create_time')
+                    biz_type = event.get('biz_type')
                     recovery_time = event.get('recovery_time')
 
                     # 格式化备注文本
                     create_time_str = create_time.strftime('%Y-%m-%d %H:%M')
-                    if recovery_time:
+                    
+                    # biz_type = 2 代表已恢复
+                    if biz_type == 2 and recovery_time:
                         recovery_time_str = recovery_time.strftime('%Y-%m-%d %H:%M')
                         remarks.append(f"{create_time_str}离线至{recovery_time_str}恢复")
                         # 计算交集时长
@@ -766,16 +776,29 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
                         overlap_end = min(recovery_time, end_date_dt)
                         if overlap_end > overlap_start:
                             total_offline_hours += (overlap_end - overlap_start).total_seconds() / 3600
-                    else:
-                        remarks.append(f"{create_time_str}离线至今")
+                    # biz_type = 1 代表未恢复
+                    elif biz_type == 1:
+                        # 确定离线事件的有效结束时间，不超过当前实际时间，也不超过查询结束时间
+                        effective_end_time_for_event = min(current_real_time, end_date_dt)
+                        
+                        # 根据有效结束时间生成备注
+                        remark_end_time_str = ""
+                        if effective_end_time_for_event == current_real_time:
+                            remark_end_time_str = f"当前时间({current_real_time.strftime('%Y-%m-%d %H:%M')})"
+                        else: # effective_end_time_for_event == end_date_dt
+                            remark_end_time_str = f"查询结束({end_date_dt.strftime('%Y-%m-%d %H:%M')})"
+                        
+                        remarks.append(f"{create_time_str}离线至{remark_end_time_str}")
+                        
                         # 计算交集时长
                         overlap_start = max(create_time, start_date_dt)
-                        overlap_end = end_date_dt # 持续到查询结束
+                        overlap_end = effective_end_time_for_event # 使用有效结束时间进行计算
                         if overlap_end > overlap_start:
                             total_offline_hours += (overlap_end - overlap_start).total_seconds() / 3600
 
-                # J列: 累计离线时长
-                ws.cell(row=row_num, column=10, value=round(total_offline_hours, 2))
+
+                # K列: 累计离线时长
+                ws.cell(row=row_num, column=11, value=round(total_offline_hours, 2))
 
                 # --- 应用样式 ---
                 is_high_error = False
@@ -791,27 +814,30 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
                 except (ValueError, TypeError):
                     pass # 如果数据转换失败，则不应用高亮
                 
-                # K列: 备注
-                remark_cell = ws.cell(row=row_num, column=11)
+                # L列: 备注
+                remark_cell = ws.cell(row=row_num, column=12)
                 if remarks:
                     remark_cell.value = "\n".join(remarks)
                     remark_cell.font = warning_font
-                    remark_cell.alignment = Alignment(wrap_text=True, vertical='top')
+                    remark_cell.alignment = Alignment(vertical='top', wrap_text=True) # 重新启用自动换行
 
                 # 应用行样式
-                for col_num in range(1, 12):
+                for col_num in range(1, 13):
                     cell = ws.cell(row=row_num, column=col_num)
                     cell.border = thin_border
                     if (row_num - data_start_row) % 2 == 1: # 斑马纹
                         cell.fill = even_row_fill
                 
+                # 设置数据行固定高度，防止备注过长自动扩展
+                ws.row_dimensions[row_num].height = 15 # 设置一个适合单行文本的固定高度
+
                 # 如果误差高，只高亮误差百分比列
                 if is_high_error:
-                    ws.cell(row=row_num, column=9).fill = warning_fill
+                    ws.cell(row=row_num, column=10).fill = warning_fill
                         
             # --- 应用筛选功能 ---
             # 设置筛选范围，从表头行开始，到数据最后一行结束
-            ws.auto_filter.ref = f"A3:K{ws.max_row}"
+            ws.auto_filter.ref = f"A3:L{ws.max_row}"
 
             # --- 创建并设置 "非单桶设备编码" Sheet ---
             ws_update = wb.create_sheet("非单桶设备编码")
@@ -822,8 +848,8 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
             ws_update['A1'].font = title_font
             ws_update['A1'].alignment = Alignment(horizontal="center")
 
-            ws_update.append(["操作步骤：请在此表格的A列和B列粘贴或填写需要更新桶数的【设备编码】和【桶数】。"])
-            ws_update.merge_cells('A2:C2')
+            ws_update.append(["操作步骤：请在此表格的A列和B列粘贴或填写需要更新桶数的【设备编码】和【桶数】。C列备注会自动检查设备编码是否存在于主表中。"])
+            ws_update.merge_cells('A2:D2')
             ws_update['A2'].font = hint_font
             ws_update['A2'].alignment = Alignment(horizontal="center")
 
@@ -837,7 +863,7 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
 
             # 预设备注列的公式
             for i in range(4, 500): # 预设约500行公式
-                remark_formula = f'=IF(A{i}<>"", IF(COUNTIF(设备误差汇总!A:A, A{i})>0, "匹配设备正确，桶数已替换", "未匹配到此设备"), "")'
+                remark_formula = f'=IF(A{i}<>"", IF(COUNTIF(设备误差汇总!B:B, A{i})>0, "匹配设备正确，桶数已替换", "未匹配到此设备"), "")'
                 ws_update.cell(row=i, column=3, value=remark_formula)
 
             ws_update.column_dimensions['A'].width = 25
@@ -845,7 +871,7 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
             ws_update.column_dimensions['C'].width = 35
 
             # 调整列宽
-            column_widths = {'A': 20, 'B': 25, 'C': 12, 'D': 15, 'E': 20, 'F': 18, 'G': 15, 'H': 18, 'I': 15, 'J': 20, 'K': 30}
+            column_widths = {'A': 8, 'B': 20, 'C': 25, 'D': 12, 'E': 15, 'F': 20, 'G': 18, 'H': 15, 'I': 18, 'J': 15, 'K': 20, 'L': 30}
             for col_letter, width in column_widths.items():
                 ws.column_dimensions[col_letter].width = width
 
