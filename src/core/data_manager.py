@@ -278,7 +278,7 @@ class ReportDataManager:
         return result
 
 
-    def calculate_monthly_errors(self, raw_data, start_date=None, end_date=None, barrel_count=1):
+    def calculate_monthly_errors(self, raw_data, start_date, end_date, barrel_count=1):
         """
         计算每月消耗误差数据
 
@@ -286,7 +286,7 @@ class ReportDataManager:
             raw_data: 原始数据元组 (data, columns, raw_data)
             barrel_count (int): 油桶数量，默认为1
             start_date: 开始日期
-            end_date: 结束日期
+            end_date: 结束日期 (用于确定完整的月份范围)
 
         Returns:
             dict: 包含每月订单累积总量、中润亏损和客户亏损的数据
@@ -334,66 +334,88 @@ class ReportDataManager:
             'monthly_consumption': {}  # 每月消耗量
         }
 
-        # 按月份排序处理
-        sorted_months = sorted(monthly_data.keys())
+        # --- 关键优化：生成完整的月份范围，以处理数据缺失的月份 ---
+        # 解析传入的字符串日期
+        try:
+            start_dt = datetime.datetime.strptime(start_date, '%Y-%m-%d')
+            end_dt = datetime.datetime.strptime(end_date, '%Y-%m-%d')
+        except (ValueError, TypeError):
+            # 如果格式不匹配或类型错误，尝试其他常用格式
+            start_dt = parse_date(start_date)
+            end_dt = parse_date(end_date)
 
-        for i, month in enumerate(sorted_months):
-            month_data = monthly_data[month]
+        sorted_months = []
+        current_month = start_dt.replace(day=1)
+        while current_month <= end_dt:
+            sorted_months.append(current_month.strftime("%Y-%m"))
+            # 移动到下一个月的第一天
+            current_month = (current_month + datetime.timedelta(days=32)).replace(day=1)
 
-            # 计算每月订单累积总量
-            monthly_order_total = sum(item['oil_val'] for item in month_data)
-            result['monthly_order_totals'][month] = monthly_order_total
+        previous_month_end_inventory = 0
 
-            # 获取当月开始和结束的原油剩余量
-            if month_data:
-                # 按照时间排序获取开始和结束的原油剩余量
-                sorted_month_data = sorted(month_data, key=lambda x: x['order_time'])
-                start_avai_oil = sorted_month_data[0]['avai_oil']    # 最早时间的原油剩余量作为当月开始值
-                end_avai_oil = sorted_month_data[-1]['avai_oil']  # 最晚时间的原油剩余量作为当月结束值
+        # 关键修复：正确初始化第一个月的“上月期末库存”
+        if sorted_months:
+            first_month_str = sorted_months[0]
+            first_month_date = datetime.datetime.strptime(first_month_str, "%Y-%m").date()
+            
+            # 查找在第一个月之前的所有记录
+            previous_records = [
+                dict(zip(columns, r)) for r in raw_data_content
+                if (isinstance(dict(zip(columns, r)).get("加注时间"), datetime.datetime) and
+                    dict(zip(columns, r)).get("加注时间").date() < first_month_date.replace(day=1))
+            ]
+            if previous_records:
+                # 如果有之前的数据，取最晚的一条记录作为基准库存
+                previous_records.sort(key=lambda x: x['加注时间'])
+                previous_month_end_inventory = float(previous_records[-1].get("原油剩余量", 0) or 0)
+            else:
+                # 如果没有，则使用第一个月最早的一条记录作为基准库存（备用方案）
+                first_month_data = sorted(monthly_data[first_month_str], key=lambda x: x['order_time'])
+                if first_month_data:
+                    previous_month_end_inventory = first_month_data[0]['avai_oil']
 
-                # 计算库存变化量
-                # 正确的计算应该是: 结束值 - 开始值
-                # 如果结果为正，表示库存增加(加油)；如果为负，表示库存减少(消耗)
-                inventory_change = end_avai_oil - start_avai_oil
+        for month in sorted_months:
+            # 如果这个月在原始数据中不存在，则所有值都为0，然后继续下一个月
+            if month not in monthly_data:
+                result['monthly_order_totals'][month] = 0
+                result['monthly_consumption'][month] = {'value': 0}
+                continue
 
-                # 根据新的逻辑计算每月消耗量
-                monthly_consumption = 0
+            month_data = sorted(monthly_data[month], key=lambda x: x['order_time'])
 
-                # 如果原油剩余量上升（说明加油了）
-                if inventory_change > 0:
-                    # 如果当月有订单，则消耗量等于订单总量
-                    if monthly_order_total > 0:
-                        monthly_consumption = monthly_order_total
-                    # 如果当月没有订单，则消耗量为0
-                    else:
-                        monthly_consumption = 0
-                # 如果原油剩余量下降或持平（正常消耗）
-                else:
-                    # 消耗量应该是库存减少的绝对值
-                    monthly_consumption = abs(inventory_change) * barrel_count
+            # 当月期初库存 = 上月期末库存
+            start_inventory = previous_month_end_inventory
+            # 当月期末库存 = 当月最晚记录的库存
+            end_inventory = month_data[-1]['avai_oil']
 
-                # 存储每月消耗量
-                result['monthly_consumption'][month] = {
-                    'value': monthly_consumption,
-                    'inventory_change': inventory_change,
-                    'order_total': monthly_order_total
-                }
+            # 计算当月总加油量（推断）
+            total_refill_this_month = 0
+            last_inventory_point = start_inventory
+            for record in month_data:
+                current_inventory_point = record['avai_oil']
+                if current_inventory_point > last_inventory_point:
+                    total_refill_this_month += (current_inventory_point - last_inventory_point)
+                last_inventory_point = current_inventory_point
 
-                # 计算误差
-                difference = monthly_consumption - monthly_order_total
+            # 计算库存消耗总量 (核心公式)
+            inventory_consumption = ((start_inventory - end_inventory) + total_refill_this_month) * barrel_count
 
-                if difference > 0:  # 库存误差（消耗量>订单量）
-                    result['monthly_shortage_errors'][month] = {
-                        'value': difference,
-                        'inventory_change': inventory_change,
-                        'order_total': monthly_order_total
-                    }
-                elif difference < 0:  # 订单误差（订单量>消耗量）
-                    result['monthly_excess_errors'][month] = {
-                        'value': abs(difference),
-                        'inventory_change': inventory_change,
-                        'order_total': monthly_order_total
-                    }
+            # 计算订单总量
+            order_total = sum(item['oil_val'] for item in month_data)
+
+            # 存储结果
+            result['monthly_order_totals'][month] = order_total
+            result['monthly_consumption'][month] = {'value': inventory_consumption}
+
+            # 计算误差
+            difference = inventory_consumption - order_total
+            if difference > 0:
+                result['monthly_shortage_errors'][month] = {'value': difference}
+            elif difference < 0:
+                result['monthly_excess_errors'][month] = {'value': abs(difference)}
+
+            # 更新上月期末库存，为下个月做准备
+            previous_month_end_inventory = end_inventory
 
         return result
 

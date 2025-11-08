@@ -530,8 +530,8 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             chart.x_axis.textRotation = 0  # 将文本旋转角度设为0度（水平显示）
 
             # 设置数据范围（现在只有4列数据）
-            data_range = Reference(
-                ws, min_col=2, min_row=2, max_col=5, max_row=len(complete_inventory_data) + 2
+            # 调整数据范围，只包含“订单累积总量”和“库存消耗总量”两列
+            data_range = Reference(ws, min_col=2, min_row=2, max_col=3, max_row=len(complete_inventory_data) + 2
             )
             months = Reference(ws, min_col=1, min_row=3, max_row=len(complete_inventory_data) + 2)
 
@@ -549,16 +549,6 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             chart.series[1].graphicalProperties = GraphicalProperties()
             chart.series[1].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="800080") # 设置线条属性
             chart.series[1].marker = Marker(symbol="circle", size=8)
-            
-            # 中润亏损 - 红色
-            chart.series[2].graphicalProperties = GraphicalProperties()
-            chart.series[2].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FF0000") # 设置线条属性
-            chart.series[2].marker = Marker(symbol="circle", size=8)
-            
-            # 客户亏损 - 橙色
-            chart.series[3].graphicalProperties = GraphicalProperties()
-            chart.series[3].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="FFA500") # 设置线条属性
-            chart.series[3].marker = Marker(symbol="circle", size=8)
 
             # 恢复图表到初始大小
             chart.width = 30

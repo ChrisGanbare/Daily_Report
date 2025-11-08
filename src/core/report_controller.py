@@ -112,29 +112,6 @@ def _check_device_dates_consistency(devices_data):
     return True, ""
 
 
-def _load_config():
-    """
-    加载配置文件，只加载明文配置文件
-    """
-    CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
-    config_file_plain = os.path.join(CONFIG_DIR, 'query_config.json')
-    
-    # 只尝试加载明文配置文件
-    if os.path.exists(config_file_plain):
-        try:
-            print(f"尝试读取明文配置文件: {config_file_plain}")
-            with open(config_file_plain, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            print("成功加载明文配置文件")
-            return config
-        except Exception as e:
-            print(f"加载明文配置文件失败: {e}")
-            print(f"详细错误信息:\n{traceback.format_exc()}")
-            raise Exception("无法加载配置文件")
-    
-    raise Exception("未找到有效的配置文件")
-
-
 def generate_error_summary_report(log_prefix="误差汇总处理日志", query_config=None):
     """
     生成所有设备的消耗误差汇总报表 (SQL核心版)。
@@ -149,7 +126,23 @@ def generate_error_summary_report(log_prefix="误差汇总处理日志", query_c
 
     try:
         if query_config is None:
-            query_config = _load_config()
+            # --- 修改：将专用的配置加载逻辑移到此处 ---
+            CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
+            config_file_plain = os.path.join(CONFIG_DIR, 'query_config.json')
+            error_summary_config_file = os.path.join(CONFIG_DIR, 'error_summary_query.json')
+            
+            with open(config_file_plain, 'r', encoding='utf-8') as f:
+                query_config = json.load(f)
+            
+            # 加载并合并误差汇总报表的SQL模板
+            if os.path.exists(error_summary_config_file):
+                print(f"尝试读取误差汇总SQL配置文件: {error_summary_config_file}")
+                with open(error_summary_config_file, 'r', encoding='utf-8') as f:
+                    error_summary_config = json.load(f)
+                
+                if 'sql_templates' in query_config and 'sql_templates' in error_summary_config:
+                    query_config['sql_templates'].update(error_summary_config['sql_templates'])
+                    print("成功合并误差汇总SQL模板")
 
         db_config = query_config.get('db_config', {}) # type: ignore
         sql_templates = query_config.get('sql_templates', {}) # type: ignore
@@ -450,7 +443,7 @@ def generate_daily_consumption_error_reports(log_prefix="每日消耗误差处�
                 inventory_data = data_manager.extract_inventory_data(raw_data)
                 
                 # 计算误差数据
-                barrel_count = int(device.get('barrel_count', 1))
+                barrel_count = int(device.get('barrel_count') or 1)
                 error_data = data_manager.calculate_daily_errors(raw_data, barrel_count)
                 
                 if not inventory_data:
@@ -676,6 +669,25 @@ def generate_monthly_consumption_error_reports(log_prefix="每月消耗误差处
         # 验证设备信息
         valid_devices = []
         for device in devices:
+            # --- 新增：检查月度报表的日期范围 ---
+            if "monthly_consumption" in "monthly_consumption": # 确保这是月度报表流程
+                try:
+                    from dateutil.relativedelta import relativedelta
+                    from src.utils.date_utils import parse_date
+                    start_dt = parse_date(device['start_date'])
+                    end_dt = parse_date(device['end_date'])
+                    
+                    # 计算日期差异是否超过12个月
+                    if end_dt > start_dt + relativedelta(months=12):
+                        error_msg = f"  错误：设备 {device['device_code']} 的日期范围超过12个月，无法生成月度报表。"
+                        print(error_msg)
+                        log_messages.append(error_msg)
+                        failed_devices.append(device['device_code'])
+                        continue # 跳过此设备
+                except (ValueError, TypeError) as e:
+                    # 日期格式错误等问题会在 validate_csv_data 中处理，这里只关注范围
+                    pass
+            # ------------------------------------
             if validate_csv_data(device, "monthly_consumption"):
                 valid_devices.append(device)
             else:
@@ -782,7 +794,7 @@ def generate_monthly_consumption_error_reports(log_prefix="每月消耗误差处
                 inventory_data = data_manager.extract_inventory_data(raw_data)
                 
                 # 计算误差数据
-                barrel_count = int(device.get('barrel_count', 1))
+                barrel_count = int(device.get('barrel_count') or 1)
                 error_data = data_manager.calculate_monthly_errors(raw_data, start_date, end_date, barrel_count)
                 
                 if not inventory_data:
@@ -2573,42 +2585,27 @@ def _check_device_dates_consistency(devices_data):
     
     return True, ""
 
+
 def _load_config():
     """
     加载配置文件，只加载明文配置文件
-    并合并特定功能的SQL模板。
     """
     CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
     config_file_plain = os.path.join(CONFIG_DIR, 'query_config.json')
-    error_summary_config_file = os.path.join(CONFIG_DIR, 'error_summary_query.json')
     
     config = {}
     # 加载主配置文件
     if os.path.exists(config_file_plain):
         try:
-            print(f"尝试读取明文配置文件: {config_file_plain}")
+            # print(f"尝试读取明文配置文件: {config_file_plain}") # 在常规流程中不再打印
             with open(config_file_plain, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-            print("成功加载明文配置文件")
+            # print("成功加载明文配置文件")
         except Exception as e:
             print(f"加载明文配置文件失败: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
             raise Exception("无法加载配置文件")
     else:
         raise Exception("未找到主配置文件 query_config.json")
-
-    # 加载并合并误差汇总报表的SQL模板
-    if os.path.exists(error_summary_config_file):
-        try:
-            print(f"尝试读取误差汇总SQL配置文件: {error_summary_config_file}")
-            with open(error_summary_config_file, 'r', encoding='utf-8') as f:
-                error_summary_config = json.load(f)
-            
-            # 合并 sql_templates
-            if 'sql_templates' in config and 'sql_templates' in error_summary_config:
-                config['sql_templates'].update(error_summary_config['sql_templates'])
-                print("成功合并误差汇总SQL模板")
-        except Exception as e:
-            print(f"加载或合并误差汇总SQL配置文件失败: {e}")
     
     return config
