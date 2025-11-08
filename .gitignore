@@ -142,3 +142,4 @@ release/
 !zr_daily_report_portable/install.bat
 !zr_daily_report_portable/run_report.bat
 !run_report.bat
+!config/error_summary_query.json

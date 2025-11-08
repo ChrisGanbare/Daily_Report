@@ -2576,21 +2576,39 @@ def _check_device_dates_consistency(devices_data):
 def _load_config():
     """
     加载配置文件，只加载明文配置文件
+    并合并特定功能的SQL模板。
     """
     CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
     config_file_plain = os.path.join(CONFIG_DIR, 'query_config.json')
+    error_summary_config_file = os.path.join(CONFIG_DIR, 'error_summary_query.json')
     
-    # 只尝试加载明文配置文件
+    config = {}
+    # 加载主配置文件
     if os.path.exists(config_file_plain):
         try:
             print(f"尝试读取明文配置文件: {config_file_plain}")
             with open(config_file_plain, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             print("成功加载明文配置文件")
-            return config
         except Exception as e:
             print(f"加载明文配置文件失败: {e}")
             print(f"详细错误信息:\n{traceback.format_exc()}")
             raise Exception("无法加载配置文件")
+    else:
+        raise Exception("未找到主配置文件 query_config.json")
+
+    # 加载并合并误差汇总报表的SQL模板
+    if os.path.exists(error_summary_config_file):
+        try:
+            print(f"尝试读取误差汇总SQL配置文件: {error_summary_config_file}")
+            with open(error_summary_config_file, 'r', encoding='utf-8') as f:
+                error_summary_config = json.load(f)
+            
+            # 合并 sql_templates
+            if 'sql_templates' in config and 'sql_templates' in error_summary_config:
+                config['sql_templates'].update(error_summary_config['sql_templates'])
+                print("成功合并误差汇总SQL模板")
+        except Exception as e:
+            print(f"加载或合并误差汇总SQL配置文件失败: {e}")
     
-    raise Exception("未找到有效的配置文件")
+    return config
