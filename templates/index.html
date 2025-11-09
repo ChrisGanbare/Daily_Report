@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZR Daily Report - 新一代报表系统</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ZR Daily Report - 新一代报表系统</h1>
+        </header>
+
+        <main>
+            <section class="step">
+                <h2>第一步：选择报表类型及日期</h2>
+                <div class="param-grid">
+                    <label for="report-type">报表类型:</label>
+                    <select id="report-type">
+                        <option value="" disabled selected>请选择报表类型</option>
+                        <option value="daily_consumption">每日消耗误差报表</option>
+                        <option value="monthly_consumption">每月消耗误差报表</option>
+                        <option value="error_summary">误差汇总报表</option>
+                        <option value="inventory">库存报表</option>
+                        <option value="statement">客户对账单</option>
+                        <option value="refueling">加注明细</option>
+                    </select>
+
+                    <label for="start-date">开始日期:</label>
+                    <input type="date" id="start-date">
+
+                    <label for="end-date">结束日期:</label>
+                    <input type="date" id="end-date">
+                </div>
+            </section>
+
+            <section class="step">
+                <h2>第二步：选择设备</h2>
+                <div class="search-filters">
+                    <input type="text" id="search-customer" placeholder="按客户名称筛选...">
+                    <input type="text" id="search-device" placeholder="按设备编码筛选...">
+                </div>
+                <div id="device-list-container">
+                    <div id="device-list-header">
+                        <input type="checkbox" id="select-all-devices">
+                        <label for="select-all-devices">全选/取消全选</label>
+                        <span id="selected-device-count" style="margin-left: auto; font-weight: normal; color: #555;">(已选 0 台)</span>
+                    </div>
+                    <div id="device-list">
+                        <!-- 设备列表将由JS动态填充 -->
+                    </div>
+                    <div id="loading-spinner" class="hidden"></div>
+                </div>
+            </section>
+
+            <section class="step">
+                <h2>第三步：生成报表</h2>
+                <button id="generate-btn">生成并下载报表</button>
+                <p id="status-message"></p>
+            </section>
+        </main>
+
+        <footer>
+            <p>ZR Daily Report - 版本 2.0</p>
+        </footer>
+    </div>
+
+    <script src="/static/main.js"></script>
+</body>
+</html>

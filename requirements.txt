@@ -1,11 +1,16 @@
-# ZR Daily Report 项目依赖配置文件
-# 此文件包含项目运行、测试、开发所需的所有依赖包
+# ZR Daily Report Project Dependencies (v2 - Web App)
 
-# 核心运行依赖
+# --- Core Runtime Dependencies ---
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+SQLAlchemy==2.0.31
+aiomysql==0.2.0
+pandas
 openpyxl==3.1.0
-mysql-connector-python==8.0.33
 
-# 测试依赖
+# --- Testing Dependencies ---
 pytest==8.3.2
 pytest-cov==5.0.0
 pytest-asyncio==0.21.1
@@ -13,17 +18,17 @@ httpx==0.25.2
 mock>=4.0.0
 tox>=3.25.0
 
-# 代码质量检查工具
+# --- Code Quality Tools ---
 black==24.8.0
 mypy>=0.971
 isort==5.12.0
 
-# 开发工具
+# --- Development & Packaging Tools ---
 pre-commit>=3.3.0
 build>=0.10.0
 twine>=4.0.0
 pyinstaller>=5.0.0
 
-# 文档生成工具
+# --- Documentation Tools ---
 mkdocs==1.5.3
 mkdocs-material==9.4.8

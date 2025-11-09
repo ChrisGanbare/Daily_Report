@@ -1,0 +1,281 @@
+/* General Body Styles */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f4f7f9;
+    color: #333;
+    margin: 0;
+    padding: 20px;
+    line-height: 1.6;
+}
+
+/* Container */
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: #fff;
+    padding: 20px 40px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Header */
+header h1 {
+    color: #2c3e50;
+    text-align: center;
+    margin-bottom: 30px;
+    font-weight: 600;
+}
+
+/* Steps */
+.step {
+    margin-bottom: 30px;
+    border-top: 1px solid #e0e0e0;
+    padding-top: 20px;
+}
+
+.step h2 {
+    color: #34495e;
+    font-size: 1.2em;
+    margin-bottom: 15px;
+}
+
+/* Search Filters */
+.search-filters {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.search-filters input[type="text"] {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1em;
+}
+
+/* --- Device List (Key Changes for Sticky Header & Smooth Loading) --- */
+#device-list-container {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    max-height: 300px;
+    display: flex;
+    flex-direction: column;
+    position: relative; /* Crucial for overlay and spinner positioning */
+}
+
+/* New Overlay for loading state */
+#device-list-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.7);
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    pointer-events: none; /* Allow clicks to pass through when invisible */
+    z-index: 15; /* Must be above list, below spinner */
+}
+
+#device-list-container.loading::after {
+    opacity: 1;
+}
+
+#device-list-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+#device-list-header label {
+    margin-left: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* New: Header for barrel count column */
+#barrel-count-header {
+    margin-left: auto; /* Push to the right */
+    font-weight: 600;
+    width: 100px; /* Fixed width for alignment */
+    text-align: center;
+    flex-shrink: 0;
+}
+
+#device-list {
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.device-item {
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.device-item:last-child {
+    border-bottom: none;
+}
+
+.device-item:hover {
+    background-color: #f0f8ff;
+}
+
+.device-item input[type="checkbox"] {
+    margin-right: 10px;
+}
+
+.device-item .device-name {
+    font-weight: 500;
+    flex-basis: 120px; /* Give some fixed width */
+    flex-shrink: 0;
+}
+
+.device-item .customer-name {
+    color: #7f8c8d;
+    margin-left: 10px; /* Add some margin */
+    flex-grow: 1; /* Allow customer name to take up space */
+    font-size: 0.9em;
+}
+
+/* New: Styles for individual barrel count control */
+.barrel-count-control {
+    display: flex;
+    align-items: center;
+    margin-left: auto; /* Push to the right */
+    width: 100px; /* Fixed width for alignment */
+    flex-shrink: 0;
+}
+
+.barrel-count-control button {
+    width: 25px;
+    height: 25px;
+    background-color: #eee;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.barrel-count-control button:hover {
+    background-color: #ddd;
+}
+
+.barrel-count-control input[type="number"] {
+    width: 40px;
+    text-align: center;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin: 0 5px;
+    -moz-appearance: textfield; /* Hide arrows in Firefox */
+    flex-shrink: 0;
+}
+
+/* Hide arrows in Chrome, Safari, Edge */
+.barrel-count-control input[type="number"]::-webkit-outer-spin-button,
+.barrel-count-control input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+
+/* Parameter Grid */
+.param-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 15px;
+    align-items: center;
+}
+
+.param-grid label {
+    font-weight: 500;
+    text-align: right;
+}
+
+.param-grid input,
+.param-grid select {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1em;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Button */
+#generate-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #fff;
+    background-color: #3498db;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#generate-btn:hover {
+    background-color: #2980b9;
+}
+
+#generate-btn:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+}
+
+/* Status & Loading */
+#status-message {
+    text-align: center;
+    margin-top: 15px;
+    font-weight: 500;
+    min-height: 1.2em;
+}
+
+#loading-spinner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    z-index: 20; /* Must be on top of the overlay */
+}
+
+.hidden {
+    display: none;
+}
+
+@keyframes spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    margin-top: 30px;
+    color: #95a5a6;
+    font-size: 0.9em;
+}

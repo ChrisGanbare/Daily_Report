@@ -9,7 +9,7 @@
       <excludeFolder url="file://$MODULE_DIR$/htmlcov" />
       <excludeFolder url="file://$MODULE_DIR$/zr_daily_report.egg-info" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.13 (Daily_Report)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.10 (Daily_Report)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PackageRequirementsSettings">

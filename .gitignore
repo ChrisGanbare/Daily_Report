@@ -1,145 +1,41 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
 *.egg
-MANIFEST
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-tests/htmlcov/
-.coverage
-tests/.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
+*.egg-info/
+.eggs/
 .pytest_cache/
+.mypy_cache/
+.tox/
+.venv/
+venv/
 
-# Excluded modules
-src/api/
-src/core/async_processor.py
-src/core/cache_handler.py
-src/core/dependency_injection.py
-src/monitoring/progress_monitor.py
-src/web/app.py
-
-# Documentation build directory
-site/
-
-# MkDocs
-mkdocs.yml
-
-# Local configuration files
-.env
-config/*.json
-*.key
-*.pem
-
-# IDE files
+# IDEs
 .idea/
 .vscode/
 *.swp
 *.swo
 
+# Build artifacts
+build/
+dist/
+*.spec  # PyInstaller spec files
+*.zip   # Generated zip packages
+*.tar.gz
+
 # OS generated files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Environment files
-.venv/
-venv/
-ENV/
-
-# Test output files
-test_output/
-
-# Data files
-data/
-
-# 配置文件（敏感信息）
-config/.env
-frozen_dist/query_config.json
-
-# 错误日志文件
-错误日志_*.txt
-
-# Coverage reports
-coverage_html_report/
-.coveragerc
-
-# Test results
-test-reports/
-junit-*.xml
-
-# Pytest cache
-pytest_cache/
-
-# MyPy cache
-.mypy_cache/
-
-# Tox test environments
-.tox/
-
-# Temporary files
+# Logs and temporary files
+*.log
 *.tmp
 *.temp
 *~
-.swp
 
-# Package files
-*.tar.gz
-*.zip
-
-# 打包生成的目录和文件
-zr-daily-report-portable/
-zr-daily-report-v0.7/
-zr_daily_report_v0.7/
-releases/
-release/
-
-# Batch files exception - allow tracking of specific batch files
-!important.bat
-!zr_daily_report_portable/install.bat
-!zr_daily_report_portable/run_report.bat
-!run_report.bat
+# Configuration (sensitive information)
+.env
+# Explicitly include essential config files that are part of the project's source
+!config/query_config.json
 !config/error_summary_query.json
