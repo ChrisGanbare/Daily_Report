@@ -101,15 +101,6 @@ header h1 {
     cursor: pointer;
 }
 
-/* New: Header for barrel count column */
-#barrel-count-header {
-    margin-left: auto; /* Push to the right */
-    font-weight: 600;
-    width: 100px; /* Fixed width for alignment */
-    text-align: center;
-    flex-shrink: 0;
-}
-
 #device-list {
     overflow-y: auto;
     flex-grow: 1;
@@ -138,59 +129,12 @@ header h1 {
 
 .device-item .device-name {
     font-weight: 500;
-    flex-basis: 120px; /* Give some fixed width */
-    flex-shrink: 0;
 }
 
 .device-item .customer-name {
     color: #7f8c8d;
-    margin-left: 10px; /* Add some margin */
-    flex-grow: 1; /* Allow customer name to take up space */
+    margin-left: auto;
     font-size: 0.9em;
-}
-
-/* New: Styles for individual barrel count control */
-.barrel-count-control {
-    display: flex;
-    align-items: center;
-    margin-left: auto; /* Push to the right */
-    width: 100px; /* Fixed width for alignment */
-    flex-shrink: 0;
-}
-
-.barrel-count-control button {
-    width: 25px;
-    height: 25px;
-    background-color: #eee;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.barrel-count-control button:hover {
-    background-color: #ddd;
-}
-
-.barrel-count-control input[type="number"] {
-    width: 40px;
-    text-align: center;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    margin: 0 5px;
-    -moz-appearance: textfield; /* Hide arrows in Firefox */
-    flex-shrink: 0;
-}
-
-/* Hide arrows in Chrome, Safari, Edge */
-.barrel-count-control input[type="number"]::-webkit-outer-spin-button,
-.barrel-count-control input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
 }
 
 
@@ -217,7 +161,7 @@ header h1 {
     box-sizing: border-box;
 }
 
-/* Button */
+/* Button Styles */
 #generate-btn {
     display: block;
     width: 100%;
@@ -229,16 +173,29 @@ header h1 {
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    transition: background-color 0.3s;
+    transition: background-color 0.3s, transform 0.1s, box-shadow 0.1s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    top: 0;
 }
 
 #generate-btn:hover {
     background-color: #2980b9;
 }
 
+/* New: Active (pressed) state for the button */
+#generate-btn:active {
+    background-color: #2471a3;
+    transform: translateY(1px); /* Move button down slightly */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); /* Reduce shadow */
+}
+
 #generate-btn:disabled {
     background-color: #bdc3c7;
     cursor: not-allowed;
+    opacity: 0.7; /* Make it look more disabled */
+    transform: none; /* Disable active effects */
+    box-shadow: none; /* Disable shadow */
 }
 
 /* Status & Loading */

@@ -12,8 +12,11 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from pathlib import Path
 import multiprocessing
-import os # 导入os
-from starlette.background import BackgroundTask # 导入BackgroundTask
+import os
+from starlette.background import BackgroundTask
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+import json # 导入json
 
 from src.config import settings
 from src.logger import logger
@@ -81,10 +84,23 @@ async def generate_report_endpoint(
     """
     接收前端请求，调度并生成相应的报表。
     """
-    report_path = None # 初始化report_path
+    # --- 后端验证 ---
+    try:
+        start_dt = datetime.strptime(request.start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(request.end_date, '%Y-%m-%d')
+        
+        if request.report_type == 'daily_consumption':
+            if end_dt > start_dt + relativedelta(months=2):
+                raise HTTPException(status_code=400, detail="每日消耗误差报表查询日期跨度不能超过两个月。")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="日期格式无效，请使用 YYYY-MM-DD 格式。")
+
+    report_path = None
+    warnings = []
     try:
         logger.info(f"收到报表生成请求: {request.model_dump()}")
-        report_path = await service.generate_report(
+        # 正确解包元组
+        report_path, warnings = await service.generate_report(
             report_type=request.report_type,
             devices=request.devices,
             start_date=request.start_date,
@@ -93,23 +109,30 @@ async def generate_report_endpoint(
         
         media_type = 'application/zip' if report_path.suffix == '.zip' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         
-        # 创建一个后台任务来删除文件
         cleanup_task = BackgroundTask(os.remove, report_path)
+        
+        # 创建响应头
+        headers = {}
+        if warnings:
+            # 将警告信息编码后放入自定义头
+            # 注意：HTTP头不支持非ASCII字符，需要编码
+            warnings_json = json.dumps(warnings)
+            headers['X-Report-Warnings'] = warnings_json
         
         return FileResponse(
             path=report_path,
             media_type=media_type,
             filename=report_path.name,
-            background=cleanup_task, # 将清理任务传递给FileResponse
+            background=cleanup_task,
+            headers=headers, # 添加自定义头
         )
     except (ValueError, NotImplementedError) as e:
         logger.warning(f"生成报表时发生业务错误或功能未实现: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"API /api/reports/generate 发生未知错误: {e}", exc_info=True)
-        # 如果在生成文件过程中出错，但文件已创建，也尝试清理
-        if report_path and os.path.exists(report_path):
-            os.remove(report_path)
+        if report_path and os.path.exists(str(report_path)): # 确保路径是字符串
+            os.remove(str(report_path))
         raise HTTPException(status_code=500, detail="生成报表时发生服务器内部错误")
 
 
@@ -130,6 +153,5 @@ def main():
     )
 
 if __name__ == "__main__":
-    # 为PyInstaller打包的应用添加multiprocessing支持
     multiprocessing.freeze_support()
     main()

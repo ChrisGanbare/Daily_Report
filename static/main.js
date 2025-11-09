@@ -13,7 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectAllCheckbox = document.getElementById('select-all-devices');
     const selectedDeviceCountSpan = document.getElementById('selected-device-count');
     
-    // 检查所有必需的DOM元素是否存在
     const requiredElements = [
         { name: 'device-list', element: deviceList },
         { name: 'device-list-container', element: deviceListContainer },
@@ -123,7 +122,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const handleGenerateReport = async () => {
-        // 安全检查：确保DOM元素存在
         if (!reportTypeSelect || !startDateInput || !endDateInput) {
             setStatus('页面元素加载异常，请刷新页面重试。', true);
             return;
@@ -142,9 +140,21 @@ document.addEventListener('DOMContentLoaded', () => {
             setStatus('请选择开始和结束日期。', true);
             return;
         }
-        if (new Date(startDate) > new Date(endDate)) {
+        
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        if (start > end) {
             setStatus('开始日期不能晚于结束日期。', true);
             return;
+        }
+
+        // 新增：每日消耗误差报表日期范围验证
+        if (reportType === 'daily_consumption') {
+            const monthDiff = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+            if (monthDiff >= 2) {
+                setStatus('每日消耗误差报表查询日期跨度不能超过两个月。', true);
+                return;
+            }
         }
 
         const selectedCheckboxes = deviceList.querySelectorAll('.device-checkbox:checked');
@@ -160,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const requestBody = {
             report_type: reportType,
-            devices: selectedDevices, // Now sending a simple array of device codes
+            devices: selectedDevices,
             start_date: startDate,
             end_date: endDate,
         };
@@ -181,21 +191,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const contentDisposition = response.headers.get('content-disposition');
             let filename = `report.zip`;
             if (contentDisposition) {
-                // 优先处理 filename*=utf-8 格式（RFC 5987）
                 if (contentDisposition.includes('filename*=')) {
                     const utf8Match = contentDisposition.match(/filename\*=['"]?utf-8['"]?['\'\'\s]*([^;\s"]+)/i);
                     if (utf8Match && utf8Match[1]) {
                         filename = decodeURIComponent(utf8Match[1]);
                     }
                 } else {
-                    // 回退到普通 filename 格式
                     const filenameMatch = contentDisposition.match(/filename=['"]?([^;\s"]+)['"]?/i);
                     if (filenameMatch && filenameMatch[1]) {
                         filename = decodeURIComponent(filenameMatch[1]);
                     }
                 }
                 
-                // 确保文件名有正确的扩展名
                 const contentType = response.headers.get('content-type');
                 if (contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' && !filename.endsWith('.xlsx')) {
                     filename += '.xlsx';
