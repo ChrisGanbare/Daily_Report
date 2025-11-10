@@ -9,7 +9,6 @@ from datetime import datetime
 import zipfile
 import os
 from collections import defaultdict
-import math
 import pandas as pd
 
 from openpyxl import Workbook
@@ -86,8 +85,9 @@ class ReportService:
         start_date_str: str,
         end_date_str: str,
     ) -> Tuple[Path, List[str]]:
+        device_codes_tuple = tuple(sorted(device_codes))
         raw_report_data = await self.device_repo.get_daily_consumption_raw_data(
-            device_codes, start_date_str, end_date_str
+            device_codes_tuple, start_date_str, end_date_str
         )
         if not raw_report_data:
             raise ValueError("在指定日期范围内所有选定设备均未找到任何消耗数据。")
@@ -107,8 +107,14 @@ class ReportService:
                 barrel_count = self.barrel_overrides.get(device_code, 1)
                 logger.info(f"设备 {device_code} 使用桶数: {barrel_count}")
                 final_report_data = self._calculate_final_data(device_data, barrel_count, "daily")
+                
+                if not final_report_data:
+                    warnings.append(f"设备 {device_code} 计算后数据为空，已跳过。")
+                    continue
+
                 customer_name = final_report_data[0].get('customer_name', '未知客户')
                 oil_name = final_report_data[0].get('oil_name', '未知油品')
+                
                 report_path = self._generate_daily_detail_excel(
                     final_report_data, device_code, customer_name, oil_name, start_date_str, end_date_str, barrel_count
                 )
@@ -138,8 +144,9 @@ class ReportService:
         start_date_str: str,
         end_date_str: str,
     ) -> Tuple[Path, List[str]]:
+        device_codes_tuple = tuple(sorted(device_codes))
         raw_report_data = await self.device_repo.get_monthly_consumption_raw_data(
-            device_codes, start_date_str, end_date_str
+            device_codes_tuple, start_date_str, end_date_str
         )
         if not raw_report_data:
             raise ValueError("在指定日期范围内所有选定设备均未找到任何消耗数据。")
@@ -159,6 +166,11 @@ class ReportService:
                 barrel_count = self.barrel_overrides.get(device_code, 1)
                 logger.info(f"设备 {device_code} 使用桶数: {barrel_count}")
                 final_report_data = self._calculate_final_data(device_data, barrel_count, "monthly")
+
+                if not final_report_data:
+                    warnings.append(f"设备 {device_code} 计算后数据为空，已跳过。")
+                    continue
+
                 customer_name = final_report_data[0].get('customer_name', '未知客户')
                 oil_name = final_report_data[0].get('oil_name', '未知油品')
                 report_path = self._generate_monthly_detail_excel(
@@ -194,7 +206,6 @@ class ReportService:
             prev_inventory = row.get(prev_inventory_key) or 0
             end_inventory = row.get(inventory_key) or 0
             refill = row.get(refill_key) or 0
-            # 确保库存消耗量不为负数
             inventory_consumption = max(0, (prev_inventory - end_inventory) + refill)
             real_consumption = inventory_consumption * barrel_count
             order_volume = row.get(order_volume_key) or 0
@@ -206,9 +217,94 @@ class ReportService:
         return final_data
 
     def _generate_daily_detail_excel(self, report_data: List[Dict[str, Any]], device_code: str, customer_name: str, oil_name: str, start_date_str: str, end_date_str: str, barrel_count: int) -> Path:
-        # ... (Excel generation logic remains the same)
-        pass
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "消耗误差分析"
+        oil_name_str = f" {oil_name} " if oil_name and pd.notna(oil_name) else " "
+        title = f"{device_code}{oil_name_str}每日消耗误差分析({start_date_str} - {end_date_str})"
+        ws.append([title])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=20)
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center", wrap_text=True)
+        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
+        headers = ["日期", "原油剩余量(L)", "订单累积总量(L)", "库存消耗总量(L)", "中润亏损(L)", "客户亏损(L)"]
+        ws.append(headers)
+        for row in report_data:
+            shortage_error = max(0, row['error'])
+            excess_error = max(0, -row['error'])
+            ws.append([row['report_date'].isoformat(), row['end_of_day_inventory'], row['daily_order_volume'], row['real_consumption'], shortage_error, excess_error])
+        column_widths = {'A': 12, 'B': 15, 'C': 18, 'D': 18, 'E': 15, 'F': 15}
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+        chart = LineChart()
+        chart.title = "每日消耗误差分析"
+        chart.style = 13
+        chart.y_axis.title = "值 (L)"
+        chart.y_axis.majorGridlines = ChartLines(spPr=GraphicalProperties(noFill=True))
+        chart.x_axis.title = "日期"
+        chart.x_axis.number_format = 'yyyy-mm-dd'
+        chart.x_axis.tickLblSkip = 3
+        chart.x_axis.tickLblPos = "low"
+        chart.x_axis.textRotation = 0
+        chart.width = 30
+        chart.height = 15
+        dates = Reference(ws, min_col=1, min_row=3, max_row=len(report_data) + 2)
+        data = Reference(ws, min_col=2, min_row=2, max_col=4, max_row=len(report_data) + 2)
+        chart.add_data(data, titles_from_data=True)
+        chart.set_categories(dates)
+        s1 = chart.series[0]
+        s1.graphicalProperties.line.solidFill = "0000FF"
+        s1.marker = Marker(symbol="circle", size=8)
+        s2 = chart.series[1]
+        s2.graphicalProperties.line.solidFill = "00FF00"
+        s2.marker = Marker(symbol="circle", size=8)
+        s3 = chart.series[2]
+        s3.graphicalProperties.line.solidFill = "800080"
+        s3.marker = Marker(symbol="circle", size=8)
+        ws.add_chart(chart, "H5")
+        annotation_row = 34
+        ws.cell(row=annotation_row, column=8).value = "计算规则说明："
+        ws.cell(row=annotation_row, column=8).font = Font(bold=True)
+        consumption_formula = f"库存消耗总量(L) = (前日库存 - 当日库存 + 当日加油量) * {barrel_count} (桶数)"
+        ws.cell(row=annotation_row + 1, column=8).value = consumption_formula
+        ws.merge_cells(start_row=annotation_row + 1, start_column=8, end_row=annotation_row + 1, end_column=15)
+        ws.cell(row=annotation_row + 2, column=8).value = "中润亏损(L) = MAX(0, 库存消耗总量 - 订单累积总量)"
+        ws.merge_cells(start_row=annotation_row + 2, start_column=8, end_row=annotation_row + 2, end_column=15)
+        ws.cell(row=annotation_row + 3, column=8).value = "客户亏损(L) = MAX(0, 订单累积总量 - 库存消耗总量)"
+        ws.merge_cells(start_row=annotation_row + 3, start_column=8, end_row=annotation_row + 3, end_column=15)
+        final_filename = f"{customer_name}_{device_code}_{start_date_str}_to_{end_date_str}_每日消耗误差报表.xlsx"
+        output_path = Path(tempfile.gettempdir()) / final_filename
+        wb.save(output_path)
+        logger.info(f"Excel报表已生成: {output_path}")
+        return output_path
 
     def _generate_monthly_detail_excel(self, report_data: List[Dict[str, Any]], device_code: str, customer_name: str, oil_name: str, start_date_str: str, end_date_str: str, barrel_count: int) -> Path:
-        # ... (Excel generation logic remains the same)
-        pass
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "每月消耗明细"
+        oil_name_str = f" {oil_name} " if oil_name and pd.notna(oil_name) else " "
+        title = f"{device_code}{oil_name_str}每月消耗误差分析({start_date_str} - {end_date_str})"
+        ws.append([title])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=5)
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
+        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
+        headers = ["月份", "订单总量(L)", "真实消耗量(L)", "误差(L)", "期末库存(L)"]
+        ws.append(headers)
+        for row in report_data:
+            shortage_error = max(0, row['error'])
+            excess_error = max(0, -row['error'])
+            ws.append([row['report_month'], row['monthly_order_volume'], row['real_consumption'], shortage_error, excess_error])
+        for i, col in enumerate(ws.columns):
+            max_length = 0
+            column_letter = get_column_letter(i + 1)
+            for cell in col:
+                if cell.value is not None:
+                    cell_length = len(str(cell.value))
+                    if cell_length > max_length:
+                        max_length = cell_length
+            adjusted_width = (max_length + 2)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        final_filename = f"{customer_name}_{device_code}_{start_date_str}_to_{end_date_str}_每月消耗误差报表.xlsx"
+        output_path = Path(tempfile.gettempdir()) / final_filename
+        wb.save(output_path)
+        logger.info(f"Excel报表已生成: {output_path}")
+        return output_path

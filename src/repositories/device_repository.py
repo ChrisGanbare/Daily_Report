@@ -2,12 +2,76 @@
 设备与客户数据仓库
 负责所有与设备和客户相关的数据库操作
 """
-from typing import List, Dict, Any, Optional
+import asyncio
+from typing import List, Dict, Any, Optional, Tuple
+from functools import wraps
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, bindparam
 
 from src.logger import logger
 from src.config import settings
+
+# --- 异步缓存实现 ---
+class AsyncTTLCache:
+    """异步TTL缓存实现"""
+    
+    def __init__(self, maxsize=50, ttl=600):
+        self.maxsize = maxsize
+        self.ttl = ttl
+        self._cache = {}
+        self._lock = asyncio.Lock()
+    
+    async def get(self, key):
+        """获取缓存值"""
+        async with self._lock:
+            if key in self._cache:
+                value, timestamp = self._cache[key]
+                if asyncio.get_event_loop().time() - timestamp < self.ttl:
+                    return value
+                else:
+                    del self._cache[key]
+            return None
+    
+    async def set(self, key, value):
+        """设置缓存值"""
+        async with self._lock:
+            # 如果超过最大大小，删除最旧的条目
+            if len(self._cache) >= self.maxsize:
+                oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][1])
+                del self._cache[oldest_key]
+            
+            self._cache[key] = (value, asyncio.get_event_loop().time())
+
+def async_cached(cache):
+    """异步缓存装饰器"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # 生成缓存键 - 只使用函数名和实际参数，忽略self实例
+            # 对于实例方法，args[0]是self，我们只需要实际的参数
+            actual_args = args[1:] if args and hasattr(args[0], '__class__') else args
+            key = (func.__name__, actual_args, tuple(sorted(kwargs.items())))
+            
+            # 尝试从缓存获取
+            cached_result = await cache.get(key)
+            if cached_result is not None:
+                logger.info(f"缓存命中: {func.__name__}")
+                return cached_result
+            
+            # 执行函数并缓存结果
+            logger.info(f"缓存未命中，执行函数: {func.__name__}")
+            result = await func(*args, **kwargs)
+            await cache.set(key, result)
+            
+            return result
+        
+        return wrapper
+    
+    return decorator
+
+# --- 缓存配置 ---
+# 报表数据缓存：最大缓存50个查询，每个查询结果存活10分钟
+report_data_cache = AsyncTTLCache(maxsize=50, ttl=600)
 
 
 class DeviceRepository:
@@ -18,16 +82,16 @@ class DeviceRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    @async_cached(report_data_cache)
     async def get_daily_consumption_raw_data(
         self,
-        device_codes: List[str],
+        device_codes: Tuple[str, ...], # 参数必须是可哈希的，所以用元组
         start_date: str,
         end_date: str,
     ) -> List[Dict[str, Any]]:
         """
         使用高性能的单一SQL查询，获取用于计算每日消耗的原始数据。
         """
-        logger.info(f"开始为设备 {device_codes} 查询每日消耗的原始数据...")
         
         query_template = settings.sql_templates.daily_consumption_raw_query
         if not query_template:
@@ -38,7 +102,7 @@ class DeviceRepository:
             "end_date_param": end_date,
             "start_date_param_full": f"{start_date} 00:00:00",
             "end_date_param_full": f"{end_date} 23:59:59",
-            "device_codes": tuple(device_codes),
+            "device_codes": device_codes,
         }
 
         statement = text(query_template).bindparams(
@@ -54,16 +118,16 @@ class DeviceRepository:
             logger.error(f"查询每日消耗原始数据时出错: {e}", exc_info=True)
             raise
 
+    @async_cached(report_data_cache)
     async def get_monthly_consumption_raw_data(
         self,
-        device_codes: List[str],
+        device_codes: Tuple[str, ...], # 参数必须是可哈希的，所以用元组
         start_date: str,
         end_date: str,
     ) -> List[Dict[str, Any]]:
         """
         使用高性能的单一SQL查询，获取用于计算每月消耗的原始数据。
         """
-        logger.info(f"开始为设备 {device_codes} 查询每月消耗的原始数据...")
         
         query_template = settings.sql_templates.monthly_consumption_raw_query
         if not query_template:
@@ -74,7 +138,7 @@ class DeviceRepository:
             "end_date_param": end_date,
             "start_date_param_full": f"{start_date} 00:00:00",
             "end_date_param_full": f"{end_date} 23:59:59",
-            "device_codes": tuple(device_codes),
+            "device_codes": device_codes,
         }
 
         statement = text(query_template).bindparams(
