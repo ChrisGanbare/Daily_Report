@@ -194,3 +194,179 @@ class DeviceRepository:
         except Exception as e:
             logger.error(f"查询设备和客户信息时出错: {e}", exc_info=True)
             raise
+
+    @async_cached(report_data_cache)
+    async def get_inventory_raw_data(
+        self,
+        device_codes: Tuple[str, ...],
+        start_date: str,
+        end_date: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        获取库存报表的原始数据。
+        """
+        try:
+            query_template = settings.sql_templates.inventory_query
+            if not query_template:
+                raise ValueError("库存查询模板 'inventory_query' 未在配置中找到。")
+
+            # 为每个设备单独查询库存数据
+            all_data = []
+            for device_code in device_codes:
+                # 获取设备ID
+                device_id_query = text(settings.sql_templates.device_id_query)
+                device_id_result = await self.session.execute(
+                    device_id_query, {"device_code": device_code}
+                )
+                device_row = device_id_result.fetchone()
+                
+                if not device_row:
+                    logger.warning(f"设备 {device_code} 未找到，跳过库存查询")
+                    continue
+                
+                device_id = device_row[0]
+                
+                # 执行库存查询
+                formatted_query = query_template.format(
+                    device_id=device_id,
+                    start_date=start_date,
+                    end_condition=f"{end_date} 23:59:59"
+                )
+                
+                statement = text(formatted_query)
+                result = await self.session.execute(statement)
+                device_data = [row._asdict() for row in result.fetchall()]
+                
+                # 添加设备编码信息
+                for row in device_data:
+                    row['device_code'] = device_code
+                
+                all_data.extend(device_data)
+            
+            logger.info(f"为设备 {device_codes} 查询到 {len(all_data)} 条库存数据记录。")
+            return all_data
+        except Exception as e:
+            logger.error(f"查询库存数据时出错: {e}", exc_info=True)
+            raise
+
+    @async_cached(report_data_cache)
+    async def get_refueling_details_raw_data(
+        self,
+        device_codes: Tuple[str, ...],
+        start_date: str,
+        end_date: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        获取加注明细报表的原始数据。
+        """
+        try:
+            query_template = settings.sql_templates.refueling_details_query
+            if not query_template:
+                raise ValueError("加注明细查询模板 'refueling_details_query' 未在配置中找到。")
+
+            # 为每个设备单独查询加注明细数据
+            all_data = []
+            for device_code in device_codes:
+                # 获取设备ID
+                device_id_query = text(settings.sql_templates.device_id_query)
+                device_id_result = await self.session.execute(
+                    device_id_query, {"device_code": device_code}
+                )
+                device_row = device_id_result.fetchone()
+                
+                if not device_row:
+                    logger.warning(f"设备 {device_code} 未找到，跳加注明细查询")
+                    continue
+                
+                device_id = device_row[0]
+                
+                # 执行加注明细查询
+                formatted_query = query_template.format(
+                    device_id=device_id,
+                    start_date=start_date,
+                    end_condition=f"{end_date} 23:59:59"
+                )
+                
+                statement = text(formatted_query)
+                result = await self.session.execute(statement)
+                device_data = [row._asdict() for row in result.fetchall()]
+                
+                # 添加设备编码信息
+                for row in device_data:
+                    row['device_code'] = device_code
+                
+                all_data.extend(device_data)
+            
+            logger.info(f"为设备 {device_codes} 查询到 {len(all_data)} 条加注明细数据记录。")
+            return all_data
+        except Exception as e:
+            logger.error(f"查询加注明细数据时出错: {e}", exc_info=True)
+            raise
+
+    @async_cached(report_data_cache)
+    async def get_error_summary_raw_data(
+        self,
+        device_codes: Tuple[str, ...],
+        start_date: str,
+        end_date: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        获取误差汇总报表的原始数据。
+        """
+        try:
+            # 获取每日消耗数据用于误差计算
+            daily_data = await self.get_daily_consumption_raw_data(
+                device_codes, start_date, end_date
+            )
+            
+            # 获取离线事件数据
+            offline_query_template = settings.sql_templates.error_summary_offline_query
+            if not offline_query_template:
+                raise ValueError("离线事件查询模板 'error_summary_offline_query' 未在配置中找到。")
+
+            params = {
+                "start_date_param_full": f"{start_date} 00:00:00",
+                "end_date_param_full": f"{end_date} 23:59:59",
+                "device_codes": device_codes,
+            }
+
+            statement = text(offline_query_template).bindparams(
+                bindparam('device_codes', expanding=True)
+            )
+            
+            offline_result = await self.session.execute(statement, params)
+            offline_data = [row._asdict() for row in offline_result.fetchall()]
+            
+            # 合并数据
+            combined_data = {
+                "daily_consumption": daily_data,
+                "offline_events": offline_data
+            }
+            
+            logger.info(f"为设备 {device_codes} 查询到误差汇总数据：每日消耗 {len(daily_data)} 条，离线事件 {len(offline_data)} 条。")
+            return combined_data
+        except Exception as e:
+            logger.error(f"查询误差汇总数据时出错: {e}", exc_info=True)
+            raise
+
+    @async_cached(report_data_cache)
+    async def get_customer_statement_raw_data(
+        self,
+        device_codes: Tuple[str, ...],
+        start_date: str,
+        end_date: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        获取客户对账单的原始数据。
+        """
+        try:
+            # 客户对账单需要每日消耗数据
+            daily_data = await self.get_daily_consumption_raw_data(
+                device_codes, start_date, end_date
+            )
+            
+            logger.info(f"为设备 {device_codes} 查询到客户对账单数据：{len(daily_data)} 条记录。")
+            return daily_data
+        except Exception as e:
+            logger.error(f"查询客户对账单数据时出错: {e}", exc_info=True)
+            raise

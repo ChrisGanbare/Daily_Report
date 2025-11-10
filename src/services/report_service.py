@@ -74,6 +74,22 @@ class ReportService:
             return await self._generate_monthly_consumption_report(
                 devices, start_date, end_date
             )
+        elif report_type == "error_summary":
+            return await self._generate_error_summary_report(
+                devices, start_date, end_date
+            )
+        elif report_type == "inventory":
+            return await self._generate_inventory_report(
+                devices, start_date, end_date
+            )
+        elif report_type == "statement":
+            return await self._generate_customer_statement_report(
+                devices, start_date, end_date
+            )
+        elif report_type == "refueling":
+            return await self._generate_refueling_details_report(
+                devices, start_date, end_date
+            )
         else:
             raise NotImplementedError(f"报表类型 '{report_type}' 的生成逻辑尚未实现。")
 
@@ -308,3 +324,223 @@ class ReportService:
         wb.save(output_path)
         logger.info(f"Excel报表已生成: {output_path}")
         return output_path
+
+    async def _generate_error_summary_report(
+        self,
+        device_codes: List[str],
+        start_date_str: str,
+        end_date_str: str,
+    ) -> Tuple[Path, List[str]]:
+        device_codes_tuple = tuple(sorted(device_codes))
+        raw_report_data = await self.device_repo.get_error_summary_raw_data(
+            device_codes_tuple, start_date_str, end_date_str
+        )
+        if not raw_report_data:
+            raise ValueError("在指定日期范围内所有选定设备均未找到任何误差汇总数据。")
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "误差汇总报表"
+        title = f"误差汇总报表({start_date_str} - {end_date_str})"
+        ws.append([title])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=8)
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
+        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
+        
+        headers = ["设备编码", "客户名称", "油品名称", "日期", "订单总量(L)", "真实消耗量(L)", "误差(L)", "误差类型"]
+        ws.append(headers)
+        
+        for row in raw_report_data:
+            error_type = "中润亏损" if row['error'] > 0 else "客户亏损"
+            ws.append([
+                row['device_code'],
+                row.get('customer_name', '未知客户'),
+                row.get('oil_name', '未知油品'),
+                row['report_date'].isoformat(),
+                row['daily_order_volume'],
+                row['real_consumption'],
+                abs(row['error']),
+                error_type
+            ])
+        
+        for i, col in enumerate(ws.columns):
+            max_length = 0
+            column_letter = get_column_letter(i + 1)
+            for cell in col:
+                if cell.value is not None:
+                    cell_length = len(str(cell.value))
+                    if cell_length > max_length:
+                        max_length = cell_length
+            adjusted_width = (max_length + 2)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        final_filename = f"误差汇总报表_{start_date_str}_to_{end_date_str}.xlsx"
+        output_path = Path(tempfile.gettempdir()) / final_filename
+        wb.save(output_path)
+        logger.info(f"误差汇总报表已生成: {output_path}")
+        return output_path, []
+
+    async def _generate_inventory_report(
+        self,
+        device_codes: List[str],
+        start_date_str: str,
+        end_date_str: str,
+    ) -> Tuple[Path, List[str]]:
+        device_codes_tuple = tuple(sorted(device_codes))
+        raw_report_data = await self.device_repo.get_inventory_raw_data(
+            device_codes_tuple, start_date_str, end_date_str
+        )
+        if not raw_report_data:
+            raise ValueError("在指定日期范围内所有选定设备均未找到任何库存数据。")
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "库存报表"
+        title = f"库存报表({start_date_str} - {end_date_str})"
+        ws.append([title])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=6)
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
+        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
+        
+        headers = ["设备编码", "客户名称", "油品名称", "日期", "期初库存(L)", "期末库存(L)", "加油量(L)"]
+        ws.append(headers)
+        
+        for row in raw_report_data:
+            ws.append([
+                row['device_code'],
+                row.get('customer_name', '未知客户'),
+                row.get('oil_name', '未知油品'),
+                row['report_date'].isoformat(),
+                row.get('prev_day_inventory', 0),
+                row.get('end_of_day_inventory', 0),
+                row.get('daily_refill', 0)
+            ])
+        
+        for i, col in enumerate(ws.columns):
+            max_length = 0
+            column_letter = get_column_letter(i + 1)
+            for cell in col:
+                if cell.value is not None:
+                    cell_length = len(str(cell.value))
+                    if cell_length > max_length:
+                        max_length = cell_length
+            adjusted_width = (max_length + 2)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        final_filename = f"库存报表_{start_date_str}_to_{end_date_str}.xlsx"
+        output_path = Path(tempfile.gettempdir()) / final_filename
+        wb.save(output_path)
+        logger.info(f"库存报表已生成: {output_path}")
+        return output_path, []
+
+    async def _generate_customer_statement_report(
+        self,
+        device_codes: List[str],
+        start_date_str: str,
+        end_date_str: str,
+    ) -> Tuple[Path, List[str]]:
+        device_codes_tuple = tuple(sorted(device_codes))
+        raw_report_data = await self.device_repo.get_customer_statement_raw_data(
+            device_codes_tuple, start_date_str, end_date_str
+        )
+        if not raw_report_data:
+            raise ValueError("在指定日期范围内所有选定设备均未找到任何客户对账单数据。")
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "客户对账单"
+        title = f"客户对账单({start_date_str} - {end_date_str})"
+        ws.append([title])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=7)
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
+        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
+        
+        headers = ["客户名称", "设备编码", "油品名称", "日期", "订单总量(L)", "真实消耗量(L)", "误差(L)"]
+        ws.append(headers)
+        
+        for row in raw_report_data:
+            ws.append([
+                row.get('customer_name', '未知客户'),
+                row['device_code'],
+                row.get('oil_name', '未知油品'),
+                row['report_date'].isoformat(),
+                row['daily_order_volume'],
+                row['real_consumption'],
+                row['error']
+            ])
+        
+        for i, col in enumerate(ws.columns):
+            max_length = 0
+            column_letter = get_column_letter(i + 1)
+            for cell in col:
+                if cell.value is not None:
+                    cell_length = len(str(cell.value))
+                    if cell_length > max_length:
+                        max_length = cell_length
+            adjusted_width = (max_length + 2)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        final_filename = f"客户对账单_{start_date_str}_to_{end_date_str}.xlsx"
+        output_path = Path(tempfile.gettempdir()) / final_filename
+        wb.save(output_path)
+        logger.info(f"客户对账单已生成: {output_path}")
+        return output_path, []
+
+    async def _generate_refueling_details_report(
+        self,
+        device_codes: List[str],
+        start_date_str: str,
+        end_date_str: str,
+    ) -> Tuple[Path, List[str]]:
+        device_codes_tuple = tuple(sorted(device_codes))
+        raw_report_data = await self.device_repo.get_refueling_details_raw_data(
+            device_codes_tuple, start_date_str, end_date_str
+        )
+        if not raw_report_data:
+            raise ValueError("在指定日期范围内所有选定设备均未找到任何加注明细数据。")
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "加注明细报表"
+        title = f"加注明细报表({start_date_str} - {end_date_str})"
+        ws.append([title])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=6)
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
+        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
+        
+        headers = ["设备编码", "订单序号", "加注时间", "油品名称", "油加注值(L)", "原油剩余量(L)"]
+        ws.append(headers)
+        
+        for row in raw_report_data:
+            # 处理加注时间字段
+            order_time = row.get('加注时间', '未知时间')
+            if hasattr(order_time, 'isoformat'):
+                order_time_str = order_time.isoformat()
+            else:
+                order_time_str = str(order_time)
+            
+            ws.append([
+                row['device_code'],
+                row.get('订单序号', ''),
+                order_time_str,
+                row.get('油品名称', '未知油品'),
+                row.get('油加注值', 0),
+                row.get('原油剩余量', 0)
+            ])
+        
+        for i, col in enumerate(ws.columns):
+            max_length = 0
+            column_letter = get_column_letter(i + 1)
+            for cell in col:
+                if cell.value is not None:
+                    cell_length = len(str(cell.value))
+                    if cell_length > max_length:
+                        max_length = cell_length
+            adjusted_width = (max_length + 2)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        final_filename = f"加注明细报表_{start_date_str}_to_{end_date_str}.xlsx"
+        output_path = Path(tempfile.gettempdir()) / final_filename
+        wb.save(output_path)
+        logger.info(f"加注明细报表已生成: {output_path}")
+        return output_path, []
