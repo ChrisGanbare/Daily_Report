@@ -136,6 +136,8 @@ zr-daily-report-v0.7/
 zr_daily_report_v0.7/
 releases/
 release/
+frozen_dist/
+dist/
 
 # Batch files exception - allow tracking of specific batch files
 !important.bat

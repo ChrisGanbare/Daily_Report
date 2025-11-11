@@ -298,11 +298,18 @@ class FileHandler:
             raise FileReadError(error_msg)
 
         # 返回有效设备数据
-        return {
+        device_data = {
             'device_code': device_code,
             'start_date': start_date,
             'end_date': end_date,
         }
+        
+        # 添加额外的字段（如barrel_count）
+        for key, value in row.items():
+            if key not in ['device_code', 'start_date', 'end_date']:
+                device_data[key] = value.strip()
+        
+        return device_data
 
     def _validate_device_code(self, device_code, line_num):
         """验证设备编码格式"""
@@ -334,12 +341,6 @@ class FileHandler:
             raise
         except Exception as e:
             error_msg = f"错误：日期验证异常，第{line_num}行: {row}，异常信息: {str(e)}"
-            print(error_msg)
-            raise FileReadError(error_msg)
-            
-        # 验证日期跨度是否超过2个月
-        if not validate_date_span(row):
-            error_msg = f"\t错误：日期跨度超过1个月，第{line_num}行: {row}"
             print(error_msg)
             raise FileReadError(error_msg)
             

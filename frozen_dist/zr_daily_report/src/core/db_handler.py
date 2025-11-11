@@ -373,15 +373,15 @@ class DatabaseHandler:
                     row_dict = dict(zip(columns, row))
                     order_time = row_dict.get("加注时间")
                     oil_remaining = (
-                        row_dict.get("原油剩余比例", 0)
-                        if row_dict.get("原油剩余比例") is not None
+                        row_dict.get("原油剩余量", 0)
+                        if row_dict.get("原油剩余量") is not None
                         else 0
                     )
 
                     oil_name = row_dict.get("油品名称", "未知油品")
                     if i < 5:  # 只打印前5条记录用于调试
                         print(
-                            f"    记录 {i+1}: 加注时间={order_time}, 油品名称={oil_name}, 原油剩余比例={oil_remaining}"
+                            f"    记录 {i+1}: 加注时间={order_time}, 油品名称={oil_name}, 原油剩余量={oil_remaining}"
                         )
 
                     if isinstance(order_time, datetime):
@@ -431,7 +431,7 @@ class DatabaseHandler:
 
             # 转换为与原来read_inventory_data函数相同的格式
             result = [
-                (date, float(record["oil_remaining"]) * 100)
+                (date, float(record["oil_remaining"]))
                 for date, record in sorted(data.items())
             ]
             print("  库存数据读取完成。")
