@@ -6,261 +6,179 @@ ZR Daily Report 是一个用于生成切削液设备日常库存报告的Python�
 
 - 多设备批量数据处理
 - 自动化数据库查询
-- Excel报表生成（含图表）
-- 客户对账单自动生成
-- 动态列数调整（适应不同油品数量）
-- 配置文件加密存储
+- 多种Excel报表生成（含图表）
+  - **库存报表**: 生成包含每日库存百分比和趋势图的报表。
+  - **客户对账单**:
+    - **动态列数调整**：当同一客户拥有多台使用不同油品的设备时，对账单能自动为每种油品创建独立的统计列，清晰地汇总和展示各油品用量。
+  - 每日消耗误差分析
+  - 每月消耗误差分析
+  - 多设备消耗误差汇总
+  - 加注细节记录
 - 完整日志记录
+
+## 业务流程概述
+
+该程序的核心业务流程旨在自动化处理设备数据并生成多种分析报表。
+
+1.  **启动与模式选择**:
+    -   程序启动后，用户可以通过图形界面或命令行参数选择需要生成的报表类型（如库存报表、对账单等）。
+
+2.  **数据输入**:
+    -   用户通过文件选择对话框，提供一个包含设备列表和查询日期范围的 `*.csv` 文件。
+
+3.  **数据处理**:
+    -   程序读取 `*.csv` 文件，获取设备清单。
+    -   根据 `config/query_config.json` 中的数据库连接信息，连接到MySQL数据库。
+    -   针对清单中的每一台设备，在指定的日期范围内，从数据库中查询相关的库存、消耗和加注数据。
+
+4.  **报表生成**:
+    -   程序将查询到的原始数据进行计算和格式化。
+    -   根据用户选择的报表类型，调用相应的报表生成器（如 `InventoryHandler`, `StatementHandler` 等）。
+    -   使用 `template/` 目录下的Excel模板作为基础，将处理后的数据和图表填充到模板中。
+
+5.  **结果输出**:
+    -   最终生成的 `*.xlsx` 报表文件将保存到用户通过对话框指定的输出目录中。
+    -   同时，程序会生成一份详细的日志文件，记录本次操作的所有步骤和结果。
+
+## 系统要求
+
+- **操作系统**:
+  - **Windows**: Windows 7 或更高版本 (主要支持和测试平台)。
+  - **Linux/macOS**: 支持，但**必须拥有图形用户界面 (GUI) 环境** (如 GNOME, KDE, Aqua 等)，因为程序需要通过文件对话框选择文件和目录。无法在纯命令行服务器上运行。
+- **Python**: 3.8 或更高版本。
+- **数据库**: MySQL 访问权限。
 
 ## 项目依赖
 
-- Python 3.8+
-- Windows 7+ 操作系统（Linux/macOS也支持部分功能）
-- MySQL数据库访问权限
+### 核心依赖
+- `openpyxl==3.1.0`: 用于处理Excel文件。版本被锁定以**确保Excel图表功能的稳定性和兼容性**，避免新版本可能引入的未知破坏性变更。
+- `mysql-connector-python==8.0.33`: 用于连接MySQL数据库。版本被锁定以**避免已知的内存访问冲突问题**。
 
-核心依赖：
-- openpyxl == 3.1.0 (Excel处理)
-- mysql-connector-python >= 8.0.33, < 9.0.0 (MySQL数据库连接)
-- pandas >= 1.5.0 (数据处理)
+### 可选依赖
 
-Web框架依赖：
-- fastapi == 0.104.1 (Web API框架)
-- uvicorn[standard] == 0.24.0 (ASGI服务器)
-- jinja2 == 3.1.2 (模板引擎)
-- python-multipart == 0.0.6 (文件上传支持)
+- **测试依赖 (`[test]`)**: 用于运行自动化测试和生成代码覆盖率报告。
+  - `pytest>=7.0.0`
+  - `pytest-cov>=4.0.0`
+  - `mock>=4.0.0`
 
-缓存支持依赖：
-- redis == 5.0.1
-- aioredis == 2.0.1
+- **开发依赖 (`[dev]`)**: 用于代码格式化、静态类型检查和项目打包。
+  - `build>=0.10.0`
+  - `black>=22.0.0`
+  - `mypy>=0.971`
 
-监控和日志依赖：
-- prometheus-client == 0.19.0
-- structlog == 23.2.0
-
-测试依赖：
-- pytest == 8.3.2
-- pytest-cov == 5.0.0
-- pytest-asyncio == 0.21.1
-- httpx == 0.25.2
-- mock >= 4.0.0
-- tox >= 3.25.0
-
-开发工具依赖：
-- black == 24.8.0
-- mypy >= 0.971
-- isort == 5.12.0
-- pre-commit >= 3.3.0
-
-文档生成依赖：
-- mkdocs == 1.5.3
-- mkdocs-material == 9.4.8
-
-## 安装步骤
+## 安装与配置
 
 ### 1. 克隆项目
-演示仓库地址（实际地址请联系开发者获取）
 ```bash
-git clone https://github.com/example-organization/zr-daily-report-demo.git
+# 请将 "https://gitee.com/your-organization/zr-daily-report.git" 替换为您的真实仓库地址
+git clone https://gitee.com/your-organization/zr-daily-report.git
+cd zr-daily-report
 ```
 
-### 2. 创建虚拟环境并激活
+### 2. 创建并激活虚拟环境
 
 ```bash
-# Windows
+# Windows (在命令提示符 cmd.exe 中)
 python -m venv .venv
 .venv\Scripts\activate
 
-# Linux/macOS
+# Linux / macOS
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
 ### 3. 安装依赖
 
-有多种方式可以安装项目依赖：
-
 ```bash
-# 方式1: Windows一键安装（推荐）
-install_deps.bat
-
-# 方式2: 使用阿里云镜像源安装（推荐，特别是中国大陆用户）
-pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
-
-# 方式3: 使用pip安装基础依赖
+# 1. 安装核心依赖 (运行程序所必需)
 pip install .
 
-# 方式4: 安装所有依赖（包括测试和开发依赖）
-pip install .[all]
-
-# 方式5: 分别安装特定功能依赖
-pip install .[test]     # 测试依赖
-pip install .[dev]      # 开发依赖
-pip install .[docs]     # 文档依赖
+# 2. 安装所有可选依赖 (推荐开发人员使用)
+pip install .[test,dev]
 ```
 
-### 4. 构建项目（可选）
+### 4. 配置环境
 
-项目提供了构建脚本 [build_package.py](file://D:\Daily_Report\build_package.py) 来创建发行版：
+项目的核心配置位于 `config/query_config.json` 文件中，该文件包含数据库连接信息和SQL查询模板。
 
-```bash
-# 构建标准发行版（wheel 和源码包）
-python build_package.py
+由于此文件包含敏感信息，它已被 gitignore 规则忽略，不会包含在版本库中。您需要根据示例文件手动创建它：
 
-# 构建包含冻结依赖的完整发行版
-python build_package.py frozen
+1.  **复制示例文件**:
+    ```bash
+    # Windows
+    copy config\query_config.example.json config\query_config.json
 
-# 显示帮助信息
-python build_package.py help
-```
+    # Linux / macOS
+    cp config/query_config.example.json config/query_config.json
+    ```
 
-更多构建信息请参考 [构建指南](docs/build_guide.md)。
-
-### 5. 配置环境
-
-1. 复制环境配置文件：
-   ```bash
-   copy .env.example .env
-   ```
-
-2. 编辑 .env 文件，配置数据库连接信息
-
-3. 配置 query_config.json 文件，设置数据库查询语句
+2.  **编辑配置文件**:
+    打开 `config/query_config.json` 文件，将 `db_config` 对象中的 `"your_database_host"`, `"your_database_user"`, `"your_database_password"` 等占位符替换为您的真实数据库信息。
 
 ## 使用方法
 
 ### 命令行模式
 
+在项目根目录运行：
 ```bash
-# 生成库存报表和客户对账单（默认模式）
+# 交互式选择报表模式 (推荐)
 python zr_daily_report.py
 
-# 只生成库存报表
-python zr_daily_report.py --mode inventory
-
-# 只生成客户对账单
-python zr_daily_report.py --mode statement
+# 直接指定报表模式
+python zr_daily_report.py --mode <mode_name>
 ```
 
-### 配置说明
+可用的 `mode_name` 包括：
+- `inventory`: 生成设备库存报表。
+- `statement`: 生成客户对账单。
+- `both`: 同时生成库存报表和客户对账单。
+- `refueling`: 生成设备加注细节报表。
+- `daily_consumption`: 生成每日消耗误差报表。
+- `monthly_consumption`: 生成每月消耗误差报表。
+- `error_summary`: 生成多设备消耗误差汇总报表。
 
-程序需要正确配置数据库连接信息和查询语句。详细配置说明请参考 [环境配置文档](docs/environment_config.md)。
+如果项目已通过 `pip install .` 安装，还可以使用 `zr-report` 命令代替 `python zr_daily_report.py`。
 
 ## 项目结构
 ```
 zr_daily_report/
 ├── config/              # 配置文件目录
-├── data/                # 数据文件目录
-├── defect_fixes/        # 缺陷修复记录目录
-├── docs/                # 文档目录
+│   ├── query_config.example.json  # 配置文件模板
+│   └── error_summary_query.json   # (特定功能配置)
 ├── src/                 # 源代码目录
+│   ├── cli/             # 命令行界面模块
 │   ├── core/            # 核心功能模块
-│   ├── handlers/        # 处理器模块
-│   ├── monitoring/      # 监控模块
-│   ├── utils/           # 工具模块
-├── template/            # 模板目录
-├── tests/               # 测试目录
-├── .env                 # 环境变量文件
+│   ├── ui/              # 图形用户界面模块 (文件对话框等)
+│   └── utils/           # 工具模块
+├── template/            # Excel模板目录
+├── tests/               # 测试代码目录
+├── test_data/           # 测试数据目录
 ├── .gitignore           # Git忽略文件
-├── query_config.json    # 查询配置文件(加密)
+├── pyproject.toml       # 项目配置文件 (PEP 621)
 ├── README.md            # 项目说明文档
-├── requirements.txt     # 依赖包列表
-└── zr_daily_report.py   # 主程序文件
+└── zr_daily_report.py   # 主程序入口
 ```
 
 ## 核心功能模块
 
-### 数据库处理模块
-负责与MySQL数据库的连接和数据查询操作。
+项目核心逻辑位于 `src/core/` 目录下，主要包括：
 
-### 文件处理模块
-处理设备信息文件的读取和解析。
-
-### 库存报表处理模块
-生成设备库存报表和趋势图表。
-
-### 对账单处理模块
-生成客户对账单，支持动态油品列处理。
-
-## 配置文件
-
-项目使用加密的配置文件存储数据库连接信息和查询语句。配置文件位于 `config/` 目录下。
+- **`report_controller.py`**: 报表控制器，负责协调整个报表生成流程。
+- **`data_manager.py`**: 数据管理器，负责数据的获取、缓存和预处理。
+- **`db_handler.py`**: 数据库处理器，负责与MySQL数据库的交互。
+- **`file_handler.py`**: 文件处理器，处理设备信息等文件的读取。
+- **`base_report.py`**: 所有报表生成器的抽象基类，定义了通用的接口和结构。
+- **`inventory_handler.py`**: 库存报表处理器，生成包含每日库存百分比和趋势图的报表。
+- **`statement_handler.py`**: 对账单处理器，生成客户对账单。其核心特性是能够动态调整报表列数，当一个客户拥有多台使用不同油品的设备时，它能为每种油品创建专属的数据列进行汇总。
+- **`consumption_error_handler.py`**: 包含多个消耗误差报表的生成器：
+  - **`DailyConsumptionErrorReportGenerator`**: 生成每日物料消耗的误差分析报表。
+  - **`MonthlyConsumptionErrorReportGenerator`**: 生成每月物料消耗的误差分析报表。
+  - **`ConsumptionErrorSummaryGenerator`**: 汇总多个设备的消耗误差数据，生成摘要报表。
+- **`refueling_details_handler.py`**: 加注细节报表生成器，用于创建详细的设备加注记录。
 
 ## 代码质量
 
-项目使用多种工具来确保代码质量：
-
-1. **black**: 代码格式化工具，确保代码风格一致性
-2. **mypy**: 静态类型检查工具，发现潜在的类型错误
-3. **isort**: 导入语句排序工具，保持导入语句的一致性
-
-### 本地运行代码质量检查
-
-使用tox运行所有检查：
-
-```bash
-# 运行所有测试环境
-tox
-
-
-# 只运行类型检查
-tox -e typecheck
-```
-
-或者使用Makefile：
-
-```bash
-# 安装依赖
-make install
-
-# 运行所有质量检查（可能修改文件）
-make quality
-
-# 运行所有质量检查（只读模式）
-make quality-fast
-
-# 分别运行特定检查
-make typecheck
-```
-
-或者使用专门的脚本：
-
-```bash
-# 运行所有代码质量检查（不修改文件）
-python scripts/run_code_quality.py
-
-# 安装代码质量检查工具
-python scripts/run_code_quality.py --install
-```
-
-### Git Hooks
-
-项目支持Git hooks来在提交前自动运行代码质量检查。可以通过以下方式设置：
-
-```bash
-# 运行脚本自动设置Git hooks
-python scripts/setup-git-hooks.py
-```
-
-设置后，每次提交时会自动运行：
-1. 代码格式化 (black 和 isort)
-2. 类型检查 (mypy)
-
-如果任何检查失败，提交将被中止。
-
-## 持续集成/持续部署 (CI/CD)
-
-项目使用GitHub Actions进行持续集成。工作流程包括：
-1. 在多个Python版本上运行测试
-2. 运行代码质量检查
-3. 构建Python包
-
-## 测试
-
-项目包含全面的测试套件，详情请参考 [测试文档](tests/TESTING.md)。
-
-## 缺陷修复记录
-
-项目开发过程中发现并修复的重要缺陷记录请参考 [缺陷修复记录](docs/defect_fixes/defect_fixes_index.md)
+项目使用 **black** 进行代码格式化，使用 **mypy** 进行静态类型检查，以保证代码的规范性和健壮性。
 
 ## 贡献
 
