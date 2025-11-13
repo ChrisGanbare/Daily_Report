@@ -78,8 +78,8 @@ class InventoryReportGenerator(BaseReportGenerator):
             for date, value in inventory_data:
                 try:
                     validated_value = self._validate_inventory_value(value)
-                    if validated_value > 100:
-                        print(f"提示：日期 {date} 的库存值 {validated_value}% 超过100%")
+                    if validated_value > 1000:
+                        print(f"提示：日期 {date} 的液位库存值 {validated_value} 超过1000L")
                     cleaned_data.append((date, validated_value))
                 except ValueError as e:
                     invalid_records.append((date, value, str(e)))
