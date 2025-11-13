@@ -431,7 +431,7 @@ class DatabaseHandler:
 
             # 转换为与原来read_inventory_data函数相同的格式
             result = [
-                (date, float(record["oil_remaining"]) / 10)
+                (date, float(record["oil_remaining"]))
                 for date, record in sorted(data.items())
             ]
             print("  库存数据读取完成。")

@@ -106,7 +106,7 @@ class InventoryReportGenerator(BaseReportGenerator):
                     output_file_path.replace(".xlsx", ".csv"), "w", newline=""
                 ) as f:
                     writer = csv.writer(f)
-                    writer.writerow(["日期", "库存百分比"])
+                    writer.writerow(["日期", "原油剩余量(L)"])
                     writer.writerows(cleaned_data)
                 print(
                     f"数据已导出为CSV格式：{output_file_path.replace('.xlsx', '.csv')}"
@@ -151,7 +151,7 @@ class InventoryReportGenerator(BaseReportGenerator):
             ws.cell(row=1, column=1).font = Font(size=14, bold=True)
 
             # 添加数据列标题
-            ws.append(["日期", "库存百分比"])
+            ws.append(["日期", "原油剩余量(L)"])
 
             # 写入补全后的数据
             for row in complete_data:
@@ -159,13 +159,13 @@ class InventoryReportGenerator(BaseReportGenerator):
 
             # 调整列宽
             ws.column_dimensions["A"].width = 12  # 日期列宽度
-            ws.column_dimensions["B"].width = 12  # 库存百分比列宽度
+            ws.column_dimensions["B"].width = 12  # 原油剩余量(L)列宽度
 
             # 创建图表
             chart = LineChart()
             chart.title = "每日库存余量变化趋势"
             chart.style = 13
-            chart.y_axis.title = "库存百分比"
+            chart.y_axis.title = "原油剩余量(L)"
             chart.x_axis.title = "日期"
 
             # 设置图表显示数据标签

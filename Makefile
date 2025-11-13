@@ -4,7 +4,7 @@
 .PHONY: help
 help:
 	@echo "ZR Daily Report - Makefile Commands"
-	@echo "===================================="
+	@echo "="
 	@echo "install      - 安装项目依赖"
 	@echo "dev-install  - 安装开发依赖"
 	@echo "test         - 运行测试"

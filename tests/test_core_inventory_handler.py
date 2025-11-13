@@ -293,7 +293,7 @@ class TestCoreInventoryHandler(BaseTestCase):
             with open(csv_file_path, "r") as f:
                 content = f.read()
                 self.assertIn("日期", content)
-                self.assertIn("库存百分比", content)  # 修正列标题检查
+                self.assertIn("原油剩余量(L)", content)  # 修正列标题检查
         finally:
             self._remove_file_with_retry(csv_file_path)
 
