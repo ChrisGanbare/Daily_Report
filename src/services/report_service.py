@@ -17,7 +17,7 @@ from openpyxl.chart.axis import ChartLines
 from openpyxl.chart.marker import Marker
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
-from openpyxl.styles import Alignment, Font
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from src.repositories.device_repository import DeviceRepository
@@ -55,7 +55,7 @@ class ReportService:
             self.barrel_overrides = pd.Series(df.barrel_count.values, index=df.device_code).to_dict()
             logger.info(f"成功加载 {len(self.barrel_overrides)} 条桶数校准记录。")
         except Exception as e:
-            logger.error(f"使用pandas读取桶数校准文件时出错: {e}", exc_info=True)
+            logger.error(f"使用pandas读取桶数校准文件时出错: {e}", exc_info=True)  # 修复缩进
 
     # --- Main Dispatch Method ---
     async def generate_report(
@@ -236,12 +236,7 @@ class ReportService:
 
 
 
-    async def _generate_error_summary_report(
-        self,
-        device_codes: List[str],
-        start_date_str: str,
-        end_date_str: str,
-    ) -> Tuple[Path, List[str]]:
+    async def _generate_error_summary_report(self, device_codes: List[str], start_date_str: str, end_date_str: str) -> Tuple[Path, List[str]]:
         # 验证日期范围不超过2个月
         date_row = {"start_date": start_date_str, "end_date": end_date_str}
         if not validate_error_summary_date_span(date_row):
@@ -254,56 +249,181 @@ class ReportService:
         if not raw_report_data:
             raise ValueError("在指定日期范围内所有选定设备均未找到任何误差汇总数据。")
 
-        # 计算误差数据
+        # 查询离线事件数据
+        offline_events = await self._get_offline_events(device_codes_tuple, start_date_str, end_date_str)
+        
+        # 创建工作簿
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "误差汇总报表"
+        
+        # 设置标题
+        title = f"误差汇总报表({start_date_str} - {end_date_str})"
+        ws.append([title])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=12)
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
+        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
+        
+        # 添加计算公式说明在主标题下第二行
+        ws.append(["计算公式说明：单桶库存消耗 = 期末库存 - 期初库存 + 加油量，库存消耗总量 = 设备桶数 × 单桶库存消耗，误差值总数 = 库存消耗总量 - 订单总量，误差百分比 = 误差值总数 / 订单总量"])  
+        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=12)
+        
+        # 调整表头，将误差类型列移到误差百分比列前面，删除是否有离线事件列
+        headers = ["序号", "设备编码", "客户名称", "设备桶数", "订单总量(L)", "单桶库存消耗(L)", 
+                  "库存消耗总量(L)", "误差值总数(L)", "误差类型", "误差百分比(%)", "离线时长(小时)", "备注"]
+        ws.append(headers)
+        
+        # 设置表头样式
+        for cell in ws[3]:  # 表头行现在是第3行
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+        
+        # 准备数据
         processed_data = []
         for row in raw_report_data:
-            # 计算真实消耗量：期末库存 - 期初库存 + 加油量
-            real_consumption = row.get('end_of_day_inventory', 0) - row.get('prev_day_inventory', 0) + row.get('daily_refill', 0)
-            
-            # 计算误差：订单总量 - 真实消耗量
-            error = row.get('daily_order_volume', 0) - real_consumption
+            # 修正计算真实消耗量：期初库存 - 期末库存 + 加油量
+            end_inventory = row.get('end_of_day_inventory') or 0
+            prev_inventory = row.get('prev_day_inventory') or 0
+            daily_refill = row.get('daily_refill') or 0
+            real_consumption = prev_inventory - end_inventory + daily_refill  # 修正这里！
             
             # 添加计算后的字段
             processed_row = row.copy()
             processed_row['real_consumption'] = real_consumption
-            processed_row['error'] = error
             processed_data.append(processed_row)
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "误差汇总报表"
-        title = f"误差汇总报表({start_date_str} - {end_date_str})"
-        ws.append([title])
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=8)
-        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
-        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
         
-        headers = ["设备编码", "客户名称", "油品名称", "日期", "订单总量(L)", "真实消耗量(L)", "误差(L)", "误差类型"]
-        ws.append(headers)
-        
+        # 按设备编码和日期分组
+        grouped_data = defaultdict(list)
         for row in processed_data:
-            error_type = "中润亏损" if row['error'] > 0 else "客户亏损"
-            ws.append([
-                row['device_code'],
-                row.get('customer_name', '未知客户'),
-                row.get('oil_name', '未知油品'),
-                row['report_date'].isoformat(),
-                row['daily_order_volume'],
-                row['real_consumption'],
-                abs(row['error']),
-                error_type
-            ])
+            key = (row['device_code'], row.get('customer_name', '未知客户'), row.get('oil_name', '未知油品'))
+            grouped_data[key].append(row)
         
-        for i, col in enumerate(ws.columns):
-            max_length = 0
-            column_letter = get_column_letter(i + 1)
-            for cell in col:
-                if cell.value is not None:
-                    cell_length = len(str(cell.value))
-                    if cell_length > max_length:
-                        max_length = cell_length
-            adjusted_width = (max_length + 2)
-            ws.column_dimensions[column_letter].width = adjusted_width
+        # 填充数据行
+        row_index = 4  # 数据行从第4行开始
+        index = 1
+        
+        for (device_code, customer_name, oil_name), rows in grouped_data.items():
+            # 计算汇总数据
+            total_order_volume = sum(r.get('daily_order_volume', 0) for r in rows)
+            
+            # 计算单桶库存消耗（使用最后一条记录的真实消耗量）并确保≥0
+            single_barrel_consumption = max(0, rows[-1].get('real_consumption', 0))
+            
+            # 获取设备桶数（从校准文件中获取，默认为1）
+            barrel_count = self.barrel_overrides.get(device_code, 1)
+            
+            # 计算库存消耗总量 = 设备桶数 × 单桶库存消耗
+            total_inventory_consumption = barrel_count * single_barrel_consumption
+            
+            # 计算误差值总数 = 库存消耗总量 - 订单总量
+            total_error = total_inventory_consumption - total_order_volume
+            
+            # 计算误差百分比
+            error_percentage = (total_error / total_order_volume * 100) if total_order_volume > 0 else 0
+            
+            # 获取该设备的离线事件
+            device_offline_events = offline_events.get(device_code, [])
+            
+            # 计算离线时长和生成备注
+            total_offline_hours = 0
+            offline_remarks = []
+            
+            for event in device_offline_events:
+                # 计算离线时长
+                start_time = event['create_time']
+                end_time = event.get('recovery_time', datetime.now())
+                duration_hours = (end_time - start_time).total_seconds() / 3600
+                total_offline_hours += duration_hours
+                
+                # 格式化事件时间并添加到备注
+                start_str = start_time.strftime("%Y-%m-%d %H:%M")
+                end_str = end_time.strftime("%Y-%m-%d %H:%M") if event.get('recovery_time') else "至今"
+                offline_remarks.append(f"{start_str} - {end_str}")
+            
+            # 生成完整备注，使用换行符分隔离线事件
+            remarks = []
+            if offline_remarks:
+                remarks.append("离线事件：\n" + "\n".join(offline_remarks))
+            
+            if abs(error_percentage) > 10:
+                remarks.append("误差超过10%，请重点关注")
+            elif abs(error_percentage) > 5:
+                remarks.append("误差超过5%，建议核查")
+            
+            remark_text = "\n".join(remarks) if remarks else "正常"
+            
+            # 确定误差类型
+            if total_error > 0:
+                error_type = "客户亏损"
+            elif total_error < 0:
+                error_type = "中润亏损"
+            else:
+                error_type = "无误差"
+            
+            # 填充数据行，调整列顺序
+            ws.cell(row=row_index, column=1).value = index  # 序号
+            ws.cell(row=row_index, column=1).alignment = Alignment(horizontal="center")
+            
+            ws.cell(row=row_index, column=2).value = device_code  # 设备编码
+            
+            ws.cell(row=row_index, column=3).value = customer_name  # 客户名称
+            
+            ws.cell(row=row_index, column=4).value = barrel_count  # 设备桶数
+            ws.cell(row=row_index, column=4).alignment = Alignment(horizontal="center")
+            
+            ws.cell(row=row_index, column=5).value = total_order_volume  # 订单总量
+            ws.cell(row=row_index, column=5).alignment = Alignment(horizontal="right")
+            
+            ws.cell(row=row_index, column=6).value = single_barrel_consumption  # 单桶库存消耗
+            ws.cell(row=row_index, column=6).alignment = Alignment(horizontal="right")
+            
+            # 库存消耗总量使用公式
+            ws.cell(row=row_index, column=7).value = f"=D{row_index}*F{row_index}"  # 库存消耗总量
+            ws.cell(row=row_index, column=7).alignment = Alignment(horizontal="right")
+            
+            # 误差值总数使用公式
+            ws.cell(row=row_index, column=8).value = f"=G{row_index}-E{row_index}"  # 误差值总数
+            ws.cell(row=row_index, column=8).alignment = Alignment(horizontal="right")
+            
+            # 误差类型列移到误差百分比前面
+            ws.cell(row=row_index, column=9).value = error_type  # 误差类型
+            ws.cell(row=row_index, column=9).alignment = Alignment(horizontal="center")
+            
+            # 误差百分比使用公式
+            ws.cell(row=row_index, column=10).value = f"=H{row_index}/E{row_index}"  # 误差百分比
+            ws.cell(row=row_index, column=10).number_format = '0.00%'
+            ws.cell(row=row_index, column=10).alignment = Alignment(horizontal="right")
+            
+            # 仅误差百分比列标记背景色，不再整行标记
+            if abs(error_percentage) > 5:
+                ws.cell(row=row_index, column=10).fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+            
+            ws.cell(row=row_index, column=11).value = round(total_offline_hours, 2)  # 离线时长
+            ws.cell(row=row_index, column=11).alignment = Alignment(horizontal="center")
+            
+            ws.cell(row=row_index, column=12).value = remark_text  # 备注
+            ws.cell(row=row_index, column=12).alignment = Alignment(wrap_text=True)  # 自动换行
+            
+            # 斑马纹样式（跳过已标记背景色的单元格）
+            if row_index % 2 == 0:
+                for col in range(1, 13):
+                    if col != 10:  # 跳过误差百分比列
+                        cell = ws.cell(row=row_index, column=col)
+                        if not cell.fill.start_color.rgb or cell.fill.start_color.rgb == "00000000":
+                            cell.fill = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
+            
+            row_index += 1
+            index += 1
+        
+        # 设置列宽
+        column_widths = [6, 15, 20, 10, 12, 15, 15, 12, 12, 12, 12, 30]
+        for i, width in enumerate(column_widths):
+            ws.column_dimensions[get_column_letter(i + 1)].width = width
+        
+        # 不再添加统计信息行
+        
+        # 不再添加单独的计算公式说明区域
         
         final_filename = f"误差汇总报表_{start_date_str}_to_{end_date_str}.xlsx"
         output_path = Path(tempfile.gettempdir()) / final_filename
@@ -311,182 +431,50 @@ class ReportService:
         logger.info(f"误差汇总报表已生成: {output_path}")
         return output_path, []
 
-    async def _generate_inventory_report(
-        self,
-        device_codes: List[str],
-        start_date_str: str,
-        end_date_str: str,
-    ) -> Tuple[Path, List[str]]:
-        device_codes_tuple = tuple(sorted(device_codes))
-        raw_report_data = await self.device_repo.get_inventory_raw_data(
-            device_codes_tuple, start_date_str, end_date_str
-        )
-        if not raw_report_data:
-            raise ValueError("在指定日期范围内所有选定设备均未找到任何库存数据。")
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "库存报表"
-        title = f"库存报表({start_date_str} - {end_date_str})"
-        ws.append([title])
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=6)
-        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
-        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
+    async def _get_offline_events(self, device_codes, start_date, end_date):
+        """
+        获取指定设备和日期范围内的离线事件
+        """
+        # 移除不存在的settings导入，直接使用SQL查询
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import AsyncSession
+        from src.database import get_db_session
+        import json
+        from pathlib import Path
         
-        headers = ["设备编码", "客户名称", "油品名称", "日期", "期初库存(L)", "期末库存(L)", "加油量(L)"]
-        ws.append(headers)
+        offline_events = defaultdict(list)
         
-        for row in raw_report_data:
-            ws.append([
-                row['device_code'],
-                row.get('customer_name', '未知客户'),
-                row.get('oil_name', '未知油品'),
-                row['report_date'].isoformat(),
-                row.get('prev_day_inventory', 0),
-                row.get('end_of_day_inventory', 0),
-                row.get('daily_refill', 0)
-            ])
-        
-        for i, col in enumerate(ws.columns):
-            max_length = 0
-            column_letter = get_column_letter(i + 1)
-            for cell in col:
-                if cell.value is not None:
-                    cell_length = len(str(cell.value))
-                    if cell_length > max_length:
-                        max_length = cell_length
-            adjusted_width = (max_length + 2)
-            ws.column_dimensions[column_letter].width = adjusted_width
-        
-        final_filename = f"库存报表_{start_date_str}_to_{end_date_str}.xlsx"
-        output_path = Path(tempfile.gettempdir()) / final_filename
-        wb.save(output_path)
-        logger.info(f"库存报表已生成: {output_path}")
-        return output_path, []
-
-    async def _generate_customer_statement_report(
-        self,
-        device_codes: List[str],
-        start_date_str: str,
-        end_date_str: str,
-    ) -> Tuple[Path, List[str]]:
-        device_codes_tuple = tuple(sorted(device_codes))
-        raw_report_data = await self.device_repo.get_customer_statement_raw_data(
-            device_codes_tuple, start_date_str, end_date_str
-        )
-        if not raw_report_data:
-            raise ValueError("在指定日期范围内所有选定设备均未找到任何客户对账单数据。")
-
-        # 计算真实消耗量和误差
-        processed_data = []
-        for row in raw_report_data:
-            # 计算真实消耗量：期末库存 - 期初库存 + 加油量
-            real_consumption = row.get('end_of_day_inventory', 0) - row.get('prev_day_inventory', 0) + row.get('daily_refill', 0)
+        try:
+            # 直接读取查询配置文件
+            config_path = Path(__file__).parent.parent.parent / "config" / "query_config.json"
+            with open(config_path, 'r', encoding='utf-8') as f:
+                sql_templates = json.load(f)
             
-            # 计算误差：订单总量 - 真实消耗量
-            error = row.get('daily_order_volume', 0) - real_consumption
+            # 获取离线事件查询模板
+            query_template = sql_templates.get("error_summary_offline_query", "")
             
-            # 创建处理后的数据记录
-            processed_row = row.copy()
-            processed_row['real_consumption'] = real_consumption
-            processed_row['error'] = error
-            processed_data.append(processed_row)
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "客户对账单"
-        title = f"客户对账单({start_date_str} - {end_date_str})"
-        ws.append([title])
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=7)
-        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
-        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
-        
-        headers = ["客户名称", "设备编码", "油品名称", "日期", "订单总量(L)", "真实消耗量(L)", "误差(L)"]
-        ws.append(headers)
-        
-        for row in processed_data:
-            ws.append([
-                row.get('customer_name', '未知客户'),
-                row['device_code'],
-                row.get('oil_name', '未知油品'),
-                row['report_date'].isoformat(),
-                row['daily_order_volume'],
-                row['real_consumption'],
-                row['error']
-            ])
-        
-        for i, col in enumerate(ws.columns):
-            max_length = 0
-            column_letter = get_column_letter(i + 1)
-            for cell in col:
-                if cell.value is not None:
-                    cell_length = len(str(cell.value))
-                    if cell_length > max_length:
-                        max_length = cell_length
-            adjusted_width = (max_length + 2)
-            ws.column_dimensions[column_letter].width = adjusted_width
-        
-        final_filename = f"客户对账单_{start_date_str}_to_{end_date_str}.xlsx"
-        output_path = Path(tempfile.gettempdir()) / final_filename
-        wb.save(output_path)
-        logger.info(f"客户对账单已生成: {output_path}")
-        return output_path, []
-
-    async def _generate_refueling_details_report(
-        self,
-        device_codes: List[str],
-        start_date_str: str,
-        end_date_str: str,
-    ) -> Tuple[Path, List[str]]:
-        device_codes_tuple = tuple(sorted(device_codes))
-        raw_report_data = await self.device_repo.get_refueling_details_raw_data(
-            device_codes_tuple, start_date_str, end_date_str
-        )
-        if not raw_report_data:
-            raise ValueError("在指定日期范围内所有选定设备均未找到任何加注明细数据。")
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "加注明细报表"
-        title = f"加注明细报表({start_date_str} - {end_date_str})"
-        ws.append([title])
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=6)
-        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
-        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
-        
-        headers = ["设备编码", "订单序号", "加注时间", "油品名称", "油加注值(L)", "原油剩余量(L)"]
-        ws.append(headers)
-        
-        for row in raw_report_data:
-            # 处理加注时间字段
-            order_time = row.get('加注时间', '未知时间')
-            if hasattr(order_time, 'isoformat'):
-                order_time_str = order_time.isoformat()
-            else:
-                order_time_str = str(order_time)
+            if not query_template:
+                logger.warning("未找到离线事件查询模板")
+                return offline_events
             
-            ws.append([
-                row['device_code'],
-                row.get('订单序号', ''),
-                order_time_str,
-                row.get('油品名称', '未知油品'),
-                row.get('油加注值', 0),
-                row.get('原油剩余量', 0)
-            ])
+            async with get_db_session() as session:
+                params = {
+                    "start_date_param_full": f"{start_date} 00:00:00",
+                    "end_date_param_full": f"{end_date} 23:59:59"
+                }
+                
+                statement = text(query_template)
+                result = await session.execute(statement, params)
+                events = [dict(row) for row in result.fetchall()]
+                
+                # 按设备编码分组
+                for event in events:
+                    device_code = event['device_code']
+                    if device_code in device_codes:
+                        offline_events[device_code].append(event)
+                
+            logger.info(f"获取到 {sum(len(events) for events in offline_events.values())} 条离线事件记录")
+        except Exception as e:
+            logger.error(f"获取离线事件时出错: {e}", exc_info=True)
         
-        for i, col in enumerate(ws.columns):
-            max_length = 0
-            column_letter = get_column_letter(i + 1)
-            for cell in col:
-                if cell.value is not None:
-                    cell_length = len(str(cell.value))
-                    if cell_length > max_length:
-                        max_length = cell_length
-            adjusted_width = (max_length + 2)
-            ws.column_dimensions[column_letter].width = adjusted_width
-        
-        final_filename = f"加注明细报表_{start_date_str}_to_{end_date_str}.xlsx"
-        output_path = Path(tempfile.gettempdir()) / final_filename
-        wb.save(output_path)
-        logger.info(f"加注明细报表已生成: {output_path}")
-        return output_path, []
+        return offline_events
