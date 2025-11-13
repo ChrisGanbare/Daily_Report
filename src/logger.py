@@ -4,13 +4,14 @@
 import logging
 import sys
 
-from config import settings
-
 
 def setup_logger():
     """
     配置并返回一个全局日志记录器
     """
+    # 延迟导入settings，避免循环导入问题
+    from src.config import settings
+    
     # 获取日志级别，如果无效则默认为INFO
     log_level = getattr(logging, settings.logging.level.upper(), logging.INFO)
 

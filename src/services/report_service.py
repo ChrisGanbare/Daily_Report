@@ -20,8 +20,9 @@ from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
-from repositories.device_repository import DeviceRepository
-from logger import logger
+from src.repositories.device_repository import DeviceRepository
+from src.logger import logger
+from src.utils.date_utils import parse_date, validate_error_summary_date_span
 
 
 class ReportService:
@@ -241,12 +242,32 @@ class ReportService:
         start_date_str: str,
         end_date_str: str,
     ) -> Tuple[Path, List[str]]:
+        # 验证日期范围不超过2个月
+        date_row = {"start_date": start_date_str, "end_date": end_date_str}
+        if not validate_error_summary_date_span(date_row):
+            raise ValueError("误差汇总报表的日期范围不能超过2个月")
+        
         device_codes_tuple = tuple(sorted(device_codes))
         raw_report_data = await self.device_repo.get_error_summary_raw_data(
             device_codes_tuple, start_date_str, end_date_str
         )
         if not raw_report_data:
             raise ValueError("在指定日期范围内所有选定设备均未找到任何误差汇总数据。")
+
+        # 计算误差数据
+        processed_data = []
+        for row in raw_report_data:
+            # 计算真实消耗量：期末库存 - 期初库存 + 加油量
+            real_consumption = row.get('end_of_day_inventory', 0) - row.get('prev_day_inventory', 0) + row.get('daily_refill', 0)
+            
+            # 计算误差：订单总量 - 真实消耗量
+            error = row.get('daily_order_volume', 0) - real_consumption
+            
+            # 添加计算后的字段
+            processed_row = row.copy()
+            processed_row['real_consumption'] = real_consumption
+            processed_row['error'] = error
+            processed_data.append(processed_row)
 
         wb = Workbook()
         ws = wb.active
@@ -260,7 +281,7 @@ class ReportService:
         headers = ["设备编码", "客户名称", "油品名称", "日期", "订单总量(L)", "真实消耗量(L)", "误差(L)", "误差类型"]
         ws.append(headers)
         
-        for row in raw_report_data:
+        for row in processed_data:
             error_type = "中润亏损" if row['error'] > 0 else "客户亏损"
             ws.append([
                 row['device_code'],
@@ -356,6 +377,21 @@ class ReportService:
         if not raw_report_data:
             raise ValueError("在指定日期范围内所有选定设备均未找到任何客户对账单数据。")
 
+        # 计算真实消耗量和误差
+        processed_data = []
+        for row in raw_report_data:
+            # 计算真实消耗量：期末库存 - 期初库存 + 加油量
+            real_consumption = row.get('end_of_day_inventory', 0) - row.get('prev_day_inventory', 0) + row.get('daily_refill', 0)
+            
+            # 计算误差：订单总量 - 真实消耗量
+            error = row.get('daily_order_volume', 0) - real_consumption
+            
+            # 创建处理后的数据记录
+            processed_row = row.copy()
+            processed_row['real_consumption'] = real_consumption
+            processed_row['error'] = error
+            processed_data.append(processed_row)
+
         wb = Workbook()
         ws = wb.active
         ws.title = "客户对账单"
@@ -368,7 +404,7 @@ class ReportService:
         headers = ["客户名称", "设备编码", "油品名称", "日期", "订单总量(L)", "真实消耗量(L)", "误差(L)"]
         ws.append(headers)
         
-        for row in raw_report_data:
+        for row in processed_data:
             ws.append([
                 row.get('customer_name', '未知客户'),
                 row['device_code'],

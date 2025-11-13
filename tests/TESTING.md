@@ -11,13 +11,17 @@ tests/
 ├── __init__.py              # 包初始化文件
 ├── base_test.py            # 测试基类，提供通用测试工具
 ├── test_core_db_handler.py    # 数据库处理模块测试
-├── test_core_file_handler.py  # 文件处理模块测试
+# 删除不再需要的测试文件引用
+# ├── test_core_file_handler.py  # 文件处理模块测试（已删除）
 ├── test_core_inventory_handler.py  # 库存处理模块测试
 ├── test_core_statement_handler.py  # 对账单处理模块测试
 ├── test_utils_config_encrypt.py   # 配置加密工具测试
 ├── test_utils_config_handler.py   # 配置处理模块测试
 ├── test_utils_data_validator.py   # 数据验证模块测试
 ├── test_utils_date_utils.py       # 日期工具模块测试
+├── test_core_device_repository.py  # 设备仓库模块测试
+# ├── test_core_file_handler.py  # 文件处理模块测试（已删除）
+├── test_core_report_controller.py  # 报表控制器测试
 ├── test_dependency_compatibility.py  # 依赖兼容性测试
 ├── test_integration.py     # 集成测试
 └── TESTING.md               # 测试文档
@@ -181,7 +185,7 @@ python -m pytest tests/test_dependency_compatibility.py -v
 
 ### 测试维护
 
-当添加新的关键依赖或修改依赖使用方式时，应及时更新依赖兼容性测试：
+当添加新的关键依赖或修改依赖使用方式时，及时更新依赖兼容性测试：
 1. 在test_dependency_compatibility.py中添加相应的测试用例
 2. 更新TESTING.md文档中的测试范围说明
 3. 确保新添加的测试用例能够验证核心功能在不同版本下的行为
@@ -234,4 +238,3 @@ pytest
 
 # 重置testmon数据库
 pytest --testmon-nocov
-```

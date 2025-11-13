@@ -8,8 +8,8 @@ from functools import wraps
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, bindparam
 
-from logger import logger
-from config import settings
+from src.logger import logger
+from src.config import settings
 
 # --- 异步缓存实现 ---
 class AsyncTTLCache:
@@ -285,32 +285,8 @@ class DeviceRepository:
                 device_codes, start_date, end_date
             )
             
-            # 获取离线事件数据
-            offline_query_template = settings.sql_templates.error_summary_offline_query
-            if not offline_query_template:
-                raise ValueError("离线事件查询模板 'error_summary_offline_query' 未在配置中找到。")
-
-            params = {
-                "start_date_param_full": f"{start_date} 00:00:00",
-                "end_date_param_full": f"{end_date} 23:59:59",
-                "device_codes": device_codes,
-            }
-
-            statement = text(offline_query_template).bindparams(
-                bindparam('device_codes', expanding=True)
-            )
-            
-            offline_result = await self.session.execute(statement, params)
-            offline_data = [row._asdict() for row in offline_result.fetchall()]
-            
-            # 合并数据
-            combined_data = {
-                "daily_consumption": daily_data,
-                "offline_events": offline_data
-            }
-            
-            logger.info(f"为设备 {device_codes} 查询到误差汇总数据：每日消耗 {len(daily_data)} 条，离线事件 {len(offline_data)} 条。")
-            return combined_data
+            logger.info(f"为设备 {device_codes} 查询到误差汇总数据：{len(daily_data)} 条记录。")
+            return daily_data
         except Exception as e:
             logger.error(f"查询误差汇总数据时出错: {e}", exc_info=True)
             raise

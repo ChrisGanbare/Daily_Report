@@ -20,13 +20,20 @@ from dateutil.relativedelta import relativedelta
 import json
 
 # 添加项目根目录到sys.path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import os
+import sys
 
-from config import settings
-from logger import logger
-from database import get_db
-from repositories.device_repository import DeviceRepository, AsyncTTLCache, async_cached
-from services.report_service import ReportService
+# 确保能够导入同一目录下的模块
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+# 导入同一目录下的模块
+from src.config import settings
+from src.logger import logger
+from src.database import get_db
+from src.repositories.device_repository import DeviceRepository, AsyncTTLCache, async_cached
+from src.services.report_service import ReportService
 
 # --- 路径配置 ---
 BASE_DIR = Path(__file__).parent.parent

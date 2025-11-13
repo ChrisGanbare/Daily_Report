@@ -157,6 +157,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // 新增：误差汇总报表日期范围验证
+        if (reportType === 'error_summary') {
+            const monthDiff = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+            if (monthDiff >= 2) {
+                setStatus('误差汇总报表查询日期跨度不能超过两个月。', true);
+                return;
+            }
+        }
+
         const selectedCheckboxes = deviceList.querySelectorAll('.device-checkbox:checked');
         if (selectedCheckboxes.length === 0) {
             setStatus('请至少选择一个设备。', true);

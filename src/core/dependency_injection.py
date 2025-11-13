@@ -117,12 +117,38 @@ service_provider = ServiceProvider()
 
 def register_services():
     """注册所有服务到依赖注入容器"""
-    from ..utils.config_handler import ConfigHandler
     from .cache_handler import CacheHandler
     from .db_handler import DatabaseHandler
+    from ..config import settings
+
+    class ConfigServiceAdapter:
+        """配置服务适配器，将新的配置系统适配到IConfigService接口"""
+        
+        def get_database_config(self) -> Dict[str, Any]:
+            """获取数据库配置"""
+            return {
+                "host": settings.db_config.host,
+                "port": settings.db_config.port,
+                "user": settings.db_config.user,
+                "password": settings.db_config.password,
+                "database": settings.db_config.database
+            }
+        
+        def get_sql_templates(self) -> Dict[str, str]:
+            """获取SQL模板"""
+            return {
+                "device_id_query": settings.sql_templates.device_id_query,
+                "device_id_fallback_query": settings.sql_templates.device_id_fallback_query,
+                "inventory_query": settings.sql_templates.inventory_query,
+                "customer_query": settings.sql_templates.customer_query,
+                "refueling_details_query": settings.sql_templates.refueling_details_query,
+                "error_summary_main_query": settings.sql_templates.error_summary_main_query or "",
+                "error_summary_offline_query": settings.sql_templates.error_summary_offline_query or "",
+                "daily_consumption_raw_query": settings.sql_templates.daily_consumption_raw_query or ""
+            }
 
     # 注册配置服务
-    service_provider.register_singleton("IConfigService", ConfigHandler())
+    service_provider.register_singleton("IConfigService", ConfigServiceAdapter())
 
     # 注册数据库服务
     def create_database_service():

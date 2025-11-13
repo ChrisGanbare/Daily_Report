@@ -108,6 +108,46 @@ def validate_daily_consumption_date_span(row):
     return True
 
 
+def validate_error_summary_date_span(row):
+    """
+    验证误差汇总报表的日期范围（小于等于2个月）
+
+    Args:
+        row (dict): CSV数据行，应包含'start_date'和'end_date'字段
+
+    Returns:
+        bool: 验证通过返回True，否则返回False
+    """
+    try:
+        start_date = parse_date(row["start_date"])
+        end_date = parse_date(row["end_date"])
+    except ValueError as e:
+        print(f"日期格式错误: {row}。{e}")
+        return False
+
+    # 验证开始日期不能晚于结束日期
+    if start_date > end_date:
+        print(f"日期逻辑错误: 开始日期 {row['start_date']} 不能晚于结束日期 {row['end_date']}")
+        return False
+
+    # 计算总天数
+    total_days = (end_date - start_date).days
+    
+    # 计算年份差和月份差
+    year_diff = end_date.year - start_date.year
+    month_diff = end_date.month - start_date.month
+    
+    # 总月份差
+    total_month_diff = year_diff * 12 + month_diff
+    
+    # 检查是否在2个月范围内（范围 <= 2个月）
+    if total_month_diff > 2 or (total_month_diff == 2 and total_days > 61):  # 允许最多2个月，但总天数不超过61天
+        print(f"日期跨度错误: 从 {row['start_date']} 到 {row['end_date']} 的日期范围超过2个月")
+        return False
+    
+    return True
+
+
 def validate_date_span(row):
     """
     验证CSV数据行中的日期字段跨度是否在1个月以内
