@@ -2,7 +2,7 @@
 
 **Version: 2.0.0**
 
-ZR Daily Report is a modern, web-based application designed to generate daily and monthly consumption error reports for cutting fluid equipment. This version replaces the old GUI-based workflow with a streamlined, browser-based interface.
+ZR Daily Report is a modern, web-based application designed to generate daily consumption error reports for cutting fluid equipment. This version replaces the old GUI-based workflow with a streamlined, browser-based interface.
 
 ## ✨ Features
 

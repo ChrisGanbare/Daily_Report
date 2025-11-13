@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from contextlib import asynccontextmanager
 
-from src.config import settings
-from src.logger import logger
+from config import settings
+from logger import logger
 
 # 构建数据库连接URL
 # 注意：SQLAlchemy 2.x for aiomysql的URL格式是 mysql+aiomysql://

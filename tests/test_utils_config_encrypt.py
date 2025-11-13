@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 # 添加项目根目录到sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.utils.config_encrypt import decrypt_config, encrypt_config
+from utils.config_encrypt import decrypt_config, encrypt_config
 from tests.base_test import BaseTestCase
 
 

@@ -20,8 +20,8 @@ from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
-from src.repositories.device_repository import DeviceRepository
-from src.logger import logger
+from repositories.device_repository import DeviceRepository
+from logger import logger
 
 
 class ReportService:
@@ -68,10 +68,6 @@ class ReportService:
 
         if report_type == "daily_consumption":
             return await self._generate_daily_consumption_report(
-                devices, start_date, end_date
-            )
-        elif report_type == "monthly_consumption":
-            return await self._generate_monthly_consumption_report(
                 devices, start_date, end_date
             )
         elif report_type == "error_summary":
@@ -154,63 +150,7 @@ class ReportService:
                     os.remove(file_path)
         return zip_path, warnings
 
-    async def _generate_monthly_consumption_report(
-        self,
-        device_codes: List[str],
-        start_date_str: str,
-        end_date_str: str,
-    ) -> Tuple[Path, List[str]]:
-        device_codes_tuple = tuple(sorted(device_codes))
-        raw_report_data = await self.device_repo.get_monthly_consumption_raw_data(
-            device_codes_tuple, start_date_str, end_date_str
-        )
-        if not raw_report_data:
-            raise ValueError("在指定日期范围内所有选定设备均未找到任何消耗数据。")
 
-        data_by_device = defaultdict(list)
-        for row in raw_report_data:
-            data_by_device[row['device_code']].append(row)
-
-        report_files = []
-        warnings = []
-        for device_code in device_codes:
-            device_data = data_by_device.get(device_code)
-            if not device_data:
-                warnings.append(f"设备 {device_code} 没有可用于计算的数据，已跳过。")
-                continue
-            try:
-                barrel_count = self.barrel_overrides.get(device_code, 1)
-                logger.info(f"设备 {device_code} 使用桶数: {barrel_count}")
-                final_report_data = self._calculate_final_data(device_data, barrel_count, "monthly")
-
-                if not final_report_data:
-                    warnings.append(f"设备 {device_code} 计算后数据为空，已跳过。")
-                    continue
-
-                customer_name = final_report_data[0].get('customer_name', '未知客户')
-                oil_name = final_report_data[0].get('oil_name', '未知油品')
-                report_path = self._generate_monthly_detail_excel(
-                    final_report_data, device_code, customer_name, oil_name, start_date_str, end_date_str, barrel_count
-                )
-                if report_path:
-                    report_files.append(report_path)
-            except Exception as e:
-                warnings.append(f"为设备 {device_code} 生成Excel文件失败: {e}")
-                logger.error(f"为设备 {device_code} 生成Excel文件失败: {e}", exc_info=True)
-        
-        if not report_files:
-            raise ValueError("所有选定设备均未能成功生成报表。")
-
-        if len(report_files) == 1:
-            return report_files[0], warnings
-
-        zip_path = Path(tempfile.gettempdir()) / f"ZR_Monthly_Reports_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
-            for file_path in report_files:
-                if file_path:
-                    zipf.write(file_path, os.path.basename(file_path))
-                    os.remove(file_path)
-        return zip_path, warnings
 
     def _calculate_final_data(self, device_raw_data: List[Dict[str, Any]], barrel_count: int, period: str) -> List[Dict[str, Any]]:
         order_volume_key = 'daily_order_volume' if period == 'daily' else 'monthly_order_volume'
@@ -293,37 +233,7 @@ class ReportService:
         logger.info(f"Excel报表已生成: {output_path}")
         return output_path
 
-    def _generate_monthly_detail_excel(self, report_data: List[Dict[str, Any]], device_code: str, customer_name: str, oil_name: str, start_date_str: str, end_date_str: str, barrel_count: int) -> Path:
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "每月消耗明细"
-        oil_name_str = f" {oil_name} " if oil_name and pd.notna(oil_name) else " "
-        title = f"{device_code}{oil_name_str}每月消耗误差分析({start_date_str} - {end_date_str})"
-        ws.append([title])
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=5)
-        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
-        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
-        headers = ["月份", "订单总量(L)", "真实消耗量(L)", "误差(L)", "期末库存(L)"]
-        ws.append(headers)
-        for row in report_data:
-            shortage_error = max(0, row['error'])
-            excess_error = max(0, -row['error'])
-            ws.append([row['report_month'], row['monthly_order_volume'], row['real_consumption'], shortage_error, excess_error])
-        for i, col in enumerate(ws.columns):
-            max_length = 0
-            column_letter = get_column_letter(i + 1)
-            for cell in col:
-                if cell.value is not None:
-                    cell_length = len(str(cell.value))
-                    if cell_length > max_length:
-                        max_length = cell_length
-            adjusted_width = (max_length + 2)
-            ws.column_dimensions[column_letter].width = adjusted_width
-        final_filename = f"{customer_name}_{device_code}_{start_date_str}_to_{end_date_str}_每月消耗误差报表.xlsx"
-        output_path = Path(tempfile.gettempdir()) / final_filename
-        wb.save(output_path)
-        logger.info(f"Excel报表已生成: {output_path}")
-        return output_path
+
 
     async def _generate_error_summary_report(
         self,

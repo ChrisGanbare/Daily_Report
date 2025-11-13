@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 # 添加项目根目录到sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.utils.date_utils import parse_date, validate_csv_data, validate_date_span
+from utils.date_utils import parse_date, validate_csv_data, validate_date_span
 from tests.base_test import BaseTestCase
 
 

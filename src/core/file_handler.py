@@ -3,7 +3,7 @@ import os
 import sys
 import re
 from datetime import datetime
-from src.utils.date_utils import parse_date, validate_csv_data, validate_date_span
+from utils.date_utils import parse_date, validate_csv_data, validate_date_span
 
 
 class FileReadError(Exception):

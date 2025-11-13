@@ -1,7 +1,7 @@
 import asyncio
-from src.database import get_db_session
-from src.services.report_service import ReportService
-from src.repositories.device_repository import DeviceRepository
+from database import get_db_session
+from services.report_service import ReportService
+from repositories.device_repository import DeviceRepository
 
 async def check_report_file():
     try:

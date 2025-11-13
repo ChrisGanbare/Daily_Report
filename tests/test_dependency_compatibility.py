@@ -28,7 +28,7 @@ from openpyxl.chart import Reference
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.core.inventory_handler import InventoryReportGenerator
+from core.inventory_handler import InventoryReportGenerator
 
 
 class DependencyCompatibilityTest(unittest.TestCase):

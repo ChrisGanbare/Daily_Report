@@ -8,8 +8,8 @@ from functools import wraps
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, bindparam
 
-from src.logger import logger
-from src.config import settings
+from logger import logger
+from config import settings
 
 # --- 异步缓存实现 ---
 class AsyncTTLCache:
@@ -118,41 +118,7 @@ class DeviceRepository:
             logger.error(f"查询每日消耗原始数据时出错: {e}", exc_info=True)
             raise
 
-    @async_cached(report_data_cache)
-    async def get_monthly_consumption_raw_data(
-        self,
-        device_codes: Tuple[str, ...], # 参数必须是可哈希的，所以用元组
-        start_date: str,
-        end_date: str,
-    ) -> List[Dict[str, Any]]:
-        """
-        使用高性能的单一SQL查询，获取用于计算每月消耗的原始数据。
-        """
-        
-        query_template = settings.sql_templates.monthly_consumption_raw_query
-        if not query_template:
-            raise ValueError("每月消耗原始数据查询模板 'monthly_consumption_raw_query' 未在配置中找到。")
 
-        params = {
-            "start_date_param": start_date,
-            "end_date_param": end_date,
-            "start_date_param_full": f"{start_date} 00:00:00",
-            "end_date_param_full": f"{end_date} 23:59:59",
-            "device_codes": device_codes,
-        }
-
-        statement = text(query_template).bindparams(
-            bindparam('device_codes', expanding=True)
-        )
-        
-        try:
-            result = await self.session.execute(statement, params)
-            data = [row._asdict() for row in result.fetchall()]
-            logger.info(f"为设备 {device_codes} 查询到 {len(data)} 条每月消耗原始数据记录。")
-            return data
-        except Exception as e:
-            logger.error(f"查询每月消耗原始数据时出错: {e}", exc_info=True)
-            raise
 
     async def get_devices_with_customers(
         self,

@@ -55,7 +55,6 @@ class SQLTemplates(BaseModel):
     error_summary_main_query: Optional[str] = None
     error_summary_offline_query: Optional[str] = None
     daily_consumption_raw_query: Optional[str] = None
-    monthly_consumption_raw_query: Optional[str] = None
 
 class Settings(BaseModel):
     """主配置模型"""

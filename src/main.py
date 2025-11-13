@@ -13,16 +13,20 @@ from pydantic import BaseModel
 from pathlib import Path
 import multiprocessing
 import os
+import sys
 from starlette.background import BackgroundTask
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import json
 
-from src.config import settings
-from src.logger import logger
-from src.database import get_db
-from src.repositories.device_repository import DeviceRepository, AsyncTTLCache, async_cached
-from src.services.report_service import ReportService
+# 添加项目根目录到sys.path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from config import settings
+from logger import logger
+from database import get_db
+from repositories.device_repository import DeviceRepository, AsyncTTLCache, async_cached
+from services.report_service import ReportService
 
 # --- 路径配置 ---
 BASE_DIR = Path(__file__).parent.parent
