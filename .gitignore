@@ -50,20 +50,12 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-# Excluded modules
-src/api/
-src/core/async_processor.py
-src/core/cache_handler.py
-src/core/dependency_injection.py
-src/monitoring/progress_monitor.py
-src/web/app.py
 
 # Documentation build directory
 site/
 
 # Local configuration files
 .env
-config/*.json
 *.key
 *.pem
 

@@ -55,7 +55,7 @@ class ReportDataManager:
         Returns:
             list: 库存数据
         """
-        # 直接返回原始数据，因为fetch_generic_data已经处理好了
+        # 直接返回原始数据，因为db_handler.fetch_generic_data已经处理好了
         return raw_data[0]  # data部分
         
     def calculate_daily_usage(self, raw_data):
