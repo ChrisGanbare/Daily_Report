@@ -1,0 +1,15 @@
+{
+  "db_config": {
+    "host": "your_database_host",
+    "user": "your_database_user",
+    "password": "your_database_password",
+    "database": "your_database_name",
+    "port": 3306
+  },
+  "sql_templates": {
+    "device_id_query": "SELECT id, customer_id FROM oil.t_device WHERE device_code = %s ORDER BY create_time DESC LIMIT 1",
+    "customer_query": "SELECT customer_name FROM oil.t_customer WHERE id = %s",
+    "inventory_query": "SELECT * FROM oil.t_inventory WHERE device_id = %s AND create_time BETWEEN %s AND %s ORDER BY create_time DESC",
+    "refueling_details_query": "SELECT * FROM oil.t_refueling_detail WHERE device_id = %s AND create_time BETWEEN %s AND %s ORDER BY create_time ASC"
+  }
+}

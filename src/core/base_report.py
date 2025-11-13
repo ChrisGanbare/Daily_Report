@@ -78,3 +78,29 @@ class BaseReportGenerator(ABC):
         if date:
             return date.strftime("%Y-%m-%d")
         return "未知日期"
+
+    def _get_unique_filename(self, file_path):
+        """
+        生成唯一的文件名，如果文件已存在，则添加序号
+
+        Args:
+            file_path (str): 原始文件路径
+
+        Returns:
+            str: 唯一的文件路径
+        """
+        # 如果文件不存在，直接返回原路径
+        if not os.path.exists(file_path):
+            return file_path
+
+        # 分离文件名和扩展名
+        base_name, extension = os.path.splitext(file_path)
+        counter = 1
+        new_file_path = file_path
+
+        # 循环查找未被占用的文件名
+        while os.path.exists(new_file_path):
+            new_file_path = f"{base_name}({counter}){extension}"
+            counter += 1
+
+        return new_file_path

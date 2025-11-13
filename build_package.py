@@ -144,6 +144,7 @@ class PackageBuilder:
         print("创建核心依赖文件...")
         requirements_content = """openpyxl==3.1.0
 mysql-connector-python==8.0.33
+python-dateutil>=2.8.2
 """
 
         with open("requirements.txt", "w", encoding="utf-8") as f:

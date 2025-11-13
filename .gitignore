@@ -61,9 +61,6 @@ src/web/app.py
 # Documentation build directory
 site/
 
-# MkDocs
-mkdocs.yml
-
 # Local configuration files
 .env
 config/*.json
@@ -98,7 +95,7 @@ data/
 
 # 配置文件（敏感信息）
 config/.env
-config/query_config.json
+frozen_dist/
 
 # 错误日志文件
 错误日志_*.txt
@@ -136,9 +133,13 @@ zr-daily-report-v0.7/
 zr_daily_report_v0.7/
 releases/
 release/
+frozen_dist/
+dist/
 
 # Batch files exception - allow tracking of specific batch files
 !important.bat
 !zr_daily_report_portable/install.bat
 !zr_daily_report_portable/run_report.bat
 !run_report.bat
+!config/error_summary_query.json
+!config/query_config.example.json
