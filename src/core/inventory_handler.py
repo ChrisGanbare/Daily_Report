@@ -234,7 +234,7 @@ class InventoryReportGenerator(BaseReportGenerator):
     def _validate_inventory_value(self, value):
         """
         验证库存值是否有效
-        - 允许大于100的值
+        - 允许大于等于0的值
         - 不允许小于0的值
         - 不允许非数字值
         """
