@@ -236,6 +236,177 @@ class ReportService:
 
 
 
+    async def _generate_inventory_report(self, device_codes: List[str], start_date_str: str, end_date_str: str) -> Tuple[Path, List[str]]:
+        """
+        生成库存报表 - 基于重构前的业务逻辑
+        使用简单的数据验证和Excel生成方式
+        """
+        logger.info(f"开始生成库存报表: 设备={device_codes}, 日期范围={start_date_str} 至 {end_date_str}")
+        
+        device_codes_tuple = tuple(sorted(device_codes))
+        raw_report_data = await self.device_repo.get_inventory_raw_data(
+            device_codes_tuple, start_date_str, end_date_str
+        )
+        
+        if not raw_report_data:
+            raise ValueError("在指定日期范围内所有选定设备均未找到任何库存数据。")
+
+        # 按设备分组数据
+        data_by_device = defaultdict(list)
+        for row in raw_report_data:
+            data_by_device[row['device_code']].append(row)
+
+        report_files = []
+        warnings = []
+        
+        for device_code in device_codes:
+            device_data = data_by_device.get(device_code)
+            if not device_data:
+                warnings.append(f"设备 {device_code} 没有库存数据，已跳过。")
+                continue
+                
+            try:
+                # 基于重构前逻辑：使用简单的数据验证
+                validated_data = []
+                for i, row in enumerate(device_data):
+                    try:
+                        # 简单验证：检查必需字段是否存在
+                        if 'report_date' not in row or 'end_of_day_inventory' not in row:
+                            logger.warning(f"设备 {device_code} 第{i+1}条数据缺少必需字段，已跳过")
+                            continue
+                            
+                        # 验证库存值
+                        inventory_value = self._validate_inventory_value(row.get('end_of_day_inventory'))
+                        
+                        # 验证日期格式
+                        report_date = self._validate_date_format(row.get('report_date'))
+                        
+                        validated_row = row.copy()
+                        validated_row['end_of_day_inventory'] = inventory_value
+                        validated_row['report_date'] = report_date
+                        validated_data.append(validated_row)
+                        
+                    except Exception as e:
+                        logger.warning(f"设备 {device_code} 第{i+1}条数据验证失败: {e}")
+                        continue
+                
+                if not validated_data:
+                    warnings.append(f"设备 {device_code} 所有数据验证失败，已跳过。")
+                    continue
+                    
+                # 生成Excel报表
+                report_path = self._generate_inventory_excel(validated_data, device_code, start_date_str, end_date_str)
+                if report_path:
+                    report_files.append(report_path)
+                    
+            except Exception as e:
+                warnings.append(f"为设备 {device_code} 生成库存报表失败: {e}")
+                logger.error(f"为设备 {device_code} 生成库存报表失败: {e}", exc_info=True)
+        
+        if not report_files:
+            raise ValueError("所有选定设备均未能成功生成库存报表。")
+
+        if len(report_files) == 1:
+            return report_files[0], warnings
+
+        # 多设备时打包为zip
+        zip_path = Path(tempfile.gettempdir()) / f"ZR_Inventory_Reports_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for file_path in report_files:
+                if file_path:
+                    zipf.write(file_path, os.path.basename(file_path))
+                    os.remove(file_path)
+        return zip_path, warnings
+
+    def _validate_inventory_value(self, value) -> float:
+        """
+        验证库存值 - 基于重构前的简单验证逻辑
+        """
+        if value is None:
+            return 0.0
+            
+        try:
+            # 转换为浮点数
+            float_value = float(value)
+            
+            # 检查是否为负数
+            if float_value < 0:
+                logger.warning(f"库存值为负数: {float_value}，已设置为0")
+                return 0.0
+                
+            return float_value
+            
+        except (ValueError, TypeError):
+            logger.warning(f"库存值格式无效: {value}，已设置为0")
+            return 0.0
+
+    def _validate_date_format(self, date_value):
+        """
+        验证日期格式 - 支持多种日期格式
+        """
+        if date_value is None:
+            raise ValueError("日期值为空")
+            
+        try:
+            # 如果是字符串，尝试解析
+            if isinstance(date_value, str):
+                return parse_date(date_value)
+            # 如果是datetime对象，直接返回
+            elif isinstance(date_value, datetime):
+                return date_value
+            else:
+                raise ValueError(f"不支持的日期格式: {type(date_value)}")
+                
+        except Exception as e:
+            raise ValueError(f"日期格式验证失败: {date_value}, 错误: {e}")
+
+    def _generate_inventory_excel(self, report_data: List[Dict[str, Any]], device_code: str, start_date_str: str, end_date_str: str) -> Path:
+        """
+        生成库存Excel报表 - 基于重构前的简单格式
+        """
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "库存报表"
+        
+        # 设置标题
+        title = f"设备 {device_code} 库存报表({start_date_str} - {end_date_str})"
+        ws.append([title])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=4)
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
+        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
+        
+        # 表头
+        headers = ["日期", "当日库存(L)", "客户名称", "油品名称"]
+        ws.append(headers)
+        
+        # 设置表头样式
+        for cell in ws[2]:
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
+        
+        # 填充数据
+        for row in report_data:
+            ws.append([
+                row['report_date'].strftime('%Y-%m-%d'),
+                row['end_of_day_inventory'],
+                row.get('customer_name', '未知客户'),
+                row.get('oil_name', '未知油品')
+            ])
+        
+        # 设置列宽
+        column_widths = {'A': 12, 'B': 15, 'C': 20, 'D': 20}
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+        
+        # 生成文件名
+        customer_name = report_data[0].get('customer_name', '未知客户') if report_data else '未知客户'
+        final_filename = f"{customer_name}_{device_code}_{start_date_str}_to_{end_date_str}_库存报表.xlsx"
+        output_path = Path(tempfile.gettempdir()) / final_filename
+        
+        wb.save(output_path)
+        logger.info(f"库存Excel报表已生成: {output_path}")
+        return output_path
+
     async def _generate_error_summary_report(self, device_codes: List[str], start_date_str: str, end_date_str: str) -> Tuple[Path, List[str]]:
         # 验证日期范围不超过2个月
         date_row = {"start_date": start_date_str, "end_date": end_date_str}
