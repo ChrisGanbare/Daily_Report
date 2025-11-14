@@ -791,7 +791,7 @@ class ReportService:
 
     def _generate_inventory_excel_with_chart(self, inventory_data, device_code, oil_name, customer_name, start_date, end_date):
         """
-        生成带图表的库存报表Excel文件（基于development-copy分支逻辑）
+        生成带图表的库存报表Excel文件（基于development-copy分支逻辑，确保与原分支效果一致）
         
         Args:
             inventory_data: 库存数据列表
@@ -807,80 +807,119 @@ class ReportService:
         from openpyxl import Workbook
         from openpyxl.chart import LineChart, Reference
         from openpyxl.chart.axis import DateAxis
+        from openpyxl.chart.marker import Marker
+        from openpyxl.chart.shapes import GraphicalProperties
+        from openpyxl.drawing.line import LineProperties
         from openpyxl.styles import Font, Alignment, PatternFill
         from openpyxl.utils import get_column_letter
         import tempfile
         from pathlib import Path
-        from datetime import datetime
+        from datetime import datetime, timedelta
+        
+        # 数据补全逻辑（与原分支保持一致）
+        def complete_data(data_list):
+            """补全日期范围内的数据，与原分支逻辑一致"""
+            if not data_list:
+                return []
+                
+            # 将数据转换为字典格式
+            data_dict = {}
+            for record in data_list:
+                date = record.get('report_date')
+                if isinstance(date, datetime):
+                    date_key = date.date()
+                else:
+                    date_key = date
+                data_dict[date_key] = record.get('end_of_day_inventory', 0)
+            
+            # 补全日期范围内的数据
+            complete_data_list = []
+            current_date = start_date.date() if isinstance(start_date, datetime) else start_date
+            end_date_dt = end_date.date() if isinstance(end_date, datetime) else end_date
+            last_inventory = 0
+            
+            # 如果有数据，使用第一条数据的库存值作为默认值
+            if data_list:
+                last_inventory = data_list[0].get('end_of_day_inventory', 0)
+            
+            while current_date <= end_date_dt:
+                current_inventory = data_dict.get(current_date, last_inventory)
+                complete_data_list.append({
+                    'report_date': current_date,
+                    'end_of_day_inventory': current_inventory,
+                    'customer_name': customer_name,
+                    'oil_name': oil_name
+                })
+                last_inventory = current_inventory
+                current_date += timedelta(days=1)
+            
+            return complete_data_list
+        
+        # 补全数据
+        complete_inventory_data = complete_data(inventory_data)
         
         # 创建工作簿和工作表
         wb = Workbook()
         ws = wb.active
-        ws.title = "库存报表"
+        ws.title = "库存数据"
         
-        # 设置报表标题（与原项目保持一致）
-        title = f"设备 {device_code} 库存报表({start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')})"
-        ws.merge_cells('A1:D1')
-        ws['A1'] = title
-        ws['A1'].font = Font(size=14, bold=True, name="微软雅黑")
-        ws['A1'].alignment = Alignment(horizontal="center")
+        # 设置报表标题（与原分支完全一致）
+        oil_name_str = f" {oil_name} " if oil_name else " "
+        title = f"{device_code}{oil_name_str}每日库存余量变化趋势({start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')})"
+        ws.append([title])
+        # 将合并单元格的宽度增加到20列（与原分支一致）
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=20)
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
+        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
         
-        # 设置表头（与原项目保持一致）
-        headers = ["日期", "当日库存(L)", "客户名称", "油品名称"]
+        # 添加数据列标题（与原分支完全一致）
+        ws.append(["日期", "原油剩余量(L)"])
         
-        # 设置表头样式（与原项目保持一致）
-        for cell in ws[3]:
-            cell.font = Font(bold=True, size=12, name="微软雅黑")
-            cell.fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center")
+        # 写入补全后的数据（与原分支完全一致）
+        for record in complete_inventory_data:
+            ws.append([
+                record['report_date'].strftime('%Y-%m-%d') if isinstance(record['report_date'], datetime) else record['report_date'],
+                record['end_of_day_inventory']
+            ])
         
-        # 填充数据（与原项目保持一致）
-        row_index = 3
-        for record in inventory_data:
-            ws.cell(row=row_index, column=1).value = record.get('report_date', '')
-            ws.cell(row=row_index, column=2).value = record.get('end_of_day_inventory', 0)
-            ws.cell(row=row_index, column=3).value = record.get('customer_name', '未知客户')
-            ws.cell(row=row_index, column=4).value = record.get('oil_name', '未知油品')
-            
-            # 设置数据行样式
-            for col in range(1, 5):
-                cell = ws.cell(row=row_index, column=col)
-                cell.font = Font(size=10, name="微软雅黑")
-                if col == 2:  # 数值列右对齐
-                    cell.alignment = Alignment(horizontal="right")
-                else:
-                    cell.alignment = Alignment(horizontal="left")
-            
-            row_index += 1
-            
+        # 调整列宽（与原分支完全一致）
+        ws.column_dimensions["A"].width = 12  # 日期列宽度
+        ws.column_dimensions["B"].width = 12  # 原油剩余量(L)列宽度
         
-        # 设置列宽（与原项目保持一致）
-        column_widths = {'A': 12, 'B': 15, 'C': 20, 'D': 20}
-        for col, width in column_widths.items():
-            ws.column_dimensions[col].width = width
-        
-        # 创建库存趋势图表（与原项目保持一致）
-        if len(inventory_data) > 1:
+        # 创建图表（与原分支完全一致）
+        if len(complete_inventory_data) > 1:
             chart = LineChart()
-            chart.title = "库存趋势图"
+            chart.title = "每日库存余量变化趋势"
             chart.style = 13
-            chart.y_axis.title = "库存量(L)"
+            chart.y_axis.title = "原油剩余量(L)"
             chart.x_axis.title = "日期"
             
-            # 设置数据范围（当日库存列）
-            data = Reference(ws, min_col=2, min_row=2, max_col=2, max_row=row_index-1)
-            chart.add_data(data, titles_from_data=True)
+            # 设置图表显示数据标签
+            chart.x_axis.tickLblSkip = 3  # 每隔3个标签显示一个（与原分支一致）
+            chart.x_axis.tickLblPos = "low"  # 将标签位置调整到底部（与原分支一致）
+            chart.x_axis.textRotation = 0  # 将文本旋转角度设为0度（水平显示，与原分支一致）
             
-            # 设置日期轴
-            dates = Reference(ws, min_col=1, min_row=3, max_row=row_index-1)
+            # 设置数据范围（与原分支完全一致）
+            data_range = Reference(
+                ws, min_col=2, min_row=2, max_col=2, max_row=len(complete_inventory_data) + 2
+            )
+            dates = Reference(ws, min_col=1, min_row=3, max_row=len(complete_inventory_data) + 2)
+            
+            # 添加数据到图表（与原分支完全一致）
+            chart.add_data(data_range, titles_from_data=True)
             chart.set_categories(dates)
             
-            # 设置图表位置
-            chart.width = 15
-            chart.height = 8
-            ws.add_chart(chart, "A" + str(row_index + 2))
+            # 应用图表样式（与原分支完全一致）
+            chart.series[0].marker = Marker(symbol="circle", size=8)
+            
+            # 恢复图表到初始大小（与原分支完全一致）
+            chart.width = 30
+            chart.height = 15
+            
+            # 添加图表到工作表，从E5开始绘制（与原分支完全一致）
+            ws.add_chart(chart, "E5")
         
-        # 生成文件名（与原项目保持一致）
+        # 生成文件名（与原分支完全一致）
         start_date_str = start_date.strftime("%Y%m%d")
         end_date_str = end_date.strftime("%Y%m%d")
         
