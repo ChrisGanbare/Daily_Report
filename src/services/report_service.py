@@ -5,7 +5,7 @@
 import tempfile
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import zipfile
 import os
 from collections import defaultdict
@@ -835,7 +835,322 @@ class ReportService:
         except Exception as e:
             logger.error(f"获取离线事件时出错: {e}", exc_info=True)
         
-        return offline_events
+        return output_path
+
+    async def _generate_customer_statement_report(
+        self,
+        device_codes: List[str],
+        start_date_str: str,
+        end_date_str: str,
+    ) -> Tuple[Path, List[str]]:
+        """
+        生成客户对账单 - 基于development-copy分支的业务逻辑重构
+        
+        Args:
+            device_codes: 设备编码列表
+            start_date_str: 开始日期
+            end_date_str: 结束日期
+            
+        Returns:
+            (生成的Excel文件路径, 警告信息列表)
+        """
+        logger.info(f"开始生成客户对账单: 设备={device_codes}, 日期范围={start_date_str} 至 {end_date_str}")
+        
+        warnings = []
+        
+        try:
+            # 1. 验证日期范围（不超过1个月）
+            from src.utils.date_utils import validate_date_span
+            date_row = {"start_date": start_date_str, "end_date": end_date_str}
+            if not validate_date_span(date_row):
+                raise ValueError("客户对账单的日期范围不能超过1个月")
+            
+            # 2. 获取设备数据
+            device_codes_tuple = tuple(sorted(device_codes))
+            raw_report_data = await self.device_repo.get_daily_consumption_raw_data(
+                device_codes_tuple, start_date_str, end_date_str
+            )
+            
+            if not raw_report_data:
+                raise ValueError("在指定日期范围内所有选定设备均未找到任何数据。")
+            
+            # 3. 按设备分组数据
+            data_by_device = defaultdict(list)
+            for row in raw_report_data:
+                data_by_device[row['device_code']].append(row)
+            
+            # 4. 处理每个设备的数据
+            customer_devices_data = []
+            failed_devices = []
+            
+            for device_code in device_codes:
+                device_data = data_by_device.get(device_code)
+                if not device_data:
+                    failed_devices.append(device_code)
+                    warnings.append(f"设备 {device_code} 没有数据，已跳过。")
+                    continue
+                
+                try:
+                    # 计算设备消耗数据
+                    barrel_count = self.barrel_overrides.get(device_code, 1)
+                    consumption_data = self._calculate_consumption_for_statement(device_data, barrel_count)
+                    
+                    if not consumption_data:
+                        failed_devices.append(device_code)
+                        warnings.append(f"设备 {device_code} 计算后数据为空，已跳过。")
+                        continue
+                    
+                    # 提取设备信息
+                    first_record = device_data[0]
+                    device_info = {
+                        "device_code": device_code,
+                        "device_name": first_record.get('device_name', '未知设备'),
+                        "customer_name": first_record.get('customer_name', '未知客户'),
+                        "oil_name": first_record.get('oil_name', '未知油品'),
+                        "beginning_inventory": consumption_data.get('beginning_inventory', 0),
+                        "ending_inventory": consumption_data.get('ending_inventory', 0),
+                        "refill_volume": consumption_data.get('refill_volume', 0),
+                        "order_volume": consumption_data.get('order_volume', 0),
+                        "actual_consumption": consumption_data.get('actual_consumption', 0),
+                        "error": consumption_data.get('error', 0)
+                    }
+                    
+                    customer_devices_data.append(device_info)
+                    
+                except Exception as e:
+                    failed_devices.append(device_code)
+                    error_msg = f"处理设备 {device_code} 时发生错误: {str(e)}"
+                    warnings.append(error_msg)
+                    logger.error(error_msg, exc_info=True)
+            
+            if not customer_devices_data:
+                raise ValueError("所有选定设备均未能成功处理数据。")
+            
+            # 5. 按客户分组设备
+            customer_groups = self._group_devices_by_customer(customer_devices_data)
+            
+            # 6. 生成客户对账单
+            output_path = self._generate_customer_statement_excel(
+                customer_groups, start_date_str, end_date_str
+            )
+            
+            logger.info(f"客户对账单已生成: {output_path}")
+            
+            # 7. 处理失败设备警告
+            if failed_devices:
+                failed_by_customer = self._group_failed_devices_by_customer(failed_devices, customer_devices_data)
+                for customer, devices in failed_by_customer.items():
+                    warnings.append(f"客户 {customer} 以下设备处理失败: {', '.join(devices)}")
+            
+            return output_path, warnings
+            
+        except Exception as e:
+            error_msg = f"生成客户对账单失败: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise ValueError(error_msg)
+    
+    def _calculate_consumption_for_statement(self, device_data: List[Dict[str, Any]], barrel_count: int) -> Dict[str, Any]:
+        """计算客户对账单的消耗数据"""
+        if not device_data:
+            return {}
+        
+        # 使用第一条记录进行计算（简化实现）
+        data = device_data[0]
+        
+        beginning_inventory = data.get('prev_day_inventory', 0) or 0
+        ending_inventory = data.get('end_of_day_inventory', 0) or 0
+        refill_volume = data.get('daily_refill', 0) or 0
+        order_volume = data.get('daily_order_volume', 0) or 0
+        
+        # 计算实际消耗
+        inventory_consumption = max(0, (beginning_inventory - ending_inventory) + refill_volume)
+        actual_consumption = inventory_consumption * barrel_count
+        
+        # 计算误差
+        error = actual_consumption - order_volume
+        
+        return {
+            "beginning_inventory": beginning_inventory,
+            "ending_inventory": ending_inventory,
+            "refill_volume": refill_volume,
+            "order_volume": order_volume,
+            "actual_consumption": actual_consumption,
+            "error": error
+        }
+    
+    def _group_devices_by_customer(self, customer_devices_data: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """按客户分组设备"""
+        customer_groups = {}
+        
+        for device_data in customer_devices_data:
+            customer_name = device_data.get("customer_name", "未知客户")
+            
+            if customer_name not in customer_groups:
+                customer_groups[customer_name] = []
+            
+            customer_groups[customer_name].append(device_data)
+        
+        return customer_groups
+    
+    def _generate_customer_statement_excel(self, 
+                                         customer_groups: Dict[str, List[Dict[str, Any]]],
+                                         start_date_str: str,
+                                         end_date_str: str) -> Path:
+        """生成客户对账单Excel文件"""
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, PatternFill
+        from openpyxl.utils import get_column_letter
+        import tempfile
+        from pathlib import Path
+        
+        wb = Workbook()
+        
+        # 为每个客户生成对账单
+        for customer_name, devices in customer_groups.items():
+            # 创建客户工作表
+            if customer_name == "未知客户":
+                ws_name = "未知客户对账单"
+            else:
+                ws_name = f"{customer_name}对账单"
+            
+            if len(ws_name) > 31:  # Excel工作表名称最大31字符
+                ws_name = ws_name[:31]
+            
+            ws = wb.create_sheet(ws_name)
+            
+            # 设置主页内容
+            self._setup_customer_statement_sheet(ws, customer_name, devices, start_date_str, end_date_str)
+        
+        # 删除默认的工作表
+        if "Sheet" in wb.sheetnames:
+            del wb["Sheet"]
+        
+        # 生成文件名
+        if len(customer_groups) == 1:
+            customer_name = next(iter(customer_groups.keys()))
+            safe_customer_name = customer_name.replace("/", "_").replace("\\", "_")
+            filename = f"{safe_customer_name}_客户对账单_{start_date_str}_to_{end_date_str}.xlsx"
+        else:
+            filename = f"多客户对账单汇总_{start_date_str}_to_{end_date_str}.xlsx"
+        
+        output_path = Path(tempfile.gettempdir()) / filename
+        wb.save(output_path)
+        
+        return output_path
+    
+    def _setup_customer_statement_sheet(self, ws, customer_name: str, devices: List[Dict[str, Any]], 
+                                        start_date_str: str, end_date_str: str) -> None:
+        """设置客户对账单工作表"""
+        # 主标题
+        ws.append([f"{customer_name} 客户对账单"])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
+        title_cell = ws.cell(row=1, column=1)
+        title_cell.font = Font(size=16, bold=True)
+        title_cell.alignment = Alignment(horizontal="center")
+        
+        # 客户信息
+        ws.append(["客户名称:", customer_name])
+        ws.append(["日期范围:", f"{start_date_str} 至 {end_date_str}"])
+        ws.append(["生成时间:", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+        ws.append([])  # 空行
+        
+        # 设备数据表格标题
+        headers = ["设备编号", "设备名称", "油品名称", "期初库存(L)", "期末库存(L)", 
+                  "加油量(L)", "订单量(L)", "实际消耗(L)", "误差(L)"]
+        ws.append(headers)
+        
+        # 设置表头样式
+        for col in range(1, len(headers) + 1):
+            header_cell = ws.cell(row=ws.max_row, column=col)
+            header_cell.font = Font(bold=True)
+            header_cell.fill = PatternFill(start_color="E6E6E6", end_color="E6E6E6", fill_type="solid")
+        
+        # 写入设备数据
+        for device in devices:
+            row_data = [
+                device.get('device_code', ''),
+                device.get('device_name', ''),
+                device.get('oil_name', ''),
+                device.get('beginning_inventory', 0),
+                device.get('ending_inventory', 0),
+                device.get('refill_volume', 0),
+                device.get('order_volume', 0),
+                device.get('actual_consumption', 0),
+                device.get('error', 0)
+            ]
+            ws.append(row_data)
+        
+        # 添加备注信息
+        self._add_notes_to_statement(ws, len(devices))
+        
+        # 调整格式
+        self._adjust_statement_formatting(ws)
+    
+    def _add_notes_to_statement(self, ws, device_count: int) -> None:
+        """添加备注信息到对账单"""
+        # 空行
+        ws.append([])
+        ws.append([])
+        
+        # 备注标题
+        ws.append(["备注:"])
+        note_title_cell = ws.cell(row=ws.max_row, column=1)
+        note_title_cell.font = Font(bold=True)
+        
+        # 备注内容
+        notes = [
+            f"1. 本对账单包含 {device_count} 台设备的数据",
+            "2. 实际消耗 = (期初库存 - 期末库存 + 加油量)",
+            "3. 误差 = 实际消耗 - 订单量",
+            "4. 正误差表示中润亏损，负误差表示客户亏损",
+            "5. 数据来源: 设备监控系统"
+        ]
+        
+        for note in notes:
+            ws.append([note])
+    
+    def _adjust_statement_formatting(self, ws) -> None:
+        """调整对账单格式"""
+        # 设置列宽
+        column_widths = {
+            'A': 12,  # 设备编号
+            'B': 15,  # 设备名称
+            'C': 15,  # 油品名称
+            'D': 12,  # 期初库存
+            'E': 12,  # 期末库存
+            'F': 10,  # 加油量
+            'G': 10,  # 订单量
+            'H': 12,  # 实际消耗
+            'I': 10   # 误差
+        }
+        
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+        
+        # 设置数字格式
+        for row in range(6, ws.max_row + 1):  # 从数据行开始
+            for col in range(4, 10):  # D-I列（数字列）
+                cell = ws.cell(row=row, column=col)
+                if isinstance(cell.value, (int, float)):
+                    cell.number_format = '0.00'
+    
+    def _group_failed_devices_by_customer(self, failed_devices: List[str], 
+                                         customer_devices_data: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+        """按客户分组失败设备"""
+        # 创建设备到客户的映射
+        device_to_customer = {}
+        for device_data in customer_devices_data:
+            device_to_customer[device_data['device_code']] = device_data['customer_name']
+        
+        # 分组失败设备
+        failed_by_customer = {}
+        for device_code in failed_devices:
+            customer_name = device_to_customer.get(device_code, "未知客户")
+            if customer_name not in failed_by_customer:
+                failed_by_customer[customer_name] = []
+            failed_by_customer[customer_name].append(device_code)
+        
+        return failed_by_customer
 
     def _generate_inventory_excel_with_chart(self, inventory_data, device_code, oil_name, customer_name, start_date, end_date):
         """
@@ -985,3 +1300,197 @@ class ReportService:
         logger.info(f"库存报表已生成: {output_path}")
         
         return output_path
+
+    async def _generate_refueling_details_report(
+        self,
+        device_codes: List[str],
+        start_date_str: str,
+        end_date_str: str,
+    ) -> Tuple[Path, List[str]]:
+        """
+        生成加油详情报表（与原加注明细导出功能保持一致）
+        
+        Args:
+            device_codes: 设备编码列表
+            start_date_str: 开始日期
+            end_date_str: 结束日期
+            
+        Returns:
+            (生成的Excel文件路径, 警告信息列表)
+        """
+        logger.info(f"开始生成加油详情报表: 设备={device_codes}, 日期范围={start_date_str} 至 {end_date_str}")
+        
+        warnings = []
+        
+        try:
+            # 获取加注明细数据（使用正确的数据源）
+            device_codes_tuple = tuple(sorted(device_codes))
+            raw_refueling_data = await self.device_repo.get_refueling_details_raw_data(
+                device_codes_tuple, start_date_str, end_date_str
+            )
+            
+            if not raw_refueling_data:
+                raise ValueError("在指定日期范围内所有选定设备均未找到任何加注数据。")
+            
+            # 按设备分组数据
+            data_by_device = defaultdict(list)
+            for row in raw_refueling_data:
+                data_by_device[row['device_code']].append(row)
+            
+            # 处理每个设备的数据（优化版，直接使用原始数据）
+            refueling_data_list = []
+            failed_devices = []
+            
+            for device_code in device_codes:
+                device_data = data_by_device.get(device_code)
+                if not device_data:
+                    failed_devices.append(device_code)
+                    warnings.append(f"设备 {device_code} 没有加注数据，已跳过。")
+                    continue
+                
+                try:
+                    # 直接使用原始数据，避免不必要的字段映射
+                    refueling_data_list.extend(device_data)
+                        
+                except Exception as e:
+                    failed_devices.append(device_code)
+                    error_msg = f"处理设备 {device_code} 加注数据时发生错误: {str(e)}"
+                    warnings.append(error_msg)
+                    logger.error(error_msg, exc_info=True)
+            
+            if not refueling_data_list:
+                raise ValueError("所有选定设备均未能成功提取加注数据。")
+            
+            # 生成加油详情报表
+            output_path = self._generate_refueling_details_excel(
+                refueling_data_list, start_date_str, end_date_str
+            )
+            
+            logger.info(f"加油详情报表已生成: {output_path}")
+            
+            # 处理失败设备警告
+            if failed_devices:
+                warnings.append(f"以下设备处理失败: {', '.join(failed_devices)}")
+            
+            return output_path, warnings
+            
+        except Exception as e:
+            error_msg = f"生成加油详情报表失败: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise ValueError(error_msg)
+    
+    def _generate_refueling_details_excel(self, 
+                                        refueling_data: List[Dict[str, Any]],
+                                        start_date_str: str,
+                                        end_date_str: str) -> Path:
+        """生成加油详情Excel文件（优化版，基于development-copy分支最佳实践）"""
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+        import tempfile
+        from pathlib import Path
+        
+        try:
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "加注明细"
+            
+            # 数据表格标题（使用查询模板中的原始字段名）
+            headers = [
+                "订单序号", "加注时间", "油品序号", "油品名称", 
+                "水油比：水值", "水油比：油值", "水加注值", "油加注值",
+                "原油剩余量", "原油剩余比例", "油加设量", "是否结算：1=待结算 2=待生效 3=已结算", "加注模式：1=近程自动 2=远程自动 3=手动"
+            ]
+            ws.append(headers)
+            
+            # 设置表头样式
+            for col in range(1, len(headers) + 1):
+                header_cell = ws.cell(row=1, column=col)
+                header_cell.font = Font(bold=True)
+                header_cell.fill = PatternFill(start_color="E6E6E6", end_color="E6E6E6", fill_type="solid")
+            
+            # 写入数据（直接使用原始数据，字段名与查询配置一致）
+            for record in refueling_data:
+                row_data = [
+                    record.get("订单序号", ''),
+                    record.get("加注时间", ''),
+                    record.get("油品序号", ''),
+                    record.get("油品名称", '未知油品'),
+                    record.get("水油比：水值", 0),
+                    record.get("水油比：油值", 0),
+                    record.get("水加注值", 0),
+                    record.get("油加注值", 0),
+                    record.get("原油剩余量", 0),
+                    record.get("原油剩余比例", 0),
+                    record.get("油加设量", 0),
+                    record.get("是否结算：1=待结算 2=待生效 3=已结算", ''),
+                    record.get("加注模式：1=近程自动 2=远程自动 3=手动", '')
+                ]
+                ws.append(row_data)
+            
+            # 设置列宽（优化版，加宽加注时间列）
+            column_widths = {
+                'A': 10,  # 订单序号
+                'B': 25,  # 加注时间（加宽以完整显示日期时间）
+                'C': 10,  # 油品序号
+                'D': 15,  # 油品名称
+                'E': 12,  # 水油比：水值
+                'F': 12,  # 水油比：油值
+                'G': 10,  # 水加注值
+                'H': 10,  # 油加注值
+                'I': 12,  # 原油剩余量
+                'J': 12,  # 原油剩余比例
+                'K': 10,  # 油加设量
+                'L': 15,  # 是否结算（适当加宽）
+                'M': 15   # 加注模式（适当加宽）
+            }
+            
+            for col, width in column_widths.items():
+                ws.column_dimensions[col].width = width
+            
+            # 设置数字格式
+            for row in range(2, ws.max_row + 1):  # 从第2行开始（数据行）
+                for col in range(5, 11):  # E-J列（数字列）
+                    cell = ws.cell(row=row, column=col)
+                    if isinstance(cell.value, (int, float)):
+                        cell.number_format = '0.00'
+            
+            # 设置加注时间列的日期时间格式
+            for row in range(2, ws.max_row + 1):  # 从第2行开始（数据行）
+                time_cell = ws.cell(row=row, column=2)  # B列（加注时间）
+                if time_cell.value:
+                    # 设置日期时间格式，确保完整显示
+                    time_cell.number_format = 'yyyy-mm-dd hh:mm:ss'
+            
+            # 生成文件名（按照正确格式：公司名称_设备编码_开始日期_结束日期_加注明细.xlsx）
+            # 从第一条记录获取设备编码
+            if refueling_data:
+                first_record = refueling_data[0]
+                device_code = first_record.get('device_code', '未知设备')
+                
+                # 获取客户名称
+                try:
+                    from src.core.db_handler import DBHandler
+                    db_handler = DBHandler()
+                    customer_name = db_handler.get_customer_name_by_device_code(device_code)
+                except Exception:
+                    customer_name = f"客户_{device_code}"
+                
+                # 替换日期中的非法字符，确保文件名合法（与development-copy分支保持一致）
+                safe_start_date = start_date_str.replace("/", "-").replace("\\", "-")
+                safe_end_date = end_date_str.replace("/", "-").replace("\\", "-")
+                
+                filename = f"{customer_name}_{device_code}_{safe_start_date}_{safe_end_date}_加注明细.xlsx"
+            else:
+                # 如果没有数据，使用默认格式
+                filename = f"加注订单明细_{start_date_str}_至_{end_date_str}.xlsx"
+            
+            output_path = Path(tempfile.gettempdir()) / filename
+            wb.save(output_path)
+            
+            logger.info(f"加注订单明细Excel文件已生成: {output_path}")
+            return output_path
+            
+        except Exception as e:
+            error_msg = f"生成加注订单明细Excel文件失败: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise ValueError(error_msg)

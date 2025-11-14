@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setStatus('报表生成成功！已开始下载。');
 
         } catch (error) {
-            setStatus(`生成报表失败: ${error.message}`, true);
+            setStatus(error.message, true);
         } finally {
             generateBtn.disabled = false;
         }
