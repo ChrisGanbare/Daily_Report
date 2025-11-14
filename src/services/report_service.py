@@ -5,7 +5,7 @@
 import tempfile
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
-from datetime import datetime
+from datetime import datetime, date
 import zipfile
 import os
 from collections import defaultdict
@@ -243,6 +243,11 @@ class ReportService:
         """
         logger.info(f"开始生成库存报表: 设备={device_codes}, 日期范围={start_date_str} 至 {end_date_str}")
         
+        # 验证库存报表的日期范围不超过1个月
+        date_row = {"start_date": start_date_str, "end_date": end_date_str}
+        if not self._validate_inventory_date_span(date_row):
+            raise ValueError("库存报表的日期范围不能超过1个月")
+        
         device_codes_tuple = tuple(sorted(device_codes))
         raw_report_data = await self.device_repo.get_daily_consumption_raw_data(
             device_codes_tuple, start_date_str, end_date_str
@@ -455,22 +460,65 @@ class ReportService:
     def _validate_date_format(self, date_value):
         """
         验证日期格式 - 支持多种日期格式
+        基于原分支实现，支持datetime.date、datetime.datetime和字符串类型
         """
         if date_value is None:
             raise ValueError("日期值为空")
             
         try:
-            # 如果是字符串，尝试解析
-            if isinstance(date_value, str):
-                return parse_date(date_value)
-            # 如果是datetime对象，直接返回
-            elif isinstance(date_value, datetime):
+            # 如果是datetime.date对象，直接返回（原分支的处理方式）
+            if isinstance(date_value, date):
                 return date_value
+            # 如果是datetime.datetime对象，提取日期部分
+            elif isinstance(date_value, datetime):
+                return date_value.date()
+            # 如果是字符串，尝试解析
+            elif isinstance(date_value, str):
+                return parse_date(date_value)
             else:
                 raise ValueError(f"不支持的日期格式: {type(date_value)}")
                 
         except Exception as e:
             raise ValueError(f"日期格式验证失败: {date_value}, 错误: {e}")
+
+    def _validate_inventory_date_span(self, date_row: Dict[str, str]) -> bool:
+        """
+        验证库存报表的日期范围不超过1个月
+        
+        Args:
+            date_row (dict): 包含'start_date'和'end_date'字段的字典
+            
+        Returns:
+            bool: 验证通过返回True，否则返回False
+        """
+        try:
+            start_date = self._validate_date_format(date_row["start_date"])
+            end_date = self._validate_date_format(date_row["end_date"])
+        except ValueError as e:
+            logger.error(f"库存报表日期格式错误: {date_row}。{e}")
+            return False
+
+        # 验证开始日期不能晚于结束日期
+        if start_date > end_date:
+            logger.error(f"库存报表日期逻辑错误: 开始日期 {date_row['start_date']} 不能晚于结束日期 {date_row['end_date']}")
+            return False
+
+        # 计算总天数
+        total_days = (end_date - start_date).days
+        
+        # 计算年份差和月份差
+        year_diff = end_date.year - start_date.year
+        month_diff = end_date.month - start_date.month
+        
+        # 总月份差
+        total_month_diff = year_diff * 12 + month_diff
+        
+        # 检查是否在1个月范围内（范围 <= 1个月）
+        if total_month_diff > 1 or (total_month_diff == 1 and total_days > 31):  # 允许最多1个月，但总天数不超过31天
+            logger.error(f"库存报表日期跨度错误: 从 {date_row['start_date']} 到 {date_row['end_date']} 的日期范围超过1个月")
+            return False
+        
+        return True
 
     def _generate_inventory_excel(self, report_data: List[Dict[str, Any]], device_code: str, start_date_str: str, end_date_str: str) -> Path:
         """
@@ -791,7 +839,7 @@ class ReportService:
 
     def _generate_inventory_excel_with_chart(self, inventory_data, device_code, oil_name, customer_name, start_date, end_date):
         """
-        生成带图表的库存报表Excel文件（基于development-copy分支逻辑，确保与原分支效果一致）
+        生成库存报表Excel文件（基于development-copy分支逻辑，确保与原分支效果一致）
         
         Args:
             inventory_data: 库存数据列表
@@ -934,6 +982,6 @@ class ReportService:
         
         # 保存文件
         wb.save(output_path)
-        logger.info(f"带图表的库存报表已生成: {output_path}")
+        logger.info(f"库存报表已生成: {output_path}")
         
         return output_path
