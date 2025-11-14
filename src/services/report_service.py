@@ -238,13 +238,13 @@ class ReportService:
 
     async def _generate_inventory_report(self, device_codes: List[str], start_date_str: str, end_date_str: str) -> Tuple[Path, List[str]]:
         """
-        生成库存报表 - 基于重构前的业务逻辑
-        使用简单的数据验证和Excel生成方式
+        生成库存报表 - 基于development-copy分支的业务逻辑
+        使用严格的数据验证和包含图表的Excel生成方式
         """
         logger.info(f"开始生成库存报表: 设备={device_codes}, 日期范围={start_date_str} 至 {end_date_str}")
         
         device_codes_tuple = tuple(sorted(device_codes))
-        raw_report_data = await self.device_repo.get_inventory_raw_data(
+        raw_report_data = await self.device_repo.get_daily_consumption_raw_data(
             device_codes_tuple, start_date_str, end_date_str
         )
         
@@ -266,36 +266,133 @@ class ReportService:
                 continue
                 
             try:
-                # 基于重构前逻辑：使用简单的数据验证
-                validated_data = []
+                # 基于development-copy分支逻辑：使用严格的数据验证
+                cleaned_data = []
+                invalid_records = []
+                
                 for i, row in enumerate(device_data):
                     try:
-                        # 简单验证：检查必需字段是否存在
+                        # 检查必需字段是否存在
                         if 'report_date' not in row or 'end_of_day_inventory' not in row:
                             logger.warning(f"设备 {device_code} 第{i+1}条数据缺少必需字段，已跳过")
                             continue
                             
-                        # 验证库存值
-                        inventory_value = self._validate_inventory_value(row.get('end_of_day_inventory'))
+                        # 验证库存值 - 使用development-copy分支的严格验证
+                        inventory_value = self._validate_inventory_value_strict(row.get('end_of_day_inventory'))
                         
                         # 验证日期格式
                         report_date = self._validate_date_format(row.get('report_date'))
                         
-                        validated_row = row.copy()
-                        validated_row['end_of_day_inventory'] = inventory_value
-                        validated_row['report_date'] = report_date
-                        validated_data.append(validated_row)
+                        # 检查库存值是否低于10%
+                        if inventory_value < 100:
+                            logger.info(f"提示：设备 {device_code} 日期 {report_date} 的库存值 {inventory_value} 低于100L")
                         
+                        # 创建包含所有必要字段的数据字典 - 适配daily_consumption_raw_query返回的字段
+                        data_record = {
+                            'create_time': report_date,
+                            'report_date': report_date,
+                            'end_of_day_inventory': inventory_value,
+                            'oil_name': row.get('oil_name'),
+                            'customer_name': row.get('customer_name'),
+                            'order_number': '',  # 每日消耗数据没有订单号
+                            'fill_time': '',      # 每日消耗数据没有加注时间
+                            'oil_type_id': '',   # 每日消耗数据没有油品序号
+                            'water_oil_ratio': 0, # 每日消耗数据没有水油比
+                            'fill_value': 0,     # 每日消耗数据没有加注值
+                            'crude_oil_remaining': inventory_value,  # 使用库存值作为原油剩余量
+                            'crude_oil_ratio': 0  # 每日消耗数据没有原油剩余比例
+                        }
+                        cleaned_data.append(data_record)
+                        
+                    except ValueError as e:
+                        invalid_records.append((row.get('report_date'), row.get('end_of_day_inventory'), str(e)))
+                        logger.warning(f"设备 {device_code} 第{i+1}条数据验证失败: {e}")
+                        continue
                     except Exception as e:
                         logger.warning(f"设备 {device_code} 第{i+1}条数据验证失败: {e}")
                         continue
                 
-                if not validated_data:
-                    warnings.append(f"设备 {device_code} 所有数据验证失败，已跳过。")
-                    continue
-                    
-                # 生成Excel报表
-                report_path = self._generate_inventory_excel(validated_data, device_code, start_date_str, end_date_str)
+                # 记录无效数据汇总
+                if invalid_records:
+                    logger.info(f"设备 {device_code} 无效数据汇总：")
+                    for date, value, reason in invalid_records:
+                        logger.info(f"- {date}: {value} ({reason})")
+                
+                # 如果没有有效数据，使用默认数据点
+                if not cleaned_data:
+                    logger.warning(f"设备 {device_code} 没有有效的库存数据，将生成默认数据图表")
+                    try:
+                        start_date = self._validate_date_format(start_date_str)
+                        end_date = self._validate_date_format(end_date_str)
+                        
+                        # 从device_data中获取客户名称和油品名称，确保有正确的默认值
+                        # 由于device_data可能包含多条记录，我们取第一条有效记录
+                        oil_name_default = '未知油品'
+                        customer_name_default = '未知客户'
+                        
+                        if device_data:
+                            # 遍历device_data寻找包含客户名称和油品名称的记录
+                            for record in device_data:
+                                if record.get('customer_name') and record.get('oil_name'):
+                                    oil_name_default = record.get('oil_name', '未知油品')
+                                    customer_name_default = record.get('customer_name', '未知客户')
+                                    break
+                            # 如果遍历后仍然没有找到，使用第一条记录的get方法带默认值
+                            if oil_name_default == '未知油品' and customer_name_default == '未知客户':
+                                oil_name_default = device_data[0].get('oil_name', '未知油品')
+                                customer_name_default = device_data[0].get('customer_name', '未知客户')
+                        
+                        # 创建包含所有必要字段的默认数据字典
+                        default_data1 = {
+                            'create_time': start_date,
+                            'report_date': start_date,
+                            'end_of_day_inventory': 0,
+                            'oil_name': oil_name_default,
+                            'customer_name': customer_name_default,
+                            'order_number': '',
+                            'fill_time': '',
+                            'oil_type_id': '',
+                            'water_oil_ratio': 0,
+                            'fill_value': 0,
+                            'crude_oil_remaining': 0,
+                            'crude_oil_ratio': 0
+                        }
+                        default_data2 = {
+                            'create_time': end_date,
+                            'report_date': end_date,
+                            'end_of_day_inventory': 0,
+                            'oil_name': oil_name_default,
+                            'customer_name': customer_name_default,
+                            'order_number': '',
+                            'fill_time': '',
+                            'oil_type_id': '',
+                            'water_oil_ratio': 0,
+                            'fill_value': 0,
+                            'crude_oil_remaining': 0,
+                            'crude_oil_ratio': 0
+                        }
+                        cleaned_data = [default_data1, default_data2]
+                    except Exception:
+                        warnings.append(f"设备 {device_code} 所有数据验证失败，已跳过。")
+                        continue
+                
+                # 获取油品名称和客户名称（确保有默认值）- 从cleaned_data中获取
+                oil_name = cleaned_data[0].get('oil_name', '未知油品') if cleaned_data else '未知油品'
+                customer_name = cleaned_data[0].get('customer_name', '未知客户') if cleaned_data else '未知客户'
+                
+                # 确保customer_name不为None，避免文件名中出现"None"
+                if customer_name is None:
+                    customer_name = '未知客户'
+                if oil_name is None:
+                    oil_name = '未知油品'
+                
+                # 生成包含图表的Excel报表
+                # 将字符串日期转换为datetime对象
+                start_date_dt = self._validate_date_format(start_date_str)
+                end_date_dt = self._validate_date_format(end_date_str)
+                report_path = self._generate_inventory_excel_with_chart(
+                    cleaned_data, device_code, oil_name, customer_name, start_date_dt, end_date_dt
+                )
                 if report_path:
                     report_files.append(report_path)
                     
@@ -339,6 +436,21 @@ class ReportService:
         except (ValueError, TypeError):
             logger.warning(f"库存值格式无效: {value}，已设置为0")
             return 0.0
+
+    def _validate_inventory_value_strict(self, value) -> float:
+        """
+        验证库存值 - 基于development-copy分支的严格验证逻辑
+        - 允许大于100的值
+        - 不允许小于0的值
+        - 不允许非数字值
+        """
+        try:
+            float_value = float(value)
+            if float_value < 0:
+                raise ValueError("库存值不能为负数")
+            return float_value
+        except (ValueError, TypeError):
+            raise ValueError(f"无效的库存值: {value}")
 
     def _validate_date_format(self, date_value):
         """
@@ -676,3 +788,113 @@ class ReportService:
             logger.error(f"获取离线事件时出错: {e}", exc_info=True)
         
         return offline_events
+
+    def _generate_inventory_excel_with_chart(self, inventory_data, device_code, oil_name, customer_name, start_date, end_date):
+        """
+        生成带图表的库存报表Excel文件（基于development-copy分支逻辑）
+        
+        Args:
+            inventory_data: 库存数据列表
+            device_code: 设备编码
+            oil_name: 油品名称
+            customer_name: 客户名称
+            start_date: 开始日期
+            end_date: 结束日期
+            
+        Returns:
+            Excel文件路径
+        """
+        from openpyxl import Workbook
+        from openpyxl.chart import LineChart, Reference
+        from openpyxl.chart.axis import DateAxis
+        from openpyxl.styles import Font, Alignment, PatternFill
+        from openpyxl.utils import get_column_letter
+        import tempfile
+        from pathlib import Path
+        from datetime import datetime
+        
+        # 创建工作簿和工作表
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "库存报表"
+        
+        # 设置报表标题（与原项目保持一致）
+        title = f"设备 {device_code} 库存报表({start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')})"
+        ws.merge_cells('A1:D1')
+        ws['A1'] = title
+        ws['A1'].font = Font(size=14, bold=True, name="微软雅黑")
+        ws['A1'].alignment = Alignment(horizontal="center")
+        
+        # 设置表头（与原项目保持一致）
+        headers = ["日期", "当日库存(L)", "客户名称", "油品名称"]
+        
+        # 设置表头样式（与原项目保持一致）
+        for cell in ws[3]:
+            cell.font = Font(bold=True, size=12, name="微软雅黑")
+            cell.fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+        
+        # 填充数据（与原项目保持一致）
+        row_index = 3
+        for record in inventory_data:
+            ws.cell(row=row_index, column=1).value = record.get('report_date', '')
+            ws.cell(row=row_index, column=2).value = record.get('end_of_day_inventory', 0)
+            ws.cell(row=row_index, column=3).value = record.get('customer_name', '未知客户')
+            ws.cell(row=row_index, column=4).value = record.get('oil_name', '未知油品')
+            
+            # 设置数据行样式
+            for col in range(1, 5):
+                cell = ws.cell(row=row_index, column=col)
+                cell.font = Font(size=10, name="微软雅黑")
+                if col == 2:  # 数值列右对齐
+                    cell.alignment = Alignment(horizontal="right")
+                else:
+                    cell.alignment = Alignment(horizontal="left")
+            
+            row_index += 1
+            
+        
+        # 设置列宽（与原项目保持一致）
+        column_widths = {'A': 12, 'B': 15, 'C': 20, 'D': 20}
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+        
+        # 创建库存趋势图表（与原项目保持一致）
+        if len(inventory_data) > 1:
+            chart = LineChart()
+            chart.title = "库存趋势图"
+            chart.style = 13
+            chart.y_axis.title = "库存量(L)"
+            chart.x_axis.title = "日期"
+            
+            # 设置数据范围（当日库存列）
+            data = Reference(ws, min_col=2, min_row=2, max_col=2, max_row=row_index-1)
+            chart.add_data(data, titles_from_data=True)
+            
+            # 设置日期轴
+            dates = Reference(ws, min_col=1, min_row=3, max_row=row_index-1)
+            chart.set_categories(dates)
+            
+            # 设置图表位置
+            chart.width = 15
+            chart.height = 8
+            ws.add_chart(chart, "A" + str(row_index + 2))
+        
+        # 生成文件名（与原项目保持一致）
+        start_date_str = start_date.strftime("%Y%m%d")
+        end_date_str = end_date.strftime("%Y%m%d")
+        
+        # 确保customer_name不为None，避免文件名中出现"None"
+        if customer_name is None:
+            customer_name = '未知客户'
+        if oil_name is None:
+            oil_name = '未知油品'
+            
+        filename = f"{customer_name}_{device_code}_{start_date_str}_to_{end_date_str}_库存报表.xlsx"
+        output_path = Path(tempfile.gettempdir()) / filename
+        
+        # 保存文件
+        wb.save(output_path)
+        logger.info(f"带图表的库存报表已生成: {output_path}")
+        
+        return output_path
