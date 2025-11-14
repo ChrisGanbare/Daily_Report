@@ -283,9 +283,9 @@ class ReportService:
                         # 验证日期格式
                         report_date = self._validate_date_format(row.get('report_date'))
                         
-                        # 检查库存值是否低于10%
-                        if inventory_value < 100:
-                            logger.info(f"提示：设备 {device_code} 日期 {report_date} 的库存值 {inventory_value} 低于100L")
+                        # 检查库存值是否超过1000L（与原分支一致）
+                        if inventory_value > 1000:
+                            logger.info(f"提示：设备 {device_code} 日期 {report_date} 的库存值 {inventory_value} 超过1000L")
                         
                         # 创建包含所有必要字段的数据字典 - 适配daily_consumption_raw_query返回的字段
                         data_record = {
