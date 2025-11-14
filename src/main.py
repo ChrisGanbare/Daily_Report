@@ -2,6 +2,22 @@
 应用主入口
 基于FastAPI的现代Web服务
 """
+import os
+import sys
+import multiprocessing
+from pathlib import Path
+from datetime import datetime
+
+# 添加项目根目录到sys.path
+# 确保能够导入同一目录下的模块
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+# 现在导入其他模块
 import uvicorn
 from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
@@ -10,23 +26,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
-from pathlib import Path
-import multiprocessing
-import os
-import sys
 from starlette.background import BackgroundTask
-from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import json
-
-# 添加项目根目录到sys.path
-import os
-import sys
-
-# 确保能够导入同一目录下的模块
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
 
 # 导入同一目录下的模块
 from src.config import settings

@@ -258,15 +258,17 @@ class ReportService:
         ws.title = "误差汇总报表"
         
         # 设置标题
-        title = f"误差汇总报表({start_date_str} - {end_date_str})"
+        title = f"安卓设备消耗误差汇总报表({start_date_str} - {end_date_str})"
         ws.append([title])
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=12)
         ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
-        ws.cell(row=1, column=1).font = Font(size=14, bold=True)
+        ws.cell(row=1, column=1).font = Font(size=16, bold=True, name="微软雅黑")
         
         # 添加计算公式说明在主标题下第二行
         ws.append(["计算公式说明：单桶库存消耗 = 期末库存 - 期初库存 + 加油量，库存消耗总量 = 设备桶数 × 单桶库存消耗，误差值总数 = 库存消耗总量 - 订单总量，误差百分比 = 误差值总数 / 订单总量"])  
         ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=12)
+        ws.cell(row=2, column=1).font = Font(size=10, name="微软雅黑")
+        ws.cell(row=2, column=1).alignment = Alignment(horizontal="center")
         
         # 调整表头，将误差类型列移到误差百分比列前面，删除是否有离线事件列
         headers = ["序号", "设备编码", "客户名称", "设备桶数", "订单总量(L)", "单桶库存消耗(L)", 
@@ -275,7 +277,7 @@ class ReportService:
         
         # 设置表头样式
         for cell in ws[3]:  # 表头行现在是第3行
-            cell.font = Font(bold=True)
+            cell.font = Font(bold=True, size=12, name="微软雅黑")
             cell.fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
             cell.alignment = Alignment(horizontal="center")
         
@@ -332,13 +334,21 @@ class ReportService:
             for event in device_offline_events:
                 # 计算离线时长
                 start_time = event['create_time']
-                end_time = event.get('recovery_time', datetime.now())
+                recovery_time = event.get('recovery_time')
+                
+                # 如果恢复时间为None，表示设备仍在离线状态，使用当前时间计算
+                if recovery_time is None:
+                    end_time = datetime.now()
+                    end_str = f"至今({end_time.strftime('%Y-%m-%d %H:%M')})"
+                else:
+                    end_time = recovery_time
+                    end_str = end_time.strftime("%Y-%m-%d %H:%M")
+                
                 duration_hours = (end_time - start_time).total_seconds() / 3600
                 total_offline_hours += duration_hours
                 
                 # 格式化事件时间并添加到备注
                 start_str = start_time.strftime("%Y-%m-%d %H:%M")
-                end_str = end_time.strftime("%Y-%m-%d %H:%M") if event.get('recovery_time') else "至今"
                 offline_remarks.append(f"{start_str} - {end_str}")
             
             # 生成完整备注，使用换行符分隔离线事件
@@ -364,36 +374,46 @@ class ReportService:
             # 填充数据行，调整列顺序
             ws.cell(row=row_index, column=1).value = index  # 序号
             ws.cell(row=row_index, column=1).alignment = Alignment(horizontal="center")
+            ws.cell(row=row_index, column=1).font = Font(size=11, name="微软雅黑")
             
             ws.cell(row=row_index, column=2).value = device_code  # 设备编码
+            ws.cell(row=row_index, column=2).font = Font(size=11, name="微软雅黑")
             
             ws.cell(row=row_index, column=3).value = customer_name  # 客户名称
+            ws.cell(row=row_index, column=3).font = Font(size=11, name="微软雅黑")
             
             ws.cell(row=row_index, column=4).value = barrel_count  # 设备桶数
             ws.cell(row=row_index, column=4).alignment = Alignment(horizontal="center")
+            ws.cell(row=row_index, column=4).font = Font(size=11, name="微软雅黑")
             
             ws.cell(row=row_index, column=5).value = total_order_volume  # 订单总量
             ws.cell(row=row_index, column=5).alignment = Alignment(horizontal="right")
+            ws.cell(row=row_index, column=5).font = Font(size=11, name="微软雅黑")
             
             ws.cell(row=row_index, column=6).value = single_barrel_consumption  # 单桶库存消耗
             ws.cell(row=row_index, column=6).alignment = Alignment(horizontal="right")
+            ws.cell(row=row_index, column=6).font = Font(size=11, name="微软雅黑")
             
             # 库存消耗总量使用公式
             ws.cell(row=row_index, column=7).value = f"=D{row_index}*F{row_index}"  # 库存消耗总量
             ws.cell(row=row_index, column=7).alignment = Alignment(horizontal="right")
+            ws.cell(row=row_index, column=7).font = Font(size=11, name="微软雅黑")
             
             # 误差值总数使用公式
             ws.cell(row=row_index, column=8).value = f"=G{row_index}-E{row_index}"  # 误差值总数
             ws.cell(row=row_index, column=8).alignment = Alignment(horizontal="right")
+            ws.cell(row=row_index, column=8).font = Font(size=11, name="微软雅黑")
             
             # 误差类型列移到误差百分比前面
             ws.cell(row=row_index, column=9).value = error_type  # 误差类型
             ws.cell(row=row_index, column=9).alignment = Alignment(horizontal="center")
+            ws.cell(row=row_index, column=9).font = Font(size=11, name="微软雅黑")
             
             # 误差百分比使用公式
             ws.cell(row=row_index, column=10).value = f"=H{row_index}/E{row_index}"  # 误差百分比
             ws.cell(row=row_index, column=10).number_format = '0.00%'
             ws.cell(row=row_index, column=10).alignment = Alignment(horizontal="right")
+            ws.cell(row=row_index, column=10).font = Font(size=11, name="微软雅黑")
             
             # 仅误差百分比列标记背景色，不再整行标记
             if abs(error_percentage) > 5:
@@ -401,9 +421,14 @@ class ReportService:
             
             ws.cell(row=row_index, column=11).value = round(total_offline_hours, 2)  # 离线时长
             ws.cell(row=row_index, column=11).alignment = Alignment(horizontal="center")
+            ws.cell(row=row_index, column=11).font = Font(size=11, name="微软雅黑")
             
             ws.cell(row=row_index, column=12).value = remark_text  # 备注
-            ws.cell(row=row_index, column=12).alignment = Alignment(wrap_text=True)  # 自动换行
+            ws.cell(row=row_index, column=12).alignment = Alignment(wrap_text=True, vertical="top")  # 自动换行，顶部对齐
+            ws.cell(row=row_index, column=12).font = Font(size=10, name="微软雅黑")
+            
+            # 设置固定行高，避免备注内容影响整体布局
+            ws.row_dimensions[row_index].height = 30
             
             # 斑马纹样式（跳过已标记背景色的单元格）
             if row_index % 2 == 0:
@@ -425,7 +450,7 @@ class ReportService:
         
         # 不再添加单独的计算公式说明区域
         
-        final_filename = f"误差汇总报表_{start_date_str}_to_{end_date_str}.xlsx"
+        final_filename = f"安卓设备消耗误差汇总_{start_date_str}_to_{end_date_str}.xlsx"
         output_path = Path(tempfile.gettempdir()) / final_filename
         wb.save(output_path)
         logger.info(f"误差汇总报表已生成: {output_path}")
@@ -451,7 +476,8 @@ class ReportService:
                 sql_templates = json.load(f)
             
             # 获取离线事件查询模板
-            query_template = sql_templates.get("error_summary_offline_query", "")
+            sql_templates_config = sql_templates.get("sql_templates", {})
+            query_template = sql_templates_config.get("error_summary_offline_query", "")
             
             if not query_template:
                 logger.warning("未找到离线事件查询模板")
@@ -460,18 +486,19 @@ class ReportService:
             async with get_db_session() as session:
                 params = {
                     "start_date_param_full": f"{start_date} 00:00:00",
-                    "end_date_param_full": f"{end_date} 23:59:59"
+                    "end_date_param_full": f"{end_date} 23:59:59",
+                    "device_codes": tuple(device_codes)
                 }
                 
                 statement = text(query_template)
                 result = await session.execute(statement, params)
-                events = [dict(row) for row in result.fetchall()]
+                # 正确转换SQLAlchemy Row对象为字典
+                events = [dict(zip(result.keys(), row)) for row in result.fetchall()]
                 
-                # 按设备编码分组
+                # 按设备编码分组（SQL查询已通过IN条件筛选，直接分组即可）
                 for event in events:
                     device_code = event['device_code']
-                    if device_code in device_codes:
-                        offline_events[device_code].append(event)
+                    offline_events[device_code].append(event)
                 
             logger.info(f"获取到 {sum(len(events) for events in offline_events.values())} 条离线事件记录")
         except Exception as e:
