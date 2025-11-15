@@ -844,7 +844,12 @@ class ReportService:
         end_date_str: str,
     ) -> Tuple[Path, List[str]]:
         """
-        生成客户对账单 - 基于development-copy分支的业务逻辑重构
+        生成客户对账单 - 基于模板格式生成，包含3个sheet
+        
+        业务逻辑：
+        - 不需要期初库存、期末库存、加油量等
+        - 只需要：序号、油品名称/型号、设备编码、本月总升数计量（L）、备注
+        - 本月总升数计量 = 订单量（daily_order_volume）的汇总
         
         Args:
             device_codes: 设备编码列表
@@ -874,73 +879,51 @@ class ReportService:
             if not raw_report_data:
                 raise ValueError("在指定日期范围内所有选定设备均未找到任何数据。")
             
-            # 3. 按设备分组数据
-            data_by_device = defaultdict(list)
+            # 3. 按设备和油品分组，汇总订单量
+            # 数据结构: {(device_code, oil_name): {'customer_name': ..., 'total_order_volume': ..., 'device_name': ...}}
+            device_oil_data = defaultdict(lambda: {
+                'customer_name': '',
+                'device_name': '',
+                'oil_name': '',
+                'total_order_volume': 0.0
+            })
+            
             for row in raw_report_data:
-                data_by_device[row['device_code']].append(row)
-            
-            # 4. 处理每个设备的数据
-            customer_devices_data = []
-            failed_devices = []
-            
-            for device_code in device_codes:
-                device_data = data_by_device.get(device_code)
-                if not device_data:
-                    failed_devices.append(device_code)
-                    warnings.append(f"设备 {device_code} 没有数据，已跳过。")
-                    continue
+                device_code = row.get('device_code', '')
+                oil_name = row.get('oil_name', '未知油品')
+                key = (device_code, oil_name)
                 
-                try:
-                    # 计算设备消耗数据
-                    barrel_count = self.barrel_overrides.get(device_code, 1)
-                    consumption_data = self._calculate_consumption_for_statement(device_data, barrel_count)
-                    
-                    if not consumption_data:
-                        failed_devices.append(device_code)
-                        warnings.append(f"设备 {device_code} 计算后数据为空，已跳过。")
-                        continue
-                    
-                    # 提取设备信息
-                    first_record = device_data[0]
-                    device_info = {
-                        "device_code": device_code,
-                        "device_name": first_record.get('device_name', '未知设备'),
-                        "customer_name": first_record.get('customer_name', '未知客户'),
-                        "oil_name": first_record.get('oil_name', '未知油品'),
-                        "beginning_inventory": consumption_data.get('beginning_inventory', 0),
-                        "ending_inventory": consumption_data.get('ending_inventory', 0),
-                        "refill_volume": consumption_data.get('refill_volume', 0),
-                        "order_volume": consumption_data.get('order_volume', 0),
-                        "actual_consumption": consumption_data.get('actual_consumption', 0),
-                        "error": consumption_data.get('error', 0)
-                    }
-                    
-                    customer_devices_data.append(device_info)
-                    
-                except Exception as e:
-                    failed_devices.append(device_code)
-                    error_msg = f"处理设备 {device_code} 时发生错误: {str(e)}"
-                    warnings.append(error_msg)
-                    logger.error(error_msg, exc_info=True)
+                if not device_oil_data[key]['customer_name']:
+                    device_oil_data[key]['customer_name'] = row.get('customer_name', '未知客户')
+                if not device_oil_data[key]['device_name']:
+                    device_oil_data[key]['device_name'] = row.get('device_name', '未知设备')
+                if not device_oil_data[key]['oil_name']:
+                    device_oil_data[key]['oil_name'] = oil_name
+                
+                # 汇总订单量
+                order_volume = row.get('daily_order_volume', 0) or 0
+                device_oil_data[key]['total_order_volume'] += float(order_volume)
             
-            if not customer_devices_data:
+            # 4. 按客户分组设备
+            customer_groups = defaultdict(list)
+            for (device_code, oil_name), data in device_oil_data.items():
+                customer_name = data['customer_name']
+                customer_groups[customer_name].append({
+                    'device_code': device_code,
+                    'device_name': data['device_name'],
+                    'oil_name': data['oil_name'],
+                    'total_order_volume': data['total_order_volume']
+                })
+            
+            if not customer_groups:
                 raise ValueError("所有选定设备均未能成功处理数据。")
             
-            # 5. 按客户分组设备
-            customer_groups = self._group_devices_by_customer(customer_devices_data)
-            
-            # 6. 生成客户对账单
-            output_path = self._generate_customer_statement_excel(
+            # 5. 生成客户对账单（使用模板）
+            output_path = self._generate_customer_statement_from_template(
                 customer_groups, start_date_str, end_date_str
             )
             
             logger.info(f"客户对账单已生成: {output_path}")
-            
-            # 7. 处理失败设备警告
-            if failed_devices:
-                failed_by_customer = self._group_failed_devices_by_customer(failed_devices, customer_devices_data)
-                for customer, devices in failed_by_customer.items():
-                    warnings.append(f"客户 {customer} 以下设备处理失败: {', '.join(devices)}")
             
             return output_path, warnings
             
@@ -949,34 +932,160 @@ class ReportService:
             logger.error(error_msg, exc_info=True)
             raise ValueError(error_msg)
     
-    def _calculate_consumption_for_statement(self, device_data: List[Dict[str, Any]], barrel_count: int) -> Dict[str, Any]:
-        """计算客户对账单的消耗数据"""
-        if not device_data:
-            return {}
+    def _generate_customer_statement_from_template(
+        self,
+        customer_groups: Dict[str, List[Dict[str, Any]]],
+        start_date_str: str,
+        end_date_str: str
+    ) -> Path:
+        """
+        使用模板文件生成客户对账单
         
-        # 使用第一条记录进行计算（简化实现）
-        data = device_data[0]
+        模板包含3个sheet：
+        1. 中润对账单 - 主对账单，包含序号、油品名称/型号、设备编码、本月总升数计量（L）、备注
+        2. 每日用量明细 - 每日用量明细
+        3. 每月用量对比 - 月度对比数据
         
-        beginning_inventory = data.get('prev_day_inventory', 0) or 0
-        ending_inventory = data.get('end_of_day_inventory', 0) or 0
-        refill_volume = data.get('daily_refill', 0) or 0
-        order_volume = data.get('daily_order_volume', 0) or 0
+        Args:
+            customer_groups: 按客户分组的设备数据
+            start_date_str: 开始日期
+            end_date_str: 结束日期
+            
+        Returns:
+            生成的Excel文件路径
+        """
+        from openpyxl import load_workbook
+        from openpyxl.styles import Font, Alignment
+        from datetime import datetime
+        import tempfile
+        from pathlib import Path
         
-        # 计算实际消耗
-        inventory_consumption = max(0, (beginning_inventory - ending_inventory) + refill_volume)
-        actual_consumption = inventory_consumption * barrel_count
+        # 加载模板文件
+        template_path = Path(__file__).parent.parent.parent / "template" / "statement_template.xlsx"
+        if not template_path.exists():
+            raise FileNotFoundError(f"客户对账单模板文件未找到: {template_path}")
         
-        # 计算误差
-        error = actual_consumption - order_volume
+        wb = load_workbook(template_path)
         
-        return {
-            "beginning_inventory": beginning_inventory,
-            "ending_inventory": ending_inventory,
-            "refill_volume": refill_volume,
-            "order_volume": order_volume,
-            "actual_consumption": actual_consumption,
-            "error": error
-        }
+        # 为每个客户生成对账单
+        for customer_name, devices in customer_groups.items():
+            # 更新"中润对账单"sheet
+            if "中润对账单" in wb.sheetnames:
+                ws_main = wb["中润对账单"]
+                self._update_main_statement_sheet(ws_main, customer_name, devices, start_date_str, end_date_str)
+            
+            # 更新"每日用量明细"sheet
+            if "每日用量明细" in wb.sheetnames:
+                ws_daily = wb["每日用量明细"]
+                self._update_daily_detail_sheet(ws_daily, devices, start_date_str, end_date_str)
+            
+            # 更新"每月用量对比"sheet
+            if "每月用量对比" in wb.sheetnames:
+                ws_monthly = wb["每月用量对比"]
+                self._update_monthly_comparison_sheet(ws_monthly, devices, start_date_str, end_date_str)
+        
+        # 生成文件名
+        if len(customer_groups) == 1:
+            customer_name = next(iter(customer_groups.keys()))
+            safe_customer_name = customer_name.replace("/", "_").replace("\\", "_")
+            filename = f"{safe_customer_name}_客户对账单_{start_date_str}_to_{end_date_str}.xlsx"
+        else:
+            filename = f"多客户对账单汇总_{start_date_str}_to_{end_date_str}.xlsx"
+        
+        output_path = Path(tempfile.gettempdir()) / filename
+        wb.save(output_path)
+        
+        return output_path
+    
+    def _update_main_statement_sheet(
+        self,
+        ws,
+        customer_name: str,
+        devices: List[Dict[str, Any]],
+        start_date_str: str,
+        end_date_str: str
+    ) -> None:
+        """
+        更新"中润对账单"sheet
+        
+        格式：
+        行5: 客户名称、月份
+        行8: 表头（序号、油品名称/型号、设备编码、本月总升数计量（L）、备注）
+        行9开始: 数据行
+        """
+        # 更新客户名称和月份（行5）
+        # 格式: 客户名称：XXX    月份：X月份（YYYY.M.D-YYYY.M.D）
+        from datetime import datetime
+        
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+        
+        month_str = f"{start_date.month}月份（{start_date.year}.{start_date.month}.{start_date.day}-{end_date.year}.{end_date.month}.{end_date.day}）"
+        
+        # 行5: 客户名称和月份
+        ws.cell(row=5, column=1).value = f"客户名称：{customer_name}"
+        ws.cell(row=5, column=7).value = f"月份：{month_str}"
+        
+        # 清空数据行（从行9开始）
+        data_start_row = 9
+        if ws.max_row >= data_start_row:
+            ws.delete_rows(data_start_row, ws.max_row - data_start_row + 1)
+        
+        # 写入数据行
+        for idx, device in enumerate(devices, start=1):
+            row = data_start_row + idx - 1
+            ws.cell(row=row, column=1).value = idx  # 序号
+            ws.cell(row=row, column=2).value = device.get('oil_name', '未知油品')  # 油品名称/型号
+            ws.cell(row=row, column=5).value = device.get('device_code', '')  # 设备编码
+            ws.cell(row=row, column=6).value = device.get('total_order_volume', 0)  # 本月总升数计量（L）
+            ws.cell(row=row, column=8).value = device.get('remark', '')  # 备注（可选）
+        
+        # 添加"以下空白"行（如果有空行）
+        if len(devices) < 20:  # 假设最多20行数据
+            ws.cell(row=data_start_row + len(devices), column=2).value = "以下空白"
+    
+    def _update_daily_detail_sheet(
+        self,
+        ws,
+        devices: List[Dict[str, Any]],
+        start_date_str: str,
+        end_date_str: str
+    ) -> None:
+        """
+        更新"每日用量明细"sheet
+        
+        格式：
+        行2-3: 初始日期、结束日期
+        行5开始: 每日用量数据
+        """
+        from datetime import datetime
+        
+        # 更新日期范围（行2-3）
+        ws.cell(row=2, column=7).value = "初始日期"
+        ws.cell(row=2, column=8).value = "结束日期"
+        ws.cell(row=3, column=7).value = f"{start_date_str} 00:00:00"
+        ws.cell(row=3, column=8).value = f"{end_date_str} 00:00:00"
+        
+        # TODO: 填充每日用量明细数据
+        # 这里需要根据实际业务需求填充每日数据
+        logger.info("每日用量明细sheet已更新日期范围，详细数据填充待实现")
+    
+    def _update_monthly_comparison_sheet(
+        self,
+        ws,
+        devices: List[Dict[str, Any]],
+        start_date_str: str,
+        end_date_str: str
+    ) -> None:
+        """
+        更新"每月用量对比"sheet
+        
+        格式：
+        包含月度对比数据
+        """
+        # TODO: 填充每月用量对比数据
+        # 这里需要根据实际业务需求填充月度对比数据
+        logger.info("每月用量对比sheet更新待实现")
     
     def _group_devices_by_customer(self, customer_devices_data: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """按客户分组设备"""
