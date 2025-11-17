@@ -1020,37 +1020,130 @@ class ReportService:
         行5: 客户名称、月份
         行8: 表头（序号、油品名称/型号、设备编码、本月总升数计量（L）、备注）
         行9开始: 数据行
+        
+        样式要求（根据模板）：
+        - 行5: 黑体, 11pt, 垂直居中（客户名称），水平右对齐（月份）
+        - 行8表头: 黑体, 11pt, 水平居中, 垂直居中, 自动换行, 深绿色填充(#005C37), 四周边框
+        - 数据行: 黑体, 10pt, 水平居中, 垂直居中, 浅绿色背景(Theme 9 Tint 0.8), 四周边框
+        - 数字格式: 0.00_ (保留2位小数)
         """
-        # 更新客户名称和月份（行5）
-        # 格式: 客户名称：XXX    月份：X月份（YYYY.M.D-YYYY.M.D）
         from datetime import datetime
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
         
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
         
         month_str = f"{start_date.month}月份（{start_date.year}.{start_date.month}.{start_date.day}-{end_date.year}.{end_date.month}.{end_date.day}）"
         
-        # 行5: 客户名称和月份
-        ws.cell(row=5, column=1).value = f"客户名称：{customer_name}"
-        ws.cell(row=5, column=7).value = f"月份：{month_str}"
+        # 定义样式
+        # 表头字体
+        header_font = Font(name='黑体', size=11, bold=False)
+        # 数据字体
+        data_font = Font(name='黑体', size=10, bold=False)
+        # 表头填充（深绿色）
+        header_fill = PatternFill(start_color='005C37', end_color='005C37', fill_type='solid')
+        # 数据行填充（浅绿色，Theme 9 Tint 0.8）
+        # Theme 9 Tint 0.8 需要使用Theme颜色对象，但openpyxl写入时可能需要RGB
+        # 使用RGB近似值 #E2EFDA (浅绿色)
+        from openpyxl.styles.colors import Color
+        theme_color = Color(theme=9, tint=0.8)
+        data_fill = PatternFill(start_color=theme_color, end_color=theme_color, fill_type='solid')
+        # 边框
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        # 对齐方式
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        data_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        customer_alignment = Alignment(vertical='center')
+        month_alignment = Alignment(horizontal='right', vertical='center')
         
-        # 清空数据行（从行9开始）
+        # 行5: 客户名称和月份（应用样式）
+        cell_a5 = ws.cell(row=5, column=1)
+        cell_a5.value = f"客户名称：{customer_name}"
+        cell_a5.font = Font(name='黑体', size=11)
+        cell_a5.alignment = customer_alignment
+        
+        cell_g5 = ws.cell(row=5, column=7)
+        cell_g5.value = f"月份：{month_str}"
+        cell_g5.font = Font(name='黑体', size=11)
+        cell_g5.alignment = month_alignment
+        
+        # 清理数据行（从行9开始，保留行1-8的格式）
+        # 只清空值，不删除行，以保留格式
         data_start_row = 9
-        if ws.max_row >= data_start_row:
-            ws.delete_rows(data_start_row, ws.max_row - data_start_row + 1)
+        max_data_row = 16  # 最多8行数据（行9-16）
+        columns_to_clear = [1, 2, 5, 6, 8]  # A, B, E, F, H列
         
-        # 写入数据行
+        for row in range(data_start_row, max_data_row + 1):
+            for col in columns_to_clear:
+                cell = ws.cell(row=row, column=col)
+                # 检查是否是合并单元格的一部分
+                if cell.coordinate not in ws.merged_cells:
+                    cell.value = None
+        
+        # 写入数据行（最多8行）
+        device_count = len(devices)
+        if device_count > 8:
+            raise ValueError(f"设备数量超过限制（{device_count} > 8），无法在主页面显示")
+        
         for idx, device in enumerate(devices, start=1):
+            if idx > 8:
+                break
             row = data_start_row + idx - 1
-            ws.cell(row=row, column=1).value = idx  # 序号
-            ws.cell(row=row, column=2).value = device.get('oil_name', '未知油品')  # 油品名称/型号
-            ws.cell(row=row, column=5).value = device.get('device_code', '')  # 设备编码
-            ws.cell(row=row, column=6).value = device.get('total_order_volume', 0)  # 本月总升数计量（L）
-            ws.cell(row=row, column=8).value = device.get('remark', '')  # 备注（可选）
+            
+            # A列：序号
+            cell = ws.cell(row=row, column=1)
+            cell.value = idx
+            cell.font = data_font
+            cell.alignment = data_alignment
+            cell.fill = data_fill
+            cell.border = thin_border
+            
+            # B列：油品名称/型号
+            cell = ws.cell(row=row, column=2)
+            cell.value = device.get('oil_name', '未知油品')
+            cell.font = data_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.fill = data_fill
+            cell.border = thin_border
+            
+            # E列：设备编码
+            cell = ws.cell(row=row, column=5)
+            cell.value = device.get('device_code', '')
+            cell.font = data_font
+            cell.alignment = data_alignment
+            cell.fill = data_fill
+            cell.border = thin_border
+            
+            # F列：本月总升数计量（L）
+            cell = ws.cell(row=row, column=6)
+            cell.value = device.get('total_order_volume', 0)
+            cell.font = data_font
+            cell.alignment = data_alignment
+            cell.fill = data_fill
+            cell.border = thin_border
+            cell.number_format = '0.00_ '
+            
+            # H列：备注
+            cell = ws.cell(row=row, column=8)
+            cell.value = device.get('remark', '')
+            cell.font = data_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
         
-        # 添加"以下空白"行（如果有空行）
-        if len(devices) < 20:  # 假设最多20行数据
-            ws.cell(row=data_start_row + len(devices), column=2).value = "以下空白"
+        # 添加"以下空白"行（如果数据行少于8行）
+        if device_count < 8:
+            row = data_start_row + device_count
+            cell = ws.cell(row=row, column=2)
+            cell.value = "以下空白"
+            cell.font = data_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.fill = data_fill
+            cell.border = thin_border
     
     def _update_daily_detail_sheet(
         self,
@@ -1084,15 +1177,58 @@ class ReportService:
         from collections import defaultdict
         from openpyxl.styles import Alignment
         
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        
+        # 定义样式
+        date_header_font = Font(name='微软雅黑', size=10)
+        date_header_fill = PatternFill(start_color='BDD7A1', end_color='BDD7A1', fill_type='solid')
+        date_header_alignment = Alignment(horizontal='center', vertical='center')
+        date_border_left = Border(left=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+        date_border = Border(top=Side(style='thin'), bottom=Side(style='thin'))
+        
+        data_font = Font(name='微软雅黑', size=10)
+        data_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        data_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
         # 更新日期范围（行2-3）
-        ws.cell(row=2, column=7).value = "初始日期"
-        ws.cell(row=2, column=8).value = "结束日期"
+        # G2: 初始日期标题
+        cell_g2 = ws.cell(row=2, column=7)
+        cell_g2.value = "初始日期"
+        cell_g2.font = date_header_font
+        cell_g2.alignment = date_header_alignment
+        cell_g2.fill = date_header_fill
+        cell_g2.border = date_border_left
+        
+        # H2: 结束日期标题
+        cell_h2 = ws.cell(row=2, column=8)
+        cell_h2.value = "结束日期"
+        cell_h2.font = date_header_font
+        cell_h2.alignment = date_header_alignment
+        cell_h2.fill = date_header_fill
+        cell_h2.border = date_border
+        
+        # G3: 初始日期值
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-        ws.cell(row=3, column=7).value = start_date
-        ws.cell(row=3, column=7).number_format = 'yyyy"年"m"月"d"日"'
-        ws.cell(row=3, column=8).value = end_date
-        ws.cell(row=3, column=8).number_format = 'yyyy"年"m"月"d"日"'
+        cell_g3 = ws.cell(row=3, column=7)
+        cell_g3.value = start_date
+        cell_g3.number_format = 'yyyy"年"m"月"d"日";@'
+        cell_g3.font = date_header_font
+        cell_g3.alignment = date_header_alignment
+        cell_g3.border = date_border_left
+        
+        # H3: 结束日期值
+        cell_h3 = ws.cell(row=3, column=8)
+        cell_h3.value = end_date
+        cell_h3.number_format = 'yyyy"年"m"月"d"日";@'
+        cell_h3.font = date_header_font
+        cell_h3.alignment = date_header_alignment
+        cell_h3.border = date_border
         
         # 按设备-油品组合组织数据（原分支逻辑）
         # 数据结构: {(device_code, oil_name): {date: order_volume}}
@@ -1152,27 +1288,48 @@ class ReportService:
             if days_count > 1:
                 ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx + days_count - 1, end_column=1)
             month_str = f"{first_date.year}年\n{first_date.month}月"
-            ws.cell(row=row_idx, column=1).value = month_str
-            ws.cell(row=row_idx, column=1).alignment = Alignment(vertical="center", horizontal="center")
+            cell_a = ws.cell(row=row_idx, column=1)
+            cell_a.value = month_str
+            cell_a.font = data_font
+            cell_a.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            cell_a.border = data_border
             
             # 填充每日数据
             for day_idx, date in enumerate(dates):
-                # 第二列：日期（日）
-                day_str = str(date.day)
-                ws.cell(row=row_idx + day_idx, column=2).value = day_str
+                # 第二列：日期（日）- 格式为 "月.日" (如 "7.1")
+                day_str = f"{date.month}.{date.day}"
+                cell_b = ws.cell(row=row_idx + day_idx, column=2)
+                cell_b.value = day_str
+                cell_b.font = data_font
+                cell_b.alignment = data_alignment
+                cell_b.border = data_border
                 
                 # 第三列开始：各设备-油品组合的每日用量
                 for col_idx, (device_code, oil_name) in enumerate(device_oil_columns, start=3):
                     value = daily_usage_by_column[(device_code, oil_name)].get(date, 0.0)
-                    ws.cell(row=row_idx + day_idx, column=col_idx).value = value
+                    cell = ws.cell(row=row_idx + day_idx, column=col_idx)
+                    cell.value = value
+                    cell.font = data_font
+                    cell.alignment = data_alignment
+                    cell.border = data_border
                     if value > 0:
-                        ws.cell(row=row_idx + day_idx, column=col_idx).number_format = '0.00'
+                        cell.number_format = '0.00'
             
             row_idx += days_count
         
-        # 在行5写入列标题（设备编码-油品名称）
+        # 在行5写入列标题（设备编码\n油品名称）- 使用换行格式
+        header_font = Font(name='微软雅黑', size=11, bold=True)
+        header_fill = PatternFill(start_color='CADFB3', end_color='CADFB3', fill_type='solid')
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        header_border = Border(left=Side(style='thin'), top=Side(style='thin'))
+        
         for col_idx, (device_code, oil_name) in enumerate(device_oil_columns, start=3):
-            ws.cell(row=5, column=col_idx).value = f"{device_code}-{oil_name}"
+            cell = ws.cell(row=5, column=col_idx)
+            cell.value = f"{device_code}\n{oil_name}"
+            cell.font = header_font
+            cell.alignment = header_alignment
+            cell.fill = header_fill
+            cell.border = header_border
         
         logger.info(f"每日用量明细sheet已填充 {len(device_oil_columns)} 个设备-油品组合的数据")
     
@@ -1257,32 +1414,99 @@ class ReportService:
         if ws.max_row >= data_start_row:
             ws.delete_rows(data_start_row, ws.max_row - data_start_row + 1)
         
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        
+        # 定义样式
+        header_font = Font(name='微软雅黑', size=11, bold=True, color='FFFFFFFF')
+        # Theme 9 填充（表头背景，Tint 0.0）
+        from openpyxl.styles.colors import Color
+        theme_color_header = Color(theme=9, tint=0.0)
+        header_fill_theme9 = PatternFill(start_color=theme_color_header, end_color=theme_color_header, fill_type='solid')
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        header_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        data_font = Font(name='微软雅黑', size=11)
+        data_alignment = Alignment(horizontal='center', vertical='center')
+        data_fill = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
+        data_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
         # 确保表头存在（行6）
-        # 模板中行6应该是：设备编号、油品名称
+        # 模板中行6应该是：设备编号、油品名称、1月-12月
         # 如果模板中没有，则创建
         if ws.cell(row=6, column=1).value is None:
-            headers = ["设备编号", "油品名称"]
+            headers = ["设备编号", "油品名称"] + month_labels
             for col_idx, header in enumerate(headers, start=1):
-                ws.cell(row=6, column=col_idx).value = header
+                cell = ws.cell(row=6, column=col_idx)
+                cell.value = header
+                cell.font = header_font
+                cell.alignment = header_alignment
+                cell.fill = header_fill_theme9
+                cell.border = header_border
         
-        # 在行6写入各设备-油品组合的列标题（从第3列开始）
-        for col_idx, (device_code, oil_name) in enumerate(device_oil_columns, start=3):
-            ws.cell(row=6, column=col_idx).value = f"{device_code}-{oil_name}"
+        # 根据原分支代码和模板结构：
+        # - 行6: 设备编号、油品名称、1月-12月（固定，模板已有）
+        # - 行7开始: 每行对应一个设备-油品组合
+        #   - A列: 设备编号
+        #   - B列: 油品名称
+        #   - C列开始: 各月份的用量（1-12月）
+        #   - O列: 合计（SUM公式）
         
-        # 填充数据行（从行7开始，每行对应一个月份）
-        for month_idx, (month_key, month_label) in enumerate(zip(months, month_labels), start=0):
-            row_idx = data_start_row + month_idx
+        # 填充数据行（从行7开始，每行对应一个设备-油品组合）
+        row_idx = data_start_row
+        for device_code, oil_name in device_oil_columns:
+            # A列：设备编号
+            cell = ws.cell(row=row_idx, column=1)
+            cell.value = device_code
+            cell.font = data_font
+            cell.alignment = data_alignment
+            cell.fill = data_fill
+            cell.border = data_border
             
-            # 第一列：设备编号（空，因为这是按月份组织的）
-            # 第二列：月份标签（如"1月"）
-            ws.cell(row=row_idx, column=2).value = month_label
+            # B列：油品名称
+            cell = ws.cell(row=row_idx, column=2)
+            cell.value = oil_name
+            cell.font = data_font
+            cell.alignment = header_alignment
+            cell.fill = data_fill
+            cell.border = data_border
             
-            # 第三列开始：各设备-油品组合的月份用量
-            for col_idx, (device_code, oil_name) in enumerate(device_oil_columns, start=3):
+            # C列开始：各月份的用量（1-12月）
+            for month_idx, (month_key, month_label) in enumerate(zip(months, month_labels), start=0):
+                col_idx = 3 + month_idx  # C列是第3列，对应1月
                 value = monthly_usage_by_column[(device_code, oil_name)].get(month_key, 0.0)
-                ws.cell(row=row_idx, column=col_idx).value = value
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.value = value
+                cell.font = data_font
+                cell.alignment = data_alignment
+                cell.fill = data_fill
+                cell.border = data_border
                 if value > 0:
-                    ws.cell(row=row_idx, column=col_idx).number_format = '0.00'
+                    cell.number_format = '0.00_ '
+            
+            # O列：合计（使用SUM公式）
+            from openpyxl.utils import get_column_letter
+            total_col = 15  # O列
+            start_col_letter = get_column_letter(3)  # C列（1月）
+            end_col_letter = get_column_letter(14)   # N列（12月）
+            cell = ws.cell(row=row_idx, column=total_col)
+            cell.value = f"=SUM({start_col_letter}{row_idx}:{end_col_letter}{row_idx})"
+            cell.font = data_font
+            cell.alignment = data_alignment
+            cell.fill = data_fill
+            cell.border = data_border
+            cell.number_format = '0.00_ '
+            
+            row_idx += 1
         
         logger.info(f"每月用量对比sheet已填充 {len(device_oil_columns)} 个设备-油品组合的数据，共{len(months)}个月份")
     
