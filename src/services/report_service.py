@@ -835,7 +835,7 @@ class ReportService:
         except Exception as e:
             logger.error(f"获取离线事件时出错: {e}", exc_info=True)
         
-        return output_path
+        return offline_events
 
     async def _generate_customer_statement_report(
         self,
@@ -919,8 +919,9 @@ class ReportService:
                 raise ValueError("所有选定设备均未能成功处理数据。")
             
             # 5. 生成客户对账单（使用模板）
+            # 传递原始数据用于填充每日用量明细和每月用量对比
             output_path = self._generate_customer_statement_from_template(
-                customer_groups, start_date_str, end_date_str
+                customer_groups, start_date_str, end_date_str, raw_report_data
             )
             
             logger.info(f"客户对账单已生成: {output_path}")
@@ -936,7 +937,8 @@ class ReportService:
         self,
         customer_groups: Dict[str, List[Dict[str, Any]]],
         start_date_str: str,
-        end_date_str: str
+        end_date_str: str,
+        raw_report_data: List[Dict[str, Any]]
     ) -> Path:
         """
         使用模板文件生成客户对账单
@@ -950,6 +952,7 @@ class ReportService:
             customer_groups: 按客户分组的设备数据
             start_date_str: 开始日期
             end_date_str: 结束日期
+            raw_report_data: 原始报表数据（包含每日数据）
             
         Returns:
             生成的Excel文件路径
@@ -969,6 +972,11 @@ class ReportService:
         
         # 为每个客户生成对账单
         for customer_name, devices in customer_groups.items():
+            # 筛选该客户的原始数据
+            customer_device_codes = {d['device_code'] for d in devices}
+            customer_raw_data = [row for row in raw_report_data 
+                               if row.get('device_code') in customer_device_codes]
+            
             # 更新"中润对账单"sheet
             if "中润对账单" in wb.sheetnames:
                 ws_main = wb["中润对账单"]
@@ -977,12 +985,12 @@ class ReportService:
             # 更新"每日用量明细"sheet
             if "每日用量明细" in wb.sheetnames:
                 ws_daily = wb["每日用量明细"]
-                self._update_daily_detail_sheet(ws_daily, devices, start_date_str, end_date_str)
+                self._update_daily_detail_sheet(ws_daily, customer_raw_data, devices, start_date_str, end_date_str)
             
             # 更新"每月用量对比"sheet
             if "每月用量对比" in wb.sheetnames:
                 ws_monthly = wb["每月用量对比"]
-                self._update_monthly_comparison_sheet(ws_monthly, devices, start_date_str, end_date_str)
+                self._update_monthly_comparison_sheet(ws_monthly, customer_raw_data, devices, start_date_str, end_date_str)
         
         # 生成文件名
         if len(customer_groups) == 1:
@@ -1047,6 +1055,7 @@ class ReportService:
     def _update_daily_detail_sheet(
         self,
         ws,
+        raw_data: List[Dict[str, Any]],
         devices: List[Dict[str, Any]],
         start_date_str: str,
         end_date_str: str
@@ -1056,9 +1065,19 @@ class ReportService:
         
         格式：
         行2-3: 初始日期、结束日期
-        行5开始: 每日用量数据
+        行5: 表头（用油型号、日）
+        行6开始: 按日期和油品组织的每日用量数据
+        
+        Args:
+            ws: 工作表对象
+            raw_data: 原始报表数据（包含每日数据）
+            devices: 设备数据列表
+            start_date_str: 开始日期
+            end_date_str: 结束日期
         """
-        from datetime import datetime
+        from datetime import datetime, timedelta
+        from collections import defaultdict
+        from openpyxl.styles import Alignment
         
         # 更新日期范围（行2-3）
         ws.cell(row=2, column=7).value = "初始日期"
@@ -1066,13 +1085,101 @@ class ReportService:
         ws.cell(row=3, column=7).value = f"{start_date_str} 00:00:00"
         ws.cell(row=3, column=8).value = f"{end_date_str} 00:00:00"
         
-        # TODO: 填充每日用量明细数据
-        # 这里需要根据实际业务需求填充每日数据
-        logger.info("每日用量明细sheet已更新日期范围，详细数据填充待实现")
+        # 按日期和油品组织数据
+        # 数据结构: {(date, oil_name): total_order_volume}
+        daily_data = defaultdict(float)
+        
+        for row in raw_data:
+            report_date = row.get('report_date')
+            oil_name = row.get('oil_name', '未知油品')
+            order_volume = row.get('daily_order_volume', 0) or 0
+            
+            # 处理日期格式
+            if isinstance(report_date, datetime):
+                date_key = report_date.date()
+            elif isinstance(report_date, str):
+                date_key = datetime.strptime(report_date, '%Y-%m-%d').date()
+            else:
+                date_key = report_date
+            
+            key = (date_key, oil_name)
+            daily_data[key] += float(order_volume)
+        
+        # 生成日期列表
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        date_list = []
+        current_date = start_date
+        while current_date <= end_date:
+            date_list.append(current_date)
+            current_date += timedelta(days=1)
+        
+        # 获取所有油品名称
+        oil_names = sorted(set(oil_name for _, oil_name in daily_data.keys()))
+        
+        # 清空数据行（从行6开始，保留行1-5的格式）
+        # 行5: 表头（用油型号、日）
+        data_start_row = 6
+        if ws.max_row >= data_start_row:
+            ws.delete_rows(data_start_row, ws.max_row - data_start_row + 1)
+        
+        # 填充数据
+        # 根据模板结构：
+        # 行5: 第一列是"用油型号"，第二列是"日"
+        # 行6开始: 第一列是油品名称和年月，第二列开始是每日用量
+        
+        # 按油品和月份组织数据
+        # 数据结构: {(oil_name, year_month): {date: order_volume}}
+        oil_month_data = defaultdict(lambda: defaultdict(float))
+        
+        for (date, oil_name), volume in daily_data.items():
+            year_month = f"{date.year}-{date.month:02d}"
+            oil_month_data[(oil_name, year_month)][date] = volume
+        
+        row_idx = data_start_row
+        
+        # 按油品和月份填充数据
+        for (oil_name, year_month), date_volumes in sorted(oil_month_data.items()):
+            # 获取该月份的所有日期
+            month_dates = sorted(date_volumes.keys())
+            if not month_dates:
+                continue
+            
+            first_date = month_dates[0]
+            days_count = len(month_dates)
+            
+            # 第一列：油品名称和年月（合并单元格）
+            if days_count > 1:
+                ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx + days_count - 1, end_column=1)
+            month_str = f"{first_date.year}年\n{first_date.month}月"
+            ws.cell(row=row_idx, column=1).value = month_str
+            ws.cell(row=row_idx, column=1).alignment = Alignment(vertical="center", horizontal="center")
+            
+            # 填充每日数据
+            for day_idx, date in enumerate(month_dates):
+                order_volume = date_volumes.get(date, 0.0)
+                
+                # 第二列：日期（日）
+                day_str = str(date.day)
+                ws.cell(row=row_idx + day_idx, column=2).value = day_str
+                
+                # 第三列开始：每日用量
+                # 根据模板，日期列从第3列开始
+                # 计算日期在月份中的位置（从1号开始）
+                day_col = 2 + date.day  # 第2列是"日"，第3列开始是日期
+                if day_col <= ws.max_column:
+                    ws.cell(row=row_idx + day_idx, column=day_col).value = order_volume
+                    if order_volume > 0:
+                        ws.cell(row=row_idx + day_idx, column=day_col).number_format = '0.00'
+            
+            row_idx += days_count
+        
+        logger.info(f"每日用量明细sheet已填充 {len(oil_names)} 个油品的数据")
     
     def _update_monthly_comparison_sheet(
         self,
         ws,
+        raw_data: List[Dict[str, Any]],
         devices: List[Dict[str, Any]],
         start_date_str: str,
         end_date_str: str
@@ -1081,11 +1188,95 @@ class ReportService:
         更新"每月用量对比"sheet
         
         格式：
-        包含月度对比数据
+        行1: 截止日期
+        行5: 表头（设备编号、油品名称、1月-12月、合计）
+        行6开始: 数据行，每行包含设备编号、油品名称、各月份的用量、合计（使用SUM公式）
+        
+        Args:
+            ws: 工作表对象
+            raw_data: 原始报表数据（包含每日数据）
+            devices: 设备数据列表
+            start_date_str: 开始日期
+            end_date_str: 结束日期
         """
-        # TODO: 填充每月用量对比数据
-        # 这里需要根据实际业务需求填充月度对比数据
-        logger.info("每月用量对比sheet更新待实现")
+        from datetime import datetime
+        from collections import defaultdict
+        from openpyxl.utils import get_column_letter
+        
+        # 更新截止日期（行1）
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+        ws.cell(row=1, column=1).value = f"截止日期：{end_date.year}年{end_date.month}月{end_date.day}日"
+        
+        # 按设备-油品-月份组织数据
+        # 数据结构: {(device_code, oil_name): {month: total_order_volume}}
+        monthly_data = defaultdict(lambda: defaultdict(float))
+        
+        for row in raw_data:
+            device_code = row.get('device_code', '')
+            oil_name = row.get('oil_name', '未知油品')
+            report_date = row.get('report_date')
+            order_volume = row.get('daily_order_volume', 0) or 0
+            
+            # 处理日期格式，提取月份
+            if isinstance(report_date, datetime):
+                month_key = f"{report_date.year}-{report_date.month:02d}"
+            elif isinstance(report_date, str):
+                date_obj = datetime.strptime(report_date, '%Y-%m-%d')
+                month_key = f"{date_obj.year}-{date_obj.month:02d}"
+            else:
+                continue
+            
+            key = (device_code, oil_name)
+            monthly_data[key][month_key] += float(order_volume)
+        
+        # 生成月份列表（1-12月，格式：YYYY-MM）
+        current_year = end_date.year
+        months = [f"{current_year}-{i:02d}" for i in range(1, 13)]
+        month_labels = [f"{i}月" for i in range(1, 13)]
+        
+        # 清空数据行（从行7开始，保留行1-6的格式）
+        # 行1: 截止日期
+        # 行5: 年份和合计标题
+        # 行6: 表头（设备编号、油品名称、1月-12月）
+        data_start_row = 7
+        if ws.max_row >= data_start_row:
+            ws.delete_rows(data_start_row, ws.max_row - data_start_row + 1)
+        
+        # 确保表头存在（行6）
+        # 模板中行6应该是：设备编号、油品名称、1月-12月
+        # 如果模板中没有，则创建
+        if ws.cell(row=6, column=1).value is None:
+            headers = ["设备编号", "油品名称"] + month_labels
+            for col_idx, header in enumerate(headers, start=1):
+                ws.cell(row=6, column=col_idx).value = header
+        
+        # 填充数据行（从行7开始）
+        row_idx = data_start_row
+        for (device_code, oil_name), month_volumes in monthly_data.items():
+            # 设备编号
+            ws.cell(row=row_idx, column=1).value = device_code
+            # 油品名称
+            ws.cell(row=row_idx, column=2).value = oil_name
+            
+            # 填充各月份数据
+            total_volume = 0.0
+            for month_idx, month_key in enumerate(months, start=3):  # 从第3列开始
+                volume = month_volumes.get(month_key, 0.0)
+                ws.cell(row=row_idx, column=month_idx).value = volume
+                if volume > 0:
+                    ws.cell(row=row_idx, column=month_idx).number_format = '0.00'
+                total_volume += volume
+            
+            # 合计列（使用SUM公式，列O是第15列）
+            total_col = 15  # 合计列
+            start_col_letter = get_column_letter(3)  # C列（1月）
+            end_col_letter = get_column_letter(14)   # N列（12月）
+            ws.cell(row=row_idx, column=total_col).value = f"=SUM({start_col_letter}{row_idx}:{end_col_letter}{row_idx})"
+            ws.cell(row=row_idx, column=total_col).number_format = '0.00'
+            
+            row_idx += 1
+        
+        logger.info(f"每月用量对比sheet已填充 {len(monthly_data)} 条设备-油品组合的数据")
     
     def _group_devices_by_customer(self, customer_devices_data: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """按客户分组设备"""
