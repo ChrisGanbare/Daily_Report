@@ -1063,10 +1063,15 @@ class ReportService:
         """
         更新"每日用量明细"sheet
         
-        格式：
+        格式（按原分支development-copy的逻辑）：
         行2-3: 初始日期、结束日期
-        行5: 表头（用油型号、日）
-        行6开始: 按日期和油品组织的每日用量数据
+        行5: 表头（用油型号、日，以及各设备-油品组合的列标题）
+        行6开始: 第一列是年月，第二列是日期（日），第三列开始是各设备-油品组合的每日用量
+        
+        原分支逻辑：
+        - 按(device_code, oil_name)作为复合键，为每个设备-油品组合创建独立的列
+        - 从第3列开始，每列对应一个设备-油品组合
+        - 使用oil_columns列表保持列的顺序
         
         Args:
             ws: 工作表对象
@@ -1082,17 +1087,27 @@ class ReportService:
         # 更新日期范围（行2-3）
         ws.cell(row=2, column=7).value = "初始日期"
         ws.cell(row=2, column=8).value = "结束日期"
-        ws.cell(row=3, column=7).value = f"{start_date_str} 00:00:00"
-        ws.cell(row=3, column=8).value = f"{end_date_str} 00:00:00"
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        ws.cell(row=3, column=7).value = start_date
+        ws.cell(row=3, column=7).number_format = 'yyyy"年"m"月"d"日"'
+        ws.cell(row=3, column=8).value = end_date
+        ws.cell(row=3, column=8).number_format = 'yyyy"年"m"月"d"日"'
         
-        # 按日期和油品组织数据
-        # 数据结构: {(date, oil_name): total_order_volume}
-        daily_data = defaultdict(float)
+        # 按设备-油品组合组织数据（原分支逻辑）
+        # 数据结构: {(device_code, oil_name): {date: order_volume}}
+        device_oil_columns = []  # 保持列的顺序
+        daily_usage_by_column = defaultdict(lambda: defaultdict(float))
         
         for row in raw_data:
-            report_date = row.get('report_date')
+            device_code = row.get('device_code', '')
             oil_name = row.get('oil_name', '未知油品')
+            report_date = row.get('report_date')
             order_volume = row.get('daily_order_volume', 0) or 0
+            
+            key = (device_code, oil_name)
+            if key not in device_oil_columns:
+                device_oil_columns.append(key)
             
             # 处理日期格式
             if isinstance(report_date, datetime):
@@ -1102,53 +1117,38 @@ class ReportService:
             else:
                 date_key = report_date
             
-            key = (date_key, oil_name)
-            daily_data[key] += float(order_volume)
+            daily_usage_by_column[key][date_key] += float(order_volume)
         
         # 生成日期列表
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
         date_list = []
         current_date = start_date
         while current_date <= end_date:
             date_list.append(current_date)
             current_date += timedelta(days=1)
         
-        # 获取所有油品名称
-        oil_names = sorted(set(oil_name for _, oil_name in daily_data.keys()))
-        
         # 清空数据行（从行6开始，保留行1-5的格式）
-        # 行5: 表头（用油型号、日）
         data_start_row = 6
         if ws.max_row >= data_start_row:
             ws.delete_rows(data_start_row, ws.max_row - data_start_row + 1)
         
-        # 填充数据
-        # 根据模板结构：
-        # 行5: 第一列是"用油型号"，第二列是"日"
-        # 行6开始: 第一列是油品名称和年月，第二列开始是每日用量
-        
-        # 按油品和月份组织数据
-        # 数据结构: {(oil_name, year_month): {date: order_volume}}
-        oil_month_data = defaultdict(lambda: defaultdict(float))
-        
-        for (date, oil_name), volume in daily_data.items():
+        # 按月份组织日期（用于显示年月和日期）
+        month_dates = defaultdict(list)
+        for date in date_list:
             year_month = f"{date.year}-{date.month:02d}"
-            oil_month_data[(oil_name, year_month)][date] = volume
+            month_dates[year_month].append(date)
         
         row_idx = data_start_row
         
-        # 按油品和月份填充数据
-        for (oil_name, year_month), date_volumes in sorted(oil_month_data.items()):
-            # 获取该月份的所有日期
-            month_dates = sorted(date_volumes.keys())
-            if not month_dates:
+        # 按月份填充数据
+        for year_month in sorted(month_dates.keys()):
+            dates = sorted(month_dates[year_month])
+            if not dates:
                 continue
             
-            first_date = month_dates[0]
-            days_count = len(month_dates)
+            first_date = dates[0]
+            days_count = len(dates)
             
-            # 第一列：油品名称和年月（合并单元格）
+            # 第一列：年月（合并单元格）
             if days_count > 1:
                 ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx + days_count - 1, end_column=1)
             month_str = f"{first_date.year}年\n{first_date.month}月"
@@ -1156,25 +1156,25 @@ class ReportService:
             ws.cell(row=row_idx, column=1).alignment = Alignment(vertical="center", horizontal="center")
             
             # 填充每日数据
-            for day_idx, date in enumerate(month_dates):
-                order_volume = date_volumes.get(date, 0.0)
-                
+            for day_idx, date in enumerate(dates):
                 # 第二列：日期（日）
                 day_str = str(date.day)
                 ws.cell(row=row_idx + day_idx, column=2).value = day_str
                 
-                # 第三列开始：每日用量
-                # 根据模板，日期列从第3列开始
-                # 计算日期在月份中的位置（从1号开始）
-                day_col = 2 + date.day  # 第2列是"日"，第3列开始是日期
-                if day_col <= ws.max_column:
-                    ws.cell(row=row_idx + day_idx, column=day_col).value = order_volume
-                    if order_volume > 0:
-                        ws.cell(row=row_idx + day_idx, column=day_col).number_format = '0.00'
+                # 第三列开始：各设备-油品组合的每日用量
+                for col_idx, (device_code, oil_name) in enumerate(device_oil_columns, start=3):
+                    value = daily_usage_by_column[(device_code, oil_name)].get(date, 0.0)
+                    ws.cell(row=row_idx + day_idx, column=col_idx).value = value
+                    if value > 0:
+                        ws.cell(row=row_idx + day_idx, column=col_idx).number_format = '0.00'
             
             row_idx += days_count
         
-        logger.info(f"每日用量明细sheet已填充 {len(oil_names)} 个油品的数据")
+        # 在行5写入列标题（设备编码-油品名称）
+        for col_idx, (device_code, oil_name) in enumerate(device_oil_columns, start=3):
+            ws.cell(row=5, column=col_idx).value = f"{device_code}-{oil_name}"
+        
+        logger.info(f"每日用量明细sheet已填充 {len(device_oil_columns)} 个设备-油品组合的数据")
     
     def _update_monthly_comparison_sheet(
         self,
@@ -1187,10 +1187,17 @@ class ReportService:
         """
         更新"每月用量对比"sheet
         
-        格式：
+        格式（按原分支development-copy的逻辑）：
         行1: 截止日期
-        行5: 表头（设备编号、油品名称、1月-12月、合计）
-        行6开始: 数据行，每行包含设备编号、油品名称、各月份的用量、合计（使用SUM公式）
+        行5: 年份和合计标题
+        行6: 表头（设备编号、油品名称，以及各设备-油品组合的列标题）
+        行7开始: 第一列是设备编号，第二列是油品名称，第三列开始是各设备-油品组合的月份数据
+        
+        原分支逻辑：
+        - 按(device_code, oil_name)作为复合键，为每个设备-油品组合创建独立的列
+        - 从第3列开始，每列对应一个设备-油品组合
+        - 使用oil_columns列表保持列的顺序
+        - 行7开始，每行对应一个月份（1-12月）
         
         Args:
             ws: 工作表对象
@@ -1201,21 +1208,33 @@ class ReportService:
         """
         from datetime import datetime
         from collections import defaultdict
-        from openpyxl.utils import get_column_letter
+        from openpyxl.styles import Alignment
         
         # 更新截止日期（行1）
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-        ws.cell(row=1, column=1).value = f"截止日期：{end_date.year}年{end_date.month}月{end_date.day}日"
+        ws.cell(row=1, column=1).value = end_date
+        ws.cell(row=1, column=1).number_format = 'yyyy"年"m"月"d"日"'
+        # 添加前缀文本
+        cell = ws.cell(row=1, column=1)
+        cell.value = f"截止日期：{end_date.year}年{end_date.month}月{end_date.day}日"
+        cell.alignment = Alignment(horizontal='right', vertical='center')
+        # 合并A1到O1
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=15)
         
-        # 按设备-油品-月份组织数据
+        # 按设备-油品组合组织数据（原分支逻辑）
         # 数据结构: {(device_code, oil_name): {month: total_order_volume}}
-        monthly_data = defaultdict(lambda: defaultdict(float))
+        device_oil_columns = []  # 保持列的顺序
+        monthly_usage_by_column = defaultdict(lambda: defaultdict(float))
         
         for row in raw_data:
             device_code = row.get('device_code', '')
             oil_name = row.get('oil_name', '未知油品')
             report_date = row.get('report_date')
             order_volume = row.get('daily_order_volume', 0) or 0
+            
+            key = (device_code, oil_name)
+            if key not in device_oil_columns:
+                device_oil_columns.append(key)
             
             # 处理日期格式，提取月份
             if isinstance(report_date, datetime):
@@ -1226,8 +1245,7 @@ class ReportService:
             else:
                 continue
             
-            key = (device_code, oil_name)
-            monthly_data[key][month_key] += float(order_volume)
+            monthly_usage_by_column[key][month_key] += float(order_volume)
         
         # 生成月份列表（1-12月，格式：YYYY-MM）
         current_year = end_date.year
@@ -1235,48 +1253,38 @@ class ReportService:
         month_labels = [f"{i}月" for i in range(1, 13)]
         
         # 清空数据行（从行7开始，保留行1-6的格式）
-        # 行1: 截止日期
-        # 行5: 年份和合计标题
-        # 行6: 表头（设备编号、油品名称、1月-12月）
         data_start_row = 7
         if ws.max_row >= data_start_row:
             ws.delete_rows(data_start_row, ws.max_row - data_start_row + 1)
         
         # 确保表头存在（行6）
-        # 模板中行6应该是：设备编号、油品名称、1月-12月
+        # 模板中行6应该是：设备编号、油品名称
         # 如果模板中没有，则创建
         if ws.cell(row=6, column=1).value is None:
-            headers = ["设备编号", "油品名称"] + month_labels
+            headers = ["设备编号", "油品名称"]
             for col_idx, header in enumerate(headers, start=1):
                 ws.cell(row=6, column=col_idx).value = header
         
-        # 填充数据行（从行7开始）
-        row_idx = data_start_row
-        for (device_code, oil_name), month_volumes in monthly_data.items():
-            # 设备编号
-            ws.cell(row=row_idx, column=1).value = device_code
-            # 油品名称
-            ws.cell(row=row_idx, column=2).value = oil_name
-            
-            # 填充各月份数据
-            total_volume = 0.0
-            for month_idx, month_key in enumerate(months, start=3):  # 从第3列开始
-                volume = month_volumes.get(month_key, 0.0)
-                ws.cell(row=row_idx, column=month_idx).value = volume
-                if volume > 0:
-                    ws.cell(row=row_idx, column=month_idx).number_format = '0.00'
-                total_volume += volume
-            
-            # 合计列（使用SUM公式，列O是第15列）
-            total_col = 15  # 合计列
-            start_col_letter = get_column_letter(3)  # C列（1月）
-            end_col_letter = get_column_letter(14)   # N列（12月）
-            ws.cell(row=row_idx, column=total_col).value = f"=SUM({start_col_letter}{row_idx}:{end_col_letter}{row_idx})"
-            ws.cell(row=row_idx, column=total_col).number_format = '0.00'
-            
-            row_idx += 1
+        # 在行6写入各设备-油品组合的列标题（从第3列开始）
+        for col_idx, (device_code, oil_name) in enumerate(device_oil_columns, start=3):
+            ws.cell(row=6, column=col_idx).value = f"{device_code}-{oil_name}"
         
-        logger.info(f"每月用量对比sheet已填充 {len(monthly_data)} 条设备-油品组合的数据")
+        # 填充数据行（从行7开始，每行对应一个月份）
+        for month_idx, (month_key, month_label) in enumerate(zip(months, month_labels), start=0):
+            row_idx = data_start_row + month_idx
+            
+            # 第一列：设备编号（空，因为这是按月份组织的）
+            # 第二列：月份标签（如"1月"）
+            ws.cell(row=row_idx, column=2).value = month_label
+            
+            # 第三列开始：各设备-油品组合的月份用量
+            for col_idx, (device_code, oil_name) in enumerate(device_oil_columns, start=3):
+                value = monthly_usage_by_column[(device_code, oil_name)].get(month_key, 0.0)
+                ws.cell(row=row_idx, column=col_idx).value = value
+                if value > 0:
+                    ws.cell(row=row_idx, column=col_idx).number_format = '0.00'
+        
+        logger.info(f"每月用量对比sheet已填充 {len(device_oil_columns)} 个设备-油品组合的数据，共{len(months)}个月份")
     
     def _group_devices_by_customer(self, customer_devices_data: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """按客户分组设备"""
