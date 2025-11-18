@@ -1,5 +1,5 @@
 """
-客户对账单处理器 - 基于development-copy分支的业务逻辑重构
+客户对账单处理器 - 重新设计实现，确保与development-copy分支功能完全一致
 """
 
 import logging
@@ -14,11 +14,13 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
+from src.services.customer_statement_service import CustomerStatementService
+
 logger = logging.getLogger(__name__)
 
 
 class StatementHandler:
-    """客户对账单处理器"""
+    """客户对账单处理器 - 重新设计实现"""
     
     def __init__(self, template_path: Optional[str] = None):
         """
@@ -28,7 +30,7 @@ class StatementHandler:
             template_path: Excel模板文件路径
         """
         self.template_path = template_path
-        self.customer_statement_generator = CustomerStatementGenerator(template_path)
+        self.customer_statement_service = CustomerStatementService()
     
     def generate_customer_statement_from_template(self,
                                                  customer_data: Dict[str, Any],
@@ -37,7 +39,7 @@ class StatementHandler:
                                                  start_date: str,
                                                  end_date: str) -> str:
         """
-        从模板生成客户对账单
+        从模板生成客户对账单 - 使用新的CustomerStatementService
         
         Args:
             customer_data: 客户基础信息
@@ -58,10 +60,20 @@ class StatementHandler:
             # 验证设备数据
             self._validate_devices_data(devices_data)
             
+            # 提取设备编码列表
+            device_codes = [device['device_code'] for device in devices_data]
+            
             # 生成对账单
-            output_path = self.customer_statement_generator.generate_report(
-                customer_data, devices_data, output_dir, start_date, end_date
+            output_path, warnings = self.customer_statement_service.generate_customer_statement(
+                device_codes=device_codes,
+                start_date=start_date,
+                end_date=end_date,
+                output_dir=output_dir
             )
+            
+            # 记录警告信息
+            for warning in warnings:
+                logger.warning(warning)
             
             logger.info(f"客户对账单生成成功: {output_path}")
             return output_path
@@ -394,7 +406,3 @@ class StatementHandler:
                 cell = ws.cell(row=row, column=col)
                 if isinstance(cell.value, (int, float)):
                     cell.number_format = '0.00'
-
-
-# 导入CustomerStatementGenerator类
-from .customer_statement_generator import CustomerStatementGenerator

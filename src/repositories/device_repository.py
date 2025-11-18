@@ -161,6 +161,73 @@ class DeviceRepository:
             logger.error(f"查询设备和客户信息时出错: {e}", exc_info=True)
             raise
 
+    async def get_devices_with_customers_paginated(
+        self,
+        customer_name: Optional[str],
+        device_code: Optional[str],
+        page: int,
+        page_size: int,
+    ) -> Dict[str, Any]:
+        try:
+            base_where = """
+                WHERE
+                    d.del_status = 1
+                    AND c.status = 1
+            """
+            where_clauses = []
+            params: Dict[str, Any] = {}
+            if customer_name:
+                where_clauses.append("c.customer_name LIKE :customer_name")
+                params["customer_name"] = f"%{customer_name}%"
+            if device_code:
+                where_clauses.append("d.device_code LIKE :device_code")
+                params["device_code"] = f"%{device_code}%"
+
+            if where_clauses:
+                dynamic_where = base_where + " AND " + " AND ".join(where_clauses)
+            else:
+                dynamic_where = base_where
+
+            count_sql = f"""
+                SELECT COUNT(*) AS total
+                FROM oil.t_device d
+                JOIN oil.t_customer c ON d.customer_id = c.id
+                {dynamic_where}
+            """
+            count_stmt = text(count_sql)
+            count_result = await self.session.execute(count_stmt, params)
+            total = int(count_result.scalar() or 0)
+
+            offset = (page - 1) * page_size
+            list_sql = f"""
+                SELECT
+                    d.device_code AS code,
+                    c.customer_name AS name
+                FROM oil.t_device d
+                JOIN oil.t_customer c ON d.customer_id = c.id
+                {dynamic_where}
+                ORDER BY c.customer_name, d.device_code
+                LIMIT :limit OFFSET :offset
+            """
+            list_params = {**params, "limit": page_size, "offset": offset}
+            list_stmt = text(list_sql)
+            list_result = await self.session.execute(list_stmt, list_params)
+            devices = [row._asdict() for row in list_result.fetchall()]
+
+            pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+            return {
+                "data": devices,
+                "pagination": {
+                    "page": page,
+                    "size": page_size,
+                    "total": total,
+                    "pages": pages,
+                },
+            }
+        except Exception as e:
+            logger.error(f"分页查询设备和客户信息时出错: {e}", exc_info=True)
+            raise
+
     @async_cached(report_data_cache)
     async def get_inventory_raw_data(
         self,

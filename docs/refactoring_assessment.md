@@ -408,3 +408,4 @@ async def get_devices_list(
 - `src/cli/` - 如果不需要CLI功能，可删除
 - `src/ui/` - GUI相关，已迁移到Web，可删除
 - `src/web/` - 如果未使用，可删除
+

@@ -7,6 +7,8 @@ import sys
 import multiprocessing
 from pathlib import Path
 from datetime import datetime
+import asyncio
+import uuid
 
 # 添加项目根目录到sys.path
 # 确保能够导入同一目录下的模块
@@ -19,7 +21,7 @@ if current_dir not in sys.path:
 
 # 现在导入其他模块
 import uvicorn
-from fastapi import FastAPI, Depends, Request, HTTPException
+from fastapi import FastAPI, Depends, Request, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -66,6 +68,52 @@ def get_report_service(repo: DeviceRepository = Depends(get_device_repository)) 
     return ReportService(repo)
 
 
+# --- 简易后台任务管理器 ---
+class TaskState(BaseModel):
+    task_id: str
+    status: str  # pending, running, done, error
+    progress: int = 0
+    message: str = ""
+    created_at: datetime
+    updated_at: datetime
+    result_path: Optional[str] = None
+    warnings: Optional[List[str]] = None
+
+
+TASKS: Dict[str, TaskState] = {}
+TASKS_LOCK = asyncio.Lock()
+
+async def _run_report_task(task_id: str, payload: Dict[str, Any], service: ReportService):
+    async with TASKS_LOCK:
+        state = TASKS.get(task_id)
+        if not state:
+            return
+        state.status = "running"
+        state.updated_at = datetime.utcnow()
+    try:
+        report_path, warnings = await service.generate_report(
+            report_type=payload["report_type"],
+            devices=payload["devices"],
+            start_date=payload["start_date"],
+            end_date=payload["end_date"],
+        )
+        async with TASKS_LOCK:
+            state = TASKS[task_id]
+            state.status = "done"
+            state.progress = 100
+            state.result_path = str(report_path)
+            state.warnings = warnings
+            state.updated_at = datetime.utcnow()
+    except Exception as e:
+        logger.error(f"后台任务 {task_id} 失败: {e}", exc_info=True)
+        async with TASKS_LOCK:
+            state = TASKS.get(task_id)
+            if state:
+                state.status = "error"
+                state.message = str(e)
+                state.updated_at = datetime.utcnow()
+
+
 # --- API 模型 ---
 class ReportGenerationRequest(BaseModel):
     report_type: str
@@ -80,16 +128,32 @@ async def get_index_page(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.get("/api/devices", response_model=List[Dict[str, Any]])
-@async_cached(device_list_cache) # 应用异步缓存装饰器
+@app.get("/api/devices")
 async def get_devices_list(
     customer_name: Optional[str] = None,
     device_code: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    response: Response = None,
     repo: DeviceRepository = Depends(get_device_repository),
 ):
     try:
-        logger.info(f"缓存未命中，正在从数据库查询设备列表 (customer: {customer_name}, device: {device_code})")
-        return await repo.get_devices_with_customers(customer_name, device_code)
+        logger.info(
+            f"缓存未命中，正在从数据库查询设备列表 (customer: {customer_name}, device: {device_code}, page: {page}, size: {page_size})"
+        )
+        result = await repo.get_devices_with_customers_paginated(
+            customer_name=customer_name,
+            device_code=device_code,
+            page=page,
+            page_size=page_size,
+        )
+        # 将分页信息放入响应头，响应体维持数组以兼容前端 devices.forEach
+        pagination = result.get("pagination", {})
+        try:
+            response.headers["X-Pagination"] = json.dumps(pagination)
+        except Exception:
+            pass
+        return result.get("data", [])
     except Exception as e:
         logger.error(f"API /api/devices 出错: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="获取设备列表时发生服务器内部错误")
@@ -151,6 +215,72 @@ async def generate_report_endpoint(
         raise HTTPException(status_code=500, detail="生成报表时发生服务器内部错误")
 
 
+# --- 后台任务式报表生成接口 ---
+class TaskCreateRequest(BaseModel):
+    report_type: str
+    devices: List[str]
+    start_date: str
+    end_date: str
+
+
+@app.post("/api/tasks/reports")
+async def create_report_task(request: TaskCreateRequest, service: ReportService = Depends(get_report_service)):
+    # 基本校验（与同步接口一致的规则）
+    try:
+        start_dt = datetime.strptime(request.start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(request.end_date, '%Y-%m-%d')
+        if request.report_type == 'daily_consumption' and end_dt > start_dt + relativedelta(months=2):
+            raise HTTPException(status_code=400, detail="每日消耗误差报表查询日期跨度不能超过两个月。")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="日期格式无效，请使用 YYYY-MM-DD 格式。")
+
+    task_id = uuid.uuid4().hex
+    state = TaskState(
+        task_id=task_id,
+        status="pending",
+        progress=0,
+        message="",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    async with TASKS_LOCK:
+        TASKS[task_id] = state
+
+    payload = request.model_dump()
+    asyncio.create_task(_run_report_task(task_id, payload, service))
+
+    return {"task_id": task_id, "status": state.status}
+
+
+@app.get("/api/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    async with TASKS_LOCK:
+        state = TASKS.get(task_id)
+        if not state:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        data = state.model_dump()
+        # 提供可选下载链接
+        if state.status == "done" and state.result_path:
+            data["download_url"] = f"/api/tasks/{task_id}/download"
+        return data
+
+
+@app.get("/api/tasks/{task_id}/download")
+async def download_task_result(task_id: str):
+    async with TASKS_LOCK:
+        state = TASKS.get(task_id)
+        if not state:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        if state.status != "done" or not state.result_path:
+            raise HTTPException(status_code=400, detail="任务尚未完成或无可下载结果")
+        path = state.result_path
+
+    media_type = 'application/zip' if path.endswith('.zip') else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    cleanup_task = BackgroundTask(os.remove, path)
+    filename = os.path.basename(path)
+    return FileResponse(path=path, media_type=media_type, filename=filename, background=cleanup_task)
+
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "version": app.version}
@@ -161,7 +291,7 @@ def main():
     logger.info("启动Web服务 (开发模式)...")
     uvicorn.run(
         "src.main:app",
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=8000,
         log_level=settings.logging.level.lower(),
         reload=True,
