@@ -95,7 +95,7 @@ def test_daily_report_with_barrel_count(temp_output_dir, mock_db_handler, mocker
     data_manager = ReportDataManager(mock_db_handler)
     # 模拟 fetch_raw_data 方法，使其返回我们准备好的数据
     mocker.patch.object(data_manager, 'fetch_raw_data', return_value=mock_raw_data)
-    error_data = data_manager.calculate_daily_errors(mock_raw_data, barrel_count)
+    error_data = data_manager.calculate_daily_errors(mock_raw_data, test_date.strftime('%Y-%m-%d'), test_date.strftime('%Y-%m-%d'), barrel_count)
 
     # 步骤 B: 使用 consumption_error_handler 生成报表
     report_generator = DailyConsumptionErrorReportGenerator()

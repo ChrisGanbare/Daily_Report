@@ -132,6 +132,8 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
                     writer.writerow(["日期", "原油剩余量(L)", "订单累积总量(L)", "中润亏损(L)", "客户亏损(L)"])
                     
                     # 补全数据并写入
+                    # 优先使用 error_data 中的 daily_end_inventory
+                    daily_end_inventory = error_data.get('daily_end_inventory', {})
                     data_dict = dict(cleaned_inventory_data)
                     daily_order_totals = error_data.get('daily_order_totals', {})
                     daily_shortage_errors = error_data.get('daily_shortage_errors', {})
@@ -139,7 +141,11 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
                     
                     current_date = start_date
                     while current_date <= end_date:
-                        inventory_value = data_dict.get(current_date, 0)
+                        # 优先使用 error_data 中的 daily_end_inventory
+                        if current_date in daily_end_inventory:
+                            inventory_value = daily_end_inventory[current_date]
+                        else:
+                            inventory_value = data_dict.get(current_date, 0)
                         order_total = daily_order_totals.get(current_date, 0)
                         # 处理可能为字典格式的误差数据
                         shortage_data = daily_shortage_errors.get(current_date, 0)
@@ -167,24 +173,31 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
                 return True
 
             # 补全库存数据
-            data_dict = dict(cleaned_inventory_data)
+            # 优先使用 error_data 中的 daily_end_inventory，因为它为所有日期生成了数据
+            # 包括没有订单的日期，这样可以避免"向前泄漏"的问题
+            daily_end_inventory = error_data.get('daily_end_inventory', {})
             complete_inventory_data = []
             current_date = start_date
 
-            # 处理空数据情况，避免索引错误
-            if cleaned_inventory_data:
-                last_inventory = next(iter(cleaned_inventory_data))[1]
-            else:
-                last_inventory = 0
-                print("警告：没有有效的原油剩余量数据可供处理，将生成默认数据图表")
-                # 使用默认数据点，确保能生成图表
-                cleaned_inventory_data = [(start_date, 0), (end_date, 0)]
-                print(f"使用默认数据点: {cleaned_inventory_data}")
-
+            # 创建 data_dict 用于 fallback
+            data_dict = dict(cleaned_inventory_data)
+            
             while current_date <= end_date:
-                current_inventory = data_dict.get(current_date, last_inventory)
+                # 优先使用 error_data 中的 daily_end_inventory
+                if current_date in daily_end_inventory:
+                    current_inventory = daily_end_inventory[current_date]
+                else:
+                    # 如果 error_data 中没有该日期的数据，fallback 到 inventory_data
+                    if current_date in data_dict:
+                        current_inventory = data_dict[current_date]
+                    else:
+                        # 如果都没有，使用上一个日期的值
+                        if complete_inventory_data:
+                            current_inventory = complete_inventory_data[-1][1]
+                        else:
+                            current_inventory = 0
+                
                 complete_inventory_data.append([current_date, current_inventory])
-                last_inventory = current_inventory
                 current_date += timedelta(days=1)
 
             # Excel处理
