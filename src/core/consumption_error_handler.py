@@ -734,11 +734,20 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
                 # D列: 设备桶数 - 使用VLOOKUP自动查找，找不到则默认为1
                 ws.cell(row=row_num, column=4, value=f"=IFERROR(VLOOKUP(B{row_num},'非单桶设备编码'!A:B,2,FALSE),1)")
                 ws.cell(row=row_num, column=5, value=device_data.get('total_order_volume'))
-                ws.cell(row=row_num, column=6, value=device_data.get('total_inventory_consumption'))
+                # F列: 单桶库存消耗（包含期初-期末+原油剩余量增量，单桶值）
+                single_barrel_consumption = device_data.get('total_inventory_consumption_single_barrel', device_data.get('total_inventory_consumption', 0))
+                ws.cell(row=row_num, column=6, value=single_barrel_consumption)
 
                 # --- 写入Excel公式 ---
-                # G列: 库存消耗总量 = D * F
-                ws.cell(row=row_num, column=7, value=f"=D{row_num}*F{row_num}")
+                # G列: 库存消耗总量 = (单桶部分 * 桶数) + 总量部分（订单油加注值，不需要乘以桶数）
+                # 修复：库存消耗总量 = (单桶库存消耗 * 桶数) + 订单油加注值（总量值）
+                total_refill_oil_val = device_data.get('total_refill_oil_val', 0)
+                if total_refill_oil_val:
+                    # 如果有订单油加注值，需要分别处理
+                    ws.cell(row=row_num, column=7, value=f"=D{row_num}*F{row_num}+{total_refill_oil_val}")
+                else:
+                    # 如果没有订单油加注值，按原来的公式
+                    ws.cell(row=row_num, column=7, value=f"=D{row_num}*F{row_num}")
                 # H列: 误差值总数 = G - E
                 ws.cell(row=row_num, column=8, value=f"=G{row_num}-E{row_num}")
                 # I列: 平均每日误差 = H / (查询天数)
