@@ -175,7 +175,8 @@ class ReportDataManager:
                 day_records = sorted(daily_data[current_date], key=lambda x: x['order_time'])
                 end_inventory = day_records[-1]['avai_oil']
                 
-                total_refill_today = 0
+                total_refill_inventory_increase = 0  # 原油剩余量增量部分（液位计，单桶值）
+                total_refill_oil_val = 0  # 订单油加注值部分（流量计，总量值）
                 last_inventory_point = start_inventory
                 for record in day_records:
                     current_inventory_point = record['avai_oil']
@@ -184,10 +185,16 @@ class ReportDataManager:
                         # 因为原油剩余量是在扣除油加注值之后更新的，所以需要加上油加注值
                         inventory_increase = current_inventory_point - last_inventory_point
                         oil_val = record['oil_val']
-                        total_refill_today += (inventory_increase + oil_val)
+                        # 原油剩余量增量是单桶值，需要乘以桶数
+                        total_refill_inventory_increase += inventory_increase
+                        # 订单油加注值是从流量计获取的，已经是总量值，不需要乘以桶数
+                        total_refill_oil_val += oil_val
                     last_inventory_point = current_inventory_point
 
-                inventory_consumption = ((start_inventory - end_inventory) + total_refill_today)
+                # 库存消耗 = (前日库存 - 当日库存) + 入库量
+                # 入库量 = (原油剩余量增量 * 桶数) + (订单油加注值，已经是总量)
+                total_refill_today = (total_refill_inventory_increase * barrel_count) + total_refill_oil_val
+                inventory_consumption = ((start_inventory - end_inventory) * barrel_count + total_refill_today)
                 order_total = sum(item['oil_val'] for item in day_records)
             else:
                 # 没有订单的日期：使用距离起始日期最近的一次原油剩余量
@@ -197,11 +204,12 @@ class ReportDataManager:
                 order_total = 0
 
             result['daily_order_totals'][current_date] = order_total
-            result['daily_consumption'][current_date] = inventory_consumption * barrel_count
+            # 库存消耗已经包含了桶数的计算，不需要再乘以桶数
+            result['daily_consumption'][current_date] = inventory_consumption
             # 原油剩余量是单个油桶的值，不需要除以桶数
             result['daily_end_inventory'][current_date] = end_inventory
 
-            difference = (inventory_consumption * barrel_count) - order_total
+            difference = inventory_consumption - order_total
             if difference > 0:
                 result['daily_shortage_errors'][current_date] = difference
             elif difference < 0:
@@ -272,7 +280,8 @@ class ReportDataManager:
                 month_records = sorted(monthly_data[month_str], key=lambda x: x['order_time'])
                 end_inventory = month_records[-1]['avai_oil']
                 
-                total_refill_this_month = 0
+                total_refill_inventory_increase = 0  # 原油剩余量增量部分（液位计，单桶值）
+                total_refill_oil_val = 0  # 订单油加注值部分（流量计，总量值）
                 last_inventory_point = start_inventory
                 for record in month_records:
                     current_inventory_point = record['avai_oil']
@@ -281,21 +290,27 @@ class ReportDataManager:
                         # 因为原油剩余量是在扣除油加注值之后更新的，所以需要加上油加注值
                         inventory_increase = current_inventory_point - last_inventory_point
                         oil_val = record['oil_val']
-                        total_refill_this_month += (inventory_increase + oil_val)
+                        # 原油剩余量增量是单桶值，需要乘以桶数
+                        total_refill_inventory_increase += inventory_increase
+                        # 订单油加注值是从流量计获取的，已经是总量值，不需要乘以桶数
+                        total_refill_oil_val += oil_val
                     last_inventory_point = current_inventory_point
 
-                inventory_consumption = ((start_inventory - end_inventory) + total_refill_this_month)
+                # 库存消耗 = (前月库存 - 当月库存) + 入库量
+                # 入库量 = (原油剩余量增量 * 桶数) + (订单油加注值，已经是总量)
+                total_refill_this_month = (total_refill_inventory_increase * barrel_count) + total_refill_oil_val
+                inventory_consumption = ((start_inventory - end_inventory) * barrel_count + total_refill_this_month)
                 order_total = sum(item['oil_val'] for item in month_records)
             else:
                 end_inventory = start_inventory
                 inventory_consumption = 0
                 order_total = 0
 
-            consumption_with_barrel = inventory_consumption * barrel_count
+            # 库存消耗已经包含了桶数的计算，不需要再乘以桶数
             result['monthly_order_totals'][month_str] = order_total
-            result['monthly_consumption'][month_str] = {'value': consumption_with_barrel}
+            result['monthly_consumption'][month_str] = {'value': inventory_consumption}
             
-            difference = consumption_with_barrel - order_total
+            difference = inventory_consumption - order_total
             if difference > 0:
                 result['monthly_shortage_errors'][month_str] = {'value': difference}
             elif difference < 0:
