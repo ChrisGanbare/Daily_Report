@@ -180,7 +180,11 @@ class ReportDataManager:
                 for record in day_records:
                     current_inventory_point = record['avai_oil']
                     if current_inventory_point > last_inventory_point:
-                        total_refill_today += (current_inventory_point - last_inventory_point)
+                        # 真实的入库量 = (原油剩余量增量) + (该订单的油加注值)
+                        # 因为原油剩余量是在扣除油加注值之后更新的，所以需要加上油加注值
+                        inventory_increase = current_inventory_point - last_inventory_point
+                        oil_val = record['oil_val']
+                        total_refill_today += (inventory_increase + oil_val)
                     last_inventory_point = current_inventory_point
 
                 inventory_consumption = ((start_inventory - end_inventory) + total_refill_today)
@@ -273,7 +277,11 @@ class ReportDataManager:
                 for record in month_records:
                     current_inventory_point = record['avai_oil']
                     if current_inventory_point > last_inventory_point:
-                        total_refill_this_month += (current_inventory_point - last_inventory_point)
+                        # 真实的入库量 = (原油剩余量增量) + (该订单的油加注值)
+                        # 因为原油剩余量是在扣除油加注值之后更新的，所以需要加上油加注值
+                        inventory_increase = current_inventory_point - last_inventory_point
+                        oil_val = record['oil_val']
+                        total_refill_this_month += (inventory_increase + oil_val)
                     last_inventory_point = current_inventory_point
 
                 inventory_consumption = ((start_inventory - end_inventory) + total_refill_this_month)
