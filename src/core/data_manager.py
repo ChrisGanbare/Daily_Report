@@ -176,26 +176,34 @@ class ReportDataManager:
                 end_inventory = day_records[-1]['avai_oil']
                 
                 total_refill_inventory_increase = 0  # 原油剩余量增量部分（液位计，单桶值）
-                total_refill_oil_val = 0  # 订单油加注值部分（流量计，总量值）
+                total_refill_oil_val = 0  # 订单油加注值部分（流量计，总量值）- 仅入库订单
+                order_total = 0  # 订单消耗总量（理论消耗）- 仅消耗订单的oil_val
                 last_inventory_point = start_inventory
                 for record in day_records:
                     current_inventory_point = record['avai_oil']
+                    oil_val = record['oil_val']
+                    
                     if current_inventory_point > last_inventory_point:
+                        # 入库订单：液位上升，表示有原油入库
                         # 真实的入库量 = (原油剩余量增量) + (该订单的油加注值)
                         # 因为原油剩余量是在扣除油加注值之后更新的，所以需要加上油加注值
                         inventory_increase = current_inventory_point - last_inventory_point
-                        oil_val = record['oil_val']
                         # 原油剩余量增量是单桶值，需要乘以桶数
                         total_refill_inventory_increase += inventory_increase
                         # 订单油加注值是从流量计获取的，已经是总量值，不需要乘以桶数
+                        # 入库订单的oil_val计入入库量，但不计入订单消耗总量（理论消耗）
                         total_refill_oil_val += oil_val
+                    else:
+                        # 消耗订单：液位下降或不变，表示有原油消耗
+                        # 消耗订单的oil_val计入订单消耗总量（理论消耗）
+                        order_total += oil_val
+                    
                     last_inventory_point = current_inventory_point
 
                 # 库存消耗 = (前日库存 - 当日库存) + 入库量
                 # 入库量 = (原油剩余量增量 * 桶数) + (订单油加注值，已经是总量)
                 total_refill_today = (total_refill_inventory_increase * barrel_count) + total_refill_oil_val
                 inventory_consumption = ((start_inventory - end_inventory) * barrel_count + total_refill_today)
-                order_total = sum(item['oil_val'] for item in day_records)
             else:
                 # 没有订单的日期：使用距离起始日期最近的一次原油剩余量
                 # 根据用户需求，应该使用起始日期之前最近的一次原油剩余量
@@ -281,26 +289,34 @@ class ReportDataManager:
                 end_inventory = month_records[-1]['avai_oil']
                 
                 total_refill_inventory_increase = 0  # 原油剩余量增量部分（液位计，单桶值）
-                total_refill_oil_val = 0  # 订单油加注值部分（流量计，总量值）
+                total_refill_oil_val = 0  # 订单油加注值部分（流量计，总量值）- 仅入库订单
+                order_total = 0  # 订单消耗总量（理论消耗）- 仅消耗订单的oil_val
                 last_inventory_point = start_inventory
                 for record in month_records:
                     current_inventory_point = record['avai_oil']
+                    oil_val = record['oil_val']
+                    
                     if current_inventory_point > last_inventory_point:
+                        # 入库订单：液位上升，表示有原油入库
                         # 真实的入库量 = (原油剩余量增量) + (该订单的油加注值)
                         # 因为原油剩余量是在扣除油加注值之后更新的，所以需要加上油加注值
                         inventory_increase = current_inventory_point - last_inventory_point
-                        oil_val = record['oil_val']
                         # 原油剩余量增量是单桶值，需要乘以桶数
                         total_refill_inventory_increase += inventory_increase
                         # 订单油加注值是从流量计获取的，已经是总量值，不需要乘以桶数
+                        # 入库订单的oil_val计入入库量，但不计入订单消耗总量（理论消耗）
                         total_refill_oil_val += oil_val
+                    else:
+                        # 消耗订单：液位下降或不变，表示有原油消耗
+                        # 消耗订单的oil_val计入订单消耗总量（理论消耗）
+                        order_total += oil_val
+                    
                     last_inventory_point = current_inventory_point
 
                 # 库存消耗 = (前月库存 - 当月库存) + 入库量
                 # 入库量 = (原油剩余量增量 * 桶数) + (订单油加注值，已经是总量)
                 total_refill_this_month = (total_refill_inventory_increase * barrel_count) + total_refill_oil_val
                 inventory_consumption = ((start_inventory - end_inventory) * barrel_count + total_refill_this_month)
-                order_total = sum(item['oil_val'] for item in month_records)
             else:
                 end_inventory = start_inventory
                 inventory_consumption = 0
