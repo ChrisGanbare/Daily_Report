@@ -739,15 +739,8 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
                 ws.cell(row=row_num, column=6, value=single_barrel_consumption)
 
                 # --- 写入Excel公式 ---
-                # G列: 库存消耗总量 = (单桶部分 * 桶数) + 总量部分（订单油加注值，不需要乘以桶数）
-                # 修复：库存消耗总量 = (单桶库存消耗 * 桶数) + 订单油加注值（总量值）
-                total_refill_oil_val = device_data.get('total_refill_oil_val', 0)
-                if total_refill_oil_val:
-                    # 如果有订单油加注值，需要分别处理
-                    ws.cell(row=row_num, column=7, value=f"=D{row_num}*F{row_num}+{total_refill_oil_val}")
-                else:
-                    # 如果没有订单油加注值，按原来的公式
-                    ws.cell(row=row_num, column=7, value=f"=D{row_num}*F{row_num}")
+                # G列: 库存消耗总量 = 单桶库存消耗 * 桶数（业务逻辑3：不包含入库订单的oil_val）
+                ws.cell(row=row_num, column=7, value=f"=D{row_num}*F{row_num}")
                 # H列: 误差值总数 = G - E
                 ws.cell(row=row_num, column=8, value=f"=G{row_num}-E{row_num}")
                 # I列: 平均每日误差 = H / (查询天数)
