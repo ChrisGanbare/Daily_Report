@@ -125,7 +125,8 @@ def generate_error_summary_report(log_prefix="误差汇总处理日志", query_c
         if not error_summary_main_query_template or not error_summary_offline_query_template:
             raise Exception("配置文件中缺少 'error_summary_main_query' 或 'error_summary_offline_query' SQL模板。")
 
-        date_range = get_date_range()
+        # 误差汇总报表日期跨度限制：最大31天
+        date_range = get_date_range(max_days=31)
         if not date_range:
             print("未选择日期范围，程序退出。")
             return

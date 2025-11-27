@@ -99,6 +99,7 @@ coverage_html_report/
 # Test results
 test-reports/
 junit-*.xml
+allure-results/
 
 # Pytest cache
 pytest_cache/
