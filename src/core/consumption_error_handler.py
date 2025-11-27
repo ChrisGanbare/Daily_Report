@@ -751,11 +751,28 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
                 ws.cell(row=row_num, column=10, value=f'=IF(E{row_num}=0, 0, H{row_num}/E{row_num})')
                 ws.cell(row=row_num, column=10).number_format = '0.00%' # 设置为百分比格式
 
+                # --- 数据验证和备注生成 ---
+                remarks = []
+                
+                # 检查数据计算问题
+                total_order_volume = device_data.get('total_order_volume')
+                consumption = device_data.get('total_inventory_consumption_single_barrel', 0)
+                
+                if total_order_volume is None:
+                    remarks.append("⚠️ 订单总量为NULL，可能该设备在指定日期范围内没有订单数据")
+                elif total_order_volume == 0:
+                    remarks.append("⚠️ 订单总量为0，该设备在指定日期范围内没有消耗订单")
+                
+                if consumption is None:
+                    remarks.append("⚠️ 库存消耗计算为NULL，期初/期末库存数据可能异常")
+                elif abs(consumption) > 100000:  # 异常大的值
+                    remarks.append(f"⚠️ 库存消耗值异常大({consumption:.2f}L)，请检查期初/期末库存数据")
+                
                 # --- 处理离线时长和备注 ---
                 # from datetime import datetime # 已在文件顶部引入，此处不再重复
                 offline_events = device_data.get('offline_events', [])
                 total_offline_hours = 0
-                remarks = []
+                # 注意：remarks已在上面初始化用于数据验证，这里继续追加离线事件备注，不再重新定义
 
                 # 将日期字符串转换为datetime对象
                 start_date_dt = datetime.strptime(start_date, '%Y-%m-%d')
