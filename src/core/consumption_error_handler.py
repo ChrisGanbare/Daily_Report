@@ -694,7 +694,31 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
             # --- 调整：先写入所有行内容，再设置格式 ---
             # 1. 准备所有行内容
             title_text = f"安卓设备消耗误差汇总报表 ({start_date} - {end_date})"
-            hint_text_1 = "1. 提示：D列【设备桶数】默认为1。如需更新，请在【非单桶设备编码】Sheet中填写设备编码和对应的桶数，此处的桶数将自动更新。"
+            hint_text_1_base = "1. 提示：D列【设备桶数】已从配置文件自动读取，未配置的设备默认桶数为1；若设备数据变动，需同步维护test_data/device_config.csv配置文件，保持一次维护、多次复用的准确性；"
+            
+            # 添加配置信息到第一行提示文本末尾
+            config_info_text = ""
+            try:
+                from src.core.device_config_manager import DeviceConfigManager
+                config_manager = DeviceConfigManager()
+                config_info = config_manager.get_config_info()
+                
+                if config_info['file_exists']:
+                    config_path = config_info['config_file_abspath']
+                    maintenance_time = config_info.get('last_maintenance_time', '未知')
+                    maintenance_type = config_info.get('last_maintenance_type', '')
+                    
+                    # 合并到第一行，使用多个空格分隔，保持视觉美观
+                    config_info_text = f"配置文件位置: {config_path}   最近维护时间: {maintenance_time}；"
+                    if maintenance_type:
+                        config_info_text += f" ({maintenance_type})"
+            except Exception:
+                # 如果获取配置信息失败，忽略错误
+                pass
+            
+            # 将配置信息合并到第一行提示文本
+            hint_text_1 = hint_text_1_base + config_info_text
+            
             explanation_text = "2. 误差百分比解读：正数(%)表示`库存消耗 > 订单总量`，可能为公司亏损；负数(%)表示`库存消耗 < 订单总量`，可能为客户亏损。"
             hint_text = f"{hint_text_1}\n{explanation_text}"
 
@@ -714,6 +738,7 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
             hint_cell = ws.cell(row=2, column=1)
             hint_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
             hint_cell.font = hint_font
+            # 恢复默认行高（添加配置信息之前的高度）
             ws.row_dimensions[2].height = 30
 
             # 5. 设置表头行格式
@@ -731,8 +756,9 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
                 seq_cell.alignment = Alignment(horizontal="center", vertical="center")
                 ws.cell(row=row_num, column=2, value=device_data.get('device_code'))
                 ws.cell(row=row_num, column=3, value=device_data.get('customer_name'))
-                # D列: 设备桶数 - 使用VLOOKUP自动查找，找不到则默认为1
-                ws.cell(row=row_num, column=4, value=f"=IFERROR(VLOOKUP(B{row_num},'非单桶设备编码'!A:B,2,FALSE),1)")
+                # D列: 设备桶数 - 从summary_data中直接读取（已从配置文件加载）
+                barrel_count = device_data.get('barrel_count', 1)
+                ws.cell(row=row_num, column=4, value=barrel_count)
                 ws.cell(row=row_num, column=5, value=device_data.get('total_order_volume'))
                 # F列: 单桶库存消耗（包含期初-期末+原油剩余量增量，单桶值）
                 single_barrel_consumption = device_data.get('total_inventory_consumption_single_barrel', device_data.get('total_inventory_consumption', 0))
@@ -765,7 +791,7 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
                 
                 if consumption is None:
                     remarks.append("⚠️ 库存消耗计算为NULL，期初/期末库存数据可能异常")
-                elif abs(consumption) > 100000:  # 异常大的值
+                elif abs(consumption) > 1000:  # 异常大的值
                     remarks.append(f"⚠️ 库存消耗值异常大({consumption:.2f}L)，请检查期初/期末库存数据")
                 
                 # --- 处理离线时长和备注 ---
@@ -861,34 +887,46 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
             # 设置筛选范围，从表头行开始，到数据最后一行结束
             ws.auto_filter.ref = f"A3:L{ws.max_row}"
 
-            # --- 创建并设置 "非单桶设备编码" Sheet ---
+            # --- 创建并设置 "非单桶设备编码" Sheet（保留作为参考） ---
             ws_update = wb.create_sheet("非单桶设备编码")
             
             # 设置标题和提示
-            ws_update.append(["非单桶设备编码及桶数更新"])
+            ws_update.append(["非单桶设备编码及桶数参考表"])
             ws_update.merge_cells('A1:C1')
             ws_update['A1'].font = title_font
             ws_update['A1'].alignment = Alignment(horizontal="center")
 
-            ws_update.append(["操作步骤：请在此表格的A列和B列粘贴或填写需要更新桶数的【设备编码】和【桶数】。C列备注会自动检查设备编码是否存在于主表中。"])
-            ws_update.merge_cells('A2:D2')
+            ws_update.append(["注意：\n 1.此Sheet仅作为概览，显示报表中已从配置文件自动读取的设备编码和桶数（仅显示桶数>1的设备）。\n 2.若设备数据变动，需同步维护test_data/device_config.csv配置文件，保持一次维护、多次复用的准确性。"])
+            ws_update.merge_cells('A2:C2')
             ws_update['A2'].font = hint_font
-            ws_update['A2'].alignment = Alignment(horizontal="center")
+            ws_update['A2'].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            ws_update.row_dimensions[2].height = 50  # 设置行高以确保文本完整显示，支持换行
 
             # 设置表头
+            header_row = 3
             update_headers = ["设备编码", "桶数", "备注"]
             ws_update.append(update_headers)
-            for cell in ws_update[3]:
+            # 设置表头格式
+            for col_idx, header in enumerate(update_headers, start=1):
+                cell = ws_update.cell(row=header_row, column=col_idx)
                 cell.font = header_font
                 cell.fill = header_fill
                 cell.border = thin_border
 
-            # 预设备注列的公式
-            for i in range(4, 500): # 预设约500行公式
-                remark_formula = f'=IF(A{i}<>"", IF(COUNTIF(设备误差汇总!B:B, A{i})>0, "匹配设备正确，桶数已替换", "未匹配到此设备"), "")'
-                ws_update.cell(row=i, column=3, value=remark_formula)
+            # 从summary_data中提取设备编码和桶数，只写入桶数>1的设备
+            reference_row = header_row + 1
+            for device_data in summary_data:
+                device_code = device_data.get('device_code')
+                barrel_count = device_data.get('barrel_count', 1)
+                # 只显示桶数>1的设备
+                if device_code and barrel_count > 1:
+                    ws_update.cell(row=reference_row, column=1, value=device_code)
+                    ws_update.cell(row=reference_row, column=2, value=barrel_count)
+                    ws_update.cell(row=reference_row, column=3, value="已配置非默认桶数")
+                    reference_row += 1
 
-            ws_update.column_dimensions['A'].width = 25
+            # 增加列宽度，确保提示文本能够完整显示
+            ws_update.column_dimensions['A'].width = 50  # 增加A列宽度以显示完整提示文本
             ws_update.column_dimensions['B'].width = 12
             ws_update.column_dimensions['C'].width = 35
 

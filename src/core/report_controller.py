@@ -256,6 +256,27 @@ def generate_error_summary_report(log_prefix="误差汇总处理日志", query_c
         # 执行离线事件查询
         cursor.execute(offline_query, (f"{end_date_str} 23:59:59", f"{start_date_str} 00:00:00"))
         offline_events = cursor.fetchall()
+        
+        # 读取设备桶数配置
+        print("\n正在读取设备桶数配置...")
+        from src.core.device_config_manager import DeviceConfigManager
+        config_manager = DeviceConfigManager()
+        
+        # 显示配置信息
+        config_manager.show_config_info()
+        
+        # 从summary_data中提取设备编码列表
+        device_codes = [item.get('device_code') for item in summary_data if item.get('device_code')]
+        
+        # 读取桶数配置并创建映射
+        barrel_count_map = {}
+        for device_code in device_codes:
+            barrel_count_map[device_code] = config_manager.get_barrel_count(device_code)
+        
+        if barrel_count_map:
+            configured_count = sum(1 for count in barrel_count_map.values() if count > 1)
+            print(f"已读取 {len(barrel_count_map)} 个设备的桶数配置，其中 {configured_count} 个设备配置了非默认桶数")
+        
         cursor.close()
 
         offline_data_map = defaultdict(list)
@@ -268,11 +289,14 @@ def generate_error_summary_report(log_prefix="误差汇总处理日志", query_c
 
         days_in_range = (datetime.datetime.strptime(end_date_str, '%Y-%m-%d').date() - datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()).days + 1
         
-        # 数据验证和标记
+        # 数据验证和标记，同时添加桶数信息
         data_issues = []
         for item in summary_data:
             item['days_in_range'] = days_in_range
             item['offline_events'] = offline_data_map.get(item.get('device_code'), [])
+            # 添加桶数信息
+            device_code = item.get('device_code')
+            item['barrel_count'] = barrel_count_map.get(device_code, 1)
             
             # 检查数据计算问题
             device_code = item.get('device_code', 'N/A')
@@ -383,6 +407,11 @@ def generate_daily_consumption_error_reports(log_prefix="每日消耗误差处�
         if not valid_devices:
             print("没有有效的设备信息。")
             return
+        
+        # 合并设备配置：从test_data/device_config.csv自动获取设备编码对应的油桶桶数
+        from src.core.device_config_manager import DeviceConfigManager
+        config_manager = DeviceConfigManager()
+        valid_devices = file_handler.merge_device_config(valid_devices, config_manager)
         
         db_handler = DatabaseHandler(db_config)
         connection = db_handler.connect()
@@ -499,18 +528,6 @@ def generate_refueling_details(log_prefix="加注明细处理日志", devices_da
     from src.core.file_handler import FileHandler
     from src.core.data_manager import ReportDataManager
     from src.core.refueling_details_handler import RefuelingDetailsReportGenerator
-    from src.utils.date_utils import validate_csv_data
-    from src.ui.filedialog_selector import file_dialog_selector
-    # ... (Implementation with local imports)
-    pass
-
-def generate_both_reports(log_prefix="综合处理日志", query_config=None):
-    # --- 本地导入 ---
-    from src.core.db_handler import DatabaseHandler
-    from src.core.file_handler import FileHandler
-    from src.core.data_manager import ReportDataManager, CustomerGroupingUtil
-    from src.core.inventory_handler import InventoryReportGenerator
-    from src.core.statement_handler import CustomerStatementGenerator
     from src.utils.date_utils import validate_csv_data
     from src.ui.filedialog_selector import file_dialog_selector
     # ... (Implementation with local imports)
