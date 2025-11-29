@@ -1,4 +1,3 @@
-import csv
 import os
 from datetime import timedelta, datetime # 引入 datetime 类
 from collections import defaultdict
@@ -90,7 +89,7 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
             oil_name (str): 油品名称
             chart_style (dict): 图表样式配置
             barrel_count (int): 油桶数量
-            export_format (str): 导出格式，支持xlsx和csv
+            export_format (str): 导出格式，支持xlsx
         """
         try:
             # 确保输出文件路径不重复，如果重复则添加序号
@@ -121,56 +120,6 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
 
             # 初始化工作簿
             wb = Workbook()
-
-            # 处理不同导出格式
-            if export_format.lower() == "csv":
-                with open(
-                    output_file_path.replace(".xlsx", ".csv"), "w", newline=""
-                ) as f:
-                    writer = csv.writer(f)
-                    # 写入标题行
-                    writer.writerow(["日期", "原油剩余量(L)", "订单累积总量(L)", "中润亏损(L)", "客户亏损(L)"])
-                    
-                    # 补全数据并写入
-                    # 优先使用 error_data 中的 daily_end_inventory
-                    daily_end_inventory = error_data.get('daily_end_inventory', {})
-                    data_dict = dict(cleaned_inventory_data)
-                    daily_order_totals = error_data.get('daily_order_totals', {})
-                    daily_shortage_errors = error_data.get('daily_shortage_errors', {})
-                    daily_excess_errors = error_data.get('daily_excess_errors', {})
-                    
-                    current_date = start_date
-                    while current_date <= end_date:
-                        # 优先使用 error_data 中的 daily_end_inventory
-                        if current_date in daily_end_inventory:
-                            inventory_value = daily_end_inventory[current_date]
-                        else:
-                            inventory_value = data_dict.get(current_date, 0)
-                        order_total = daily_order_totals.get(current_date, 0)
-                        # 处理可能为字典格式的误差数据
-                        shortage_data = daily_shortage_errors.get(current_date, 0)
-                        excess_data = daily_excess_errors.get(current_date, 0)
-                        
-                        # 如果是字典格式，提取value字段
-                        if isinstance(shortage_data, dict):
-                            shortage_error = shortage_data.get('value', 0)
-                        else:
-                            shortage_error = shortage_data
-                            
-                        if isinstance(excess_data, dict):
-                            excess_error = excess_data.get('value', 0)
-                        else:
-                            excess_error = excess_data
-                        
-                        writer.writerow([current_date, inventory_value, order_total, shortage_error, excess_error])
-                        current_date += timedelta(days=1)
-                        
-                print(
-                    f"数据已导出为CSV格式：{output_file_path.replace('.xlsx', '.csv')}"
-                )
-                # 立即关闭工作簿
-                wb.close()
-                return True
 
             # 补全库存数据
             # 优先使用 error_data 中的 daily_end_inventory，因为它为所有日期生成了数据
@@ -213,7 +162,42 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
             ws.cell(row=1, column=1).alignment = Alignment(horizontal="center", wrap_text=True)
             ws.cell(row=1, column=1).font = Font(size=14, bold=True)
 
-            # 添加数据列标题
+            # 添加配置信息提示行
+            hint_text_base = "提示：【设备桶数】已从配置文件自动读取，未配置的设备默认桶数为1；若设备数据变动，需同步维护test_data/device_config.csv配置文件，保持一次维护、多次复用的准确性；"
+            
+            # 获取配置信息
+            config_info_text = ""
+            try:
+                from src.core.device_config_manager import DeviceConfigManager
+                config_manager = DeviceConfigManager()
+                config_info = config_manager.get_config_info()
+                
+                if config_info['file_exists']:
+                    config_path = config_info['config_file_abspath']
+                    maintenance_time = config_info.get('last_maintenance_time', '未知')
+                    maintenance_type = config_info.get('last_maintenance_type', '')
+                    
+                    config_info_text = f"配置文件位置: {config_path}   最近维护时间: {maintenance_time}"
+                    if maintenance_type:
+                        config_info_text += f" ({maintenance_type})"
+            except Exception:
+                # 如果获取配置信息失败，忽略错误
+                pass
+            
+            # 组合提示文本，如果有配置信息则在单元格内换行显示
+            if config_info_text:
+                hint_text = hint_text_base + "\n" + config_info_text
+            else:
+                hint_text = hint_text_base
+            ws.append([hint_text])
+            ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=20)
+            hint_cell = ws.cell(row=2, column=1)
+            hint_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            hint_cell.font = Font(size=9, color="FF4500", bold=True, italic=False)
+            # 设置行高为两行提示文本的紧凑高度（固定值，减少上下空白）
+            ws.row_dimensions[2].height = 35
+
+            # 添加数据列标题（现在在第3行）
             ws.append(["日期", "原油剩余量(L)", "订单累积总量(L)", "库存消耗总量(L)","中润亏损(L)", "客户亏损(L)"])
 
             # 准备误差数据
@@ -273,9 +257,9 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
             chart.x_axis.tickLblPos = "low"  # 将标签位置调整到底部
             chart.x_axis.textRotation = 0  # 将文本旋转角度设为0度（水平显示）
 
-            # 设置数据范围
-            dates = Reference(ws, min_col=1, min_row=3, max_row=len(complete_inventory_data) + 2)
-            data_range = Reference(ws, min_col=2, min_row=2, max_col=4, max_row=len(complete_inventory_data) + 2)
+            # 设置数据范围（数据列标题在第3行，数据从第4行开始）
+            dates = Reference(ws, min_col=1, min_row=4, max_row=len(complete_inventory_data) + 3)
+            data_range = Reference(ws, min_col=2, min_row=3, max_col=4, max_row=len(complete_inventory_data) + 3)
 
             # 添加数据到图表
             chart.add_data(data_range, titles_from_data=True)
@@ -338,7 +322,7 @@ class DailyConsumptionErrorReportGenerator(BaseReportGenerator):
         # 将保存和关闭操作移到主try块之外，以确保文件句柄被正确释放
         try:
             wb.save(output_file_path)
-            print(f"  每日消耗误差图表已生成并保存为{export_format.upper()}格式")
+            print(f"  每日消耗误差图表已生成并保存为XLSX格式")
             return True
         except PermissionError:
             print(f"错误：无法保存文件 '{output_file_path}'，可能是文件正在被其他程序占用。")
@@ -440,11 +424,27 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             oil_name (str): 油品名称
             chart_style (dict): 图表样式配置
             barrel_count (int): 油桶数量
-            export_format (str): 导出格式，支持xlsx和csv
+            export_format (str): 导出格式，支持xlsx
         """
         try:
             # 确保输出文件路径不重复，如果重复则添加序号
             output_file_path = self._get_unique_filename(output_file_path)
+            
+            # 验证并清理库存数据
+            cleaned_inventory_data = []
+            invalid_records = []
+            for date, value in inventory_data:
+                try:
+                    validated_value = self._validate_inventory_value(value)
+                    cleaned_inventory_data.append((date, validated_value))
+                except ValueError as e:
+                    invalid_records.append((date, value, str(e)))
+                    print(f"警告：日期 {date} 的数据已跳过 - {str(e)}")
+
+            if invalid_records:
+                print("\n无效数据汇总：")
+                for date, value, reason in invalid_records:
+                    print(f"- {date}: {value} ({reason})")
 
             # 准备月度数据
             complete_inventory_data = []
@@ -455,6 +455,7 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             monthly_shortage_errors = error_data.get('monthly_shortage_errors', {})
             monthly_excess_errors = error_data.get('monthly_excess_errors', {})
             monthly_consumption = error_data.get('monthly_consumption', {})
+            monthly_end_inventory = error_data.get('monthly_end_inventory', {})
             
             # 获取所有唯一的月份标签并排序
             all_months = set()
@@ -462,6 +463,7 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             all_months.update(monthly_shortage_errors.keys())
             all_months.update(monthly_excess_errors.keys())
             all_months.update(monthly_consumption.keys())
+            all_months.update(monthly_end_inventory.keys())
             
             # 排序月份
             sorted_months = sorted(list(all_months))
@@ -488,7 +490,42 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             ws.cell(row=1, column=1).alignment = Alignment(horizontal="center", wrap_text=True)  # 修复换行参数
             ws.cell(row=1, column=1).font = Font(size=14, bold=True)
 
-            # 添加数据列标题
+            # 添加配置信息提示行
+            hint_text_base = "提示：【设备桶数】已从配置文件自动读取，未配置的设备默认桶数为1；若设备数据变动，需同步维护test_data/device_config.csv配置文件，保持一次维护、多次复用的准确性；"
+            
+            # 获取配置信息
+            config_info_text = ""
+            try:
+                from src.core.device_config_manager import DeviceConfigManager
+                config_manager = DeviceConfigManager()
+                config_info = config_manager.get_config_info()
+                
+                if config_info['file_exists']:
+                    config_path = config_info['config_file_abspath']
+                    maintenance_time = config_info.get('last_maintenance_time', '未知')
+                    maintenance_type = config_info.get('last_maintenance_type', '')
+                    
+                    config_info_text = f"配置文件位置: {config_path}   最近维护时间: {maintenance_time}"
+                    if maintenance_type:
+                        config_info_text += f" ({maintenance_type})"
+            except Exception:
+                # 如果获取配置信息失败，忽略错误
+                pass
+            
+            # 组合提示文本，如果有配置信息则在单元格内换行显示
+            if config_info_text:
+                hint_text = hint_text_base + "\n" + config_info_text
+            else:
+                hint_text = hint_text_base
+            ws.append([hint_text])
+            ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=20)
+            hint_cell = ws.cell(row=2, column=1)
+            hint_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            hint_cell.font = Font(size=9, color="FF4500", bold=True, italic=False)
+            # 设置行高为两行提示文本的紧凑高度（固定值，减少上下空白）
+            ws.row_dimensions[2].height = 35
+
+            # 添加数据列标题（现在在第3行）
             ws.append(["月份", "订单累积总量(L)", "库存消耗总量(L)","中润亏损(L)", "客户亏损(L)"])
 
             # 写入补全后的数据
@@ -542,25 +579,24 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             chart.x_axis.tickLblPos = "low"  # 将标签位置调整到底部
             chart.x_axis.textRotation = 0  # 将文本旋转角度设为0度（水平显示）
 
-            # 设置数据范围（现在只有4列数据）
-            # 调整数据范围，只包含“订单累积总量”和“库存消耗总量”两列
-            data_range = Reference(ws, min_col=2, min_row=2, max_col=3, max_row=len(complete_inventory_data) + 2
-            )
-            months = Reference(ws, min_col=1, min_row=3, max_row=len(complete_inventory_data) + 2)
+            # 设置数据范围（数据列标题在第3行，数据从第4行开始）
+            # 包含"订单累积总量"和"库存消耗总量"两列
+            data_range = Reference(ws, min_col=2, min_row=3, max_col=3, max_row=len(complete_inventory_data) + 3)
+            months = Reference(ws, min_col=1, min_row=4, max_row=len(complete_inventory_data) + 3)
 
             # 添加数据到图表
             chart.add_data(data_range, titles_from_data=True)
             chart.set_categories(months)
 
             # 为不同数据系列设置不同的颜色
-            # 订单累积总量 - 淡绿色（与库存报表保持一致）
+            # 订单累积总量 - 绿色
             chart.series[0].graphicalProperties = GraphicalProperties()
-            chart.series[0].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="90EE90") # 设置线条属性
+            chart.series[0].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="00FF00")
             chart.series[0].marker = Marker(symbol="circle", size=8)
             
             # 库存消耗总量 - 紫色
             chart.series[1].graphicalProperties = GraphicalProperties()
-            chart.series[1].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="800080") # 设置线条属性
+            chart.series[1].graphicalProperties.line = LineProperties(w=2.5 * 12700, solidFill="800080")
             chart.series[1].marker = Marker(symbol="circle", size=8)
 
             # 恢复图表到初始大小
@@ -570,35 +606,29 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             # 添加图表到工作表，从F5开始绘制
             ws.add_chart(chart, "F5")
             
-            # 在图表下方添加注释说明
-            # 计算注释的起始行（数据行数 + 标题行 + 适当间隔）
-            data_end_row = len(complete_inventory_data) + 2  # 数据结束行
-            annotation_row = data_end_row + 3  # 在数据下方留出一些空间
+            # 在H34单元格开始添加计算规则说明，确保位于图表下方
+            annotation_row = 34
+            annotation_col = 8  # H列
             
-            # 添加图例说明标题
-            ws.cell(row=annotation_row, column=1).value = "图例说明："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True)
+            # 添加标题
+            ws.cell(row=annotation_row, column=annotation_col).value = "计算规则说明："
+            ws.cell(row=annotation_row, column=annotation_col).font = Font(bold=True)
             
-            # 添加中润亏损定义
+            # 将每个计算规则分别写入单独的行，并合并单元格以确保完整显示
             annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "中润亏损(L)："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "当月库存消耗总量超过当月订单累积总量的部分"
-            
-            # 添加客户亏损定义
-            annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "客户亏损(L)："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True)
-            ws.cell(row=annotation_row, column=2).value = "当月订单累积总量超过当月库存消耗总量的部分"
-            
-            # 添加库存消耗总量定义
-            annotation_row += 1
-            ws.cell(row=annotation_row, column=1).value = "库存消耗总量(L)："
-            ws.cell(row=annotation_row, column=1).font = Font(bold=True, color="800080")
-            consumption_formula = "基于原油剩余量变化计算出的真实消耗量"
+            consumption_formula = "库存消耗总量(L) = (前月库存 - 当月库存 + 当月加油（入库）量)"
             if barrel_count > 1:
-                consumption_formula += f" (已乘以桶数 {barrel_count})"
-            ws.cell(row=annotation_row, column=2).value = consumption_formula
+                consumption_formula += f" * {barrel_count} (桶数)"
+            ws.cell(row=annotation_row, column=annotation_col).value = consumption_formula
+            ws.merge_cells(start_row=annotation_row, start_column=annotation_col, end_row=annotation_row, end_column=annotation_col + 7)  # 合并8个单元格
+            
+            annotation_row += 1
+            ws.cell(row=annotation_row, column=annotation_col).value = "中润亏损(L) = MAX(0, 库存消耗总量 - 订单累积总量)"
+            ws.merge_cells(start_row=annotation_row, start_column=annotation_col, end_row=annotation_row, end_column=annotation_col + 7)
+            
+            annotation_row += 1
+            ws.cell(row=annotation_row, column=annotation_col).value = "客户亏损(L) = MAX(0, 订单累积总量 - 库存消耗总量)"
+            ws.merge_cells(start_row=annotation_row, start_column=annotation_col, end_row=annotation_row, end_column=annotation_col + 7)
 
         except Exception as e:
             print("发生错误：")
@@ -607,18 +637,26 @@ class MonthlyConsumptionErrorReportGenerator(BaseReportGenerator):
             traceback.print_exc()
             raise
 
-        # 将保存和关闭操作移到主try块之外
+        # 将保存和关闭操作移到主try块之外，确保文件句柄被正确释放
         try:
             wb.save(output_file_path)
-            print(f"  每月消耗误差图表已生成并保存为{export_format.upper()}格式")
-            return True
+            print(f"  每月消耗误差图表已生成并保存为XLSX格式")
         except PermissionError:
             print(f"错误：无法保存文件 '{output_file_path}'，可能是文件正在被其他程序占用。")
             print("请关闭相关文件后重试。")
             raise
         finally:
+            # 确保工作簿总能被关闭
             if 'wb' in locals() and wb is not None:
-                wb.close()
+                try:
+                    wb.close()
+                    # 添加短暂延迟确保文件被系统完全释放（Windows系统需要）
+                    import time
+                    time.sleep(0.1)
+                except Exception as close_exc:
+                    print(f"关闭工作簿时发生错误: {close_exc}")
+        
+        return True
 
 
     def _validate_inventory_value(self, value):
@@ -791,7 +829,7 @@ class ConsumptionErrorSummaryGenerator(BaseReportGenerator):
                 
                 if consumption is None:
                     remarks.append("⚠️ 库存消耗计算为NULL，期初/期末库存数据可能异常")
-                elif abs(consumption) > 1000:  # 异常大的值
+                elif abs(consumption) > 10000:  # 异常大的值
                     remarks.append(f"⚠️ 库存消耗值异常大({consumption:.2f}L)，请检查期初/期末库存数据")
                 
                 # --- 处理离线时长和备注 ---

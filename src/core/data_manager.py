@@ -221,9 +221,17 @@ class ReportDataManager:
 
         return result
 
-    def calculate_monthly_errors(self, raw_data, start_date_str, end_date_str, barrel_count=1):
+    def calculate_monthly_errors(self, raw_data, start_date_str, end_date_str, barrel_count=1, device_id=None):
         """
         计算每月消耗误差数据，确保处理连续的时间序列。
+        对于没有订单的月份，使用距离起始月份最近的一次原油剩余量。
+        
+        Args:
+            raw_data: 原始数据，格式为 (data, columns, raw_data_content)
+            start_date_str: 起始日期字符串
+            end_date_str: 结束日期字符串
+            barrel_count: 油桶数量
+            device_id: 设备ID，用于查询起始月份之前的数据（可选）
         """
         data, columns, raw_data_content = raw_data
 
@@ -248,7 +256,8 @@ class ReportDataManager:
             'monthly_order_totals': {},
             'monthly_shortage_errors': {},
             'monthly_excess_errors': {},
-            'monthly_consumption': {}
+            'monthly_consumption': {},
+            'monthly_end_inventory': {}
         }
         start_date = parse_date(start_date_str).date()
         end_date = parse_date(end_date_str).date()
@@ -260,32 +269,176 @@ class ReportDataManager:
             next_month_day1 = (current_month + datetime.timedelta(days=32)).replace(day=1)
             current_month = next_month_day1
 
+        # 获取起始月份之前的最后一次原油剩余量
         previous_month_end_inventory = 0
         first_month_start_date = start_date.replace(day=1)
-        previous_records = [
-            dict(zip(columns, r)) for r in raw_data_content
-            if dict(zip(columns, r)).get("加注时间") and parse_date(str(dict(zip(columns, r)).get("加注时间"))).date() < first_month_start_date
-        ]
+        
+        # 首先尝试从 raw_data_content 中查找起始月份之前的记录
+        previous_records = []
+        for r in raw_data_content:
+            try:
+                row_dict = dict(zip(columns, r))
+                order_time_val = row_dict.get("加注时间")
+                if order_time_val:
+                    order_date = parse_date(str(order_time_val)).date()
+                    if order_date < first_month_start_date:
+                        previous_records.append(row_dict)
+            except (ValueError, TypeError):
+                continue
+        
         if previous_records:
-            previous_records.sort(key=lambda x: parse_date(str(x['加注时间'])))
+            previous_records.sort(key=lambda x: parse_date(str(x.get("加注时间", ""))))
             previous_month_end_inventory = float(previous_records[-1].get("原油剩余量", 0) or 0)
         else:
-            if monthly_data:
+            # 如果查询结果中没有起始月份之前的记录，尝试从数据库查询
+            if device_id and self.db_handler:
+                try:
+                    # 查询起始月份之前最近的一条记录
+                    query = (
+                        f"SELECT a.avai_oil AS '原油剩余量' "
+                        f"FROM oil.t_device_oil_order a "
+                        f"WHERE a.device_id = {device_id} "
+                        f"AND a.status = 1 "
+                        f"AND a.order_time < '{first_month_start_date.strftime('%Y-%m-%d')} 00:00:00' "
+                        f"ORDER BY a.order_time DESC LIMIT 1"
+                    )
+                    results, cols = self.db_handler._execute_query(device_id, query, None, None)
+                    if results and len(results) > 0 and cols:
+                        # 获取原油剩余量列的值
+                        row_dict = dict(zip(cols, results[0]))
+                        avai_oil = row_dict.get("原油剩余量") or row_dict.get("avai_oil")
+                        if avai_oil is not None:
+                            previous_month_end_inventory = float(avai_oil)
+                except Exception as e:
+                    print(f"  警告：无法查询起始月份之前的数据: {e}")
+            
+            # 如果仍然没有找到，且查询范围内有数据，说明起始月份之前确实没有数据
+            # 但如果起始月份在第一个数据月份之后，说明起始月份之前没有数据，使用第一个数据月份的初始值
+            if previous_month_end_inventory == 0 and monthly_data:
                 first_data_month = min(monthly_data.keys())
-                if start_date.strftime("%Y-%m") >= first_data_month:
-                     previous_month_end_inventory = 0
+                first_month_start_date_obj = datetime.datetime.strptime(first_data_month + "-01", "%Y-%m-%d").date()
+                if first_month_start_date <= first_month_start_date_obj:
+                    first_month_records = sorted(monthly_data[first_data_month], key=lambda x: x['order_time'])
+                    if first_month_records:
+                        previous_month_end_inventory = first_month_records[0]['avai_oil']
 
-        for month_str in sorted_months:
-            start_inventory = previous_month_end_inventory
+        for idx, month_str in enumerate(sorted_months):
+            # 判断是否是第一个月份和最后一个月份
+            is_first_month = (idx == 0)
+            is_last_month = (idx == len(sorted_months) - 1)
+            
+            # 确定该月份在查询范围内的起始日期和结束日期
+            month_start_date = datetime.datetime.strptime(month_str + "-01", "%Y-%m-%d").date()
+            next_month_start = (month_start_date + datetime.timedelta(days=32)).replace(day=1)
+            month_end_date = (next_month_start - datetime.timedelta(days=1))
+            
+            # 如果起始日期不是该月第一天，使用起始日期作为该月的实际起始日期
+            if is_first_month and start_date > month_start_date:
+                actual_month_start_date = start_date
+            else:
+                actual_month_start_date = month_start_date
+            
+            # 如果结束日期不是该月最后一天，使用结束日期作为该月的实际结束日期
+            if is_last_month and end_date < month_end_date:
+                actual_month_end_date = end_date
+            else:
+                actual_month_end_date = month_end_date
+            
+            # 确定起始库存
+            if is_first_month and start_date > month_start_date:
+                # 第一个月份且起始日期不是该月第一天，需要找到起始日期当天的库存
+                # 优先从查询结果中查找起始日期当天的记录
+                start_inventory = previous_month_end_inventory
+                start_date_record = None
+                before_start_date_records = []
+                
+                for r in raw_data_content:
+                    try:
+                        row_dict = dict(zip(columns, r))
+                        order_time_val = row_dict.get("加注时间")
+                        if order_time_val:
+                            order_date = parse_date(str(order_time_val)).date()
+                            if order_date == start_date:
+                                start_date_record = row_dict
+                                break
+                            elif order_date < start_date:
+                                before_start_date_records.append((order_date, row_dict))
+                    except (ValueError, TypeError):
+                        continue
+                
+                if start_date_record:
+                    # 找到起始日期当天的记录
+                    start_inventory = float(start_date_record.get("原油剩余量", 0) or 0)
+                elif before_start_date_records:
+                    # 使用起始日期之前最近的一条记录
+                    before_start_date_records.sort(key=lambda x: x[0], reverse=True)
+                    start_inventory = float(before_start_date_records[0][1].get("原油剩余量", 0) or 0)
+                
+                # 如果查询结果中没有起始日期当天的记录，尝试从数据库查询
+                if start_inventory == previous_month_end_inventory and device_id and self.db_handler:
+                    try:
+                        query = (
+                            f"SELECT a.avai_oil AS '原油剩余量' "
+                            f"FROM oil.t_device_oil_order a "
+                            f"WHERE a.device_id = {device_id} "
+                            f"AND a.status = 1 "
+                            f"AND a.order_time <= '{start_date.strftime('%Y-%m-%d')} 23:59:59' "
+                            f"ORDER BY a.order_time DESC LIMIT 1"
+                        )
+                        results, cols = self.db_handler._execute_query(device_id, query, None, None)
+                        if results and len(results) > 0 and cols:
+                            row_dict = dict(zip(cols, results[0]))
+                            avai_oil = row_dict.get("原油剩余量") or row_dict.get("avai_oil")
+                            if avai_oil is not None:
+                                start_inventory = float(avai_oil)
+                    except Exception as e:
+                        print(f"  警告：无法查询起始日期的库存数据: {e}")
+                
+                # 如果仍然没有找到，使用查询结果中该月份第一条记录的库存
+                if start_inventory == previous_month_end_inventory and month_str in monthly_data:
+                    month_records = sorted(monthly_data[month_str], key=lambda x: x['order_time'])
+                    if month_records:
+                        start_inventory = month_records[0]['avai_oil']
+            else:
+                # 使用前一个月的结束库存
+                start_inventory = previous_month_end_inventory
 
             if month_str in monthly_data:
                 month_records = sorted(monthly_data[month_str], key=lambda x: x['order_time'])
-                end_inventory = month_records[-1]['avai_oil']
+                
+                # 确定结束库存
+                if is_last_month and end_date < month_end_date:
+                    # 最后一个月份且结束日期不是该月最后一天，需要找到结束日期当天的库存
+                    end_inventory = month_records[-1]['avai_oil']  # 默认使用最后一条记录
+                    for record in month_records:
+                        record_date = record['order_time'].date()
+                        if record_date == end_date:
+                            end_inventory = record['avai_oil']
+                            break
+                        elif record_date > end_date:
+                            # 如果结束日期当天没有记录，使用结束日期之前最近的一条记录
+                            break
+                        else:
+                            end_inventory = record['avai_oil']
+                else:
+                    # 使用该月份最后一条记录的库存
+                    end_inventory = month_records[-1]['avai_oil']
+                
+                # 过滤出查询范围内的记录
+                filtered_records = []
+                for record in month_records:
+                    record_date = record['order_time'].date()
+                    if actual_month_start_date <= record_date <= actual_month_end_date:
+                        filtered_records.append(record)
+                
+                # 如果没有在查询范围内的记录，使用该月份的所有记录（保持向后兼容）
+                if not filtered_records:
+                    filtered_records = month_records
                 
                 total_refill_inventory_increase = 0  # 原油剩余量增量部分（液位计，单桶值）
                 order_total = 0  # 订单消耗总量（理论消耗）- 所有订单的oil_val（业务逻辑3）
                 last_inventory_point = start_inventory
-                for record in month_records:
+                for record in filtered_records:
                     current_inventory_point = record['avai_oil']
                     oil_val = record['oil_val']
                     
@@ -301,7 +454,7 @@ class ReportDataManager:
                     
                     last_inventory_point = current_inventory_point
 
-                # 库存消耗 = (前月库存 - 当月库存) + 入库量
+                # 库存消耗 = (起始库存 - 结束库存) + 入库量
                 # 业务逻辑3：入库量 = 原油剩余量增量 * 桶数（不包含入库订单的oil_val）
                 total_refill_this_month = total_refill_inventory_increase * barrel_count
                 inventory_consumption = ((start_inventory - end_inventory) * barrel_count + total_refill_this_month)
@@ -313,6 +466,8 @@ class ReportDataManager:
             # 库存消耗已经包含了桶数的计算，不需要再乘以桶数
             result['monthly_order_totals'][month_str] = order_total
             result['monthly_consumption'][month_str] = {'value': inventory_consumption}
+            # 原油剩余量是单个油桶的值，不需要除以桶数
+            result['monthly_end_inventory'][month_str] = end_inventory
             
             difference = inventory_consumption - order_total
             if difference > 0:
