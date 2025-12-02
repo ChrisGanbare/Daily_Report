@@ -161,11 +161,11 @@ DEV5,2025-05-01,2025-05-30
             self.assertEqual(devices[3]["device_code"], "DEVICE004")
             self.assertEqual(devices[4]["device_code"], "DEV5")
             
-            # 验证日期格式
+            # 验证日期格式（validate_csv_data 会将日期统一为 'YYYY-MM-DD' 格式）
             self.assertEqual(devices[0]["start_date"], "2025-07-01")
             self.assertEqual(devices[0]["end_date"], "2025-07-10")
-            self.assertEqual(devices[1]["start_date"], "2025/07/05")
-            self.assertEqual(devices[1]["end_date"], "2025/08/04")
+            self.assertEqual(devices[1]["start_date"], "2025-07-05")
+            self.assertEqual(devices[1]["end_date"], "2025-08-04")
             self.assertEqual(devices[2]["start_date"], "2025-06-15")
             self.assertEqual(devices[2]["end_date"], "2025-07-14")
         finally:
@@ -362,8 +362,9 @@ DEV002,2025/07/05,2025/07/15
             self.assertEqual(len(devices), 2)
             self.assertEqual(devices[0]["start_date"], "2025-07-01")
             self.assertEqual(devices[0]["end_date"], "2025-07-10")
-            self.assertEqual(devices[1]["start_date"], "2025/07/05")
-            self.assertEqual(devices[1]["end_date"], "2025/07/15")
+            # validate_csv_data 会将日期统一为 'YYYY-MM-DD' 格式
+            self.assertEqual(devices[1]["start_date"], "2025-07-05")
+            self.assertEqual(devices[1]["end_date"], "2025-07-15")
         finally:
             os.unlink(csv_file_path)
 

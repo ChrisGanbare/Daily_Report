@@ -146,3 +146,29 @@ class FileHandler:
 
         device_data = {key: value.strip() for key, value in row.items()}
         return device_data
+    
+    def merge_device_config(self, devices, config_manager):
+        """
+        合并设备配置到设备数据列表
+        
+        Args:
+            devices: 设备数据列表，每个元素包含device_code等字段
+            config_manager: DeviceConfigManager实例
+            
+        Returns:
+            list: 合并后的设备数据列表，每个元素包含barrel_count字段
+        """
+        if not devices:
+            return devices
+        
+        for device in devices:
+            device_code = device.get('device_code', '').strip()
+            if device_code:
+                # 从配置管理器获取桶数，如果未找到则使用默认值1
+                barrel_count = config_manager.get_barrel_count(device_code)
+                device['barrel_count'] = barrel_count
+            else:
+                # 如果没有设备编码，使用默认值1
+                device['barrel_count'] = 1
+        
+        return devices

@@ -122,14 +122,19 @@ def test_daily_report_with_barrel_count(temp_output_dir, mock_db_handler, mocker
     wb = load_workbook(output_file_path)
     ws = wb["消耗误差分析"]
 
-    # 数据从第3行开始，"库存消耗总量(L)"是第4列(D)
-    consumption_cell_value = ws.cell(row=3, column=4).value
+    # 数据从第4行开始（第1行标题，第2行配置信息提示，第3行数据列标题，第4行开始数据），"库存消耗总量(L)"是第4列(D)
+    consumption_cell_value = ws.cell(row=4, column=4).value
     assert consumption_cell_value == pytest.approx(expected_consumption), \
         f"Excel中的库存消耗总量应为 {expected_consumption}，但实际为 {consumption_cell_value}"
 
+    # 验证配置信息提示行是否存在（第2行）
+    hint_cell_value = ws.cell(row=2, column=1).value
+    assert hint_cell_value is not None, "配置信息提示行未生成"
+    assert "设备桶数" in str(hint_cell_value), "配置信息提示行中未包含设备桶数信息"
+    
     # 验证计算规则说明
     formula_cell_value = ws.cell(row=35, column=8).value
-    assert f"* {barrel_count} (桶数)" in formula_cell_value, "计算规则说明中未正确显示桶数信息"
+    assert f"* {barrel_count} (桶数)" in str(formula_cell_value), "计算规则说明中未正确显示桶数信息"
 
     # 关键修复：关闭工作簿以释放文件句柄
     wb.close()

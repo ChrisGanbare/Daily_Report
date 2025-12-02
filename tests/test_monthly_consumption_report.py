@@ -2,6 +2,7 @@ import pytest
 import os
 import datetime
 import shutil
+import time
 from openpyxl import load_workbook
 
 # 将src目录添加到Python路径
@@ -66,7 +67,10 @@ def test_monthly_report_with_barrel_count(temp_output_dir, mock_db_handler, mock
     # 步骤 A: 使用 data_manager 计算误差数据
     data_manager = ReportDataManager(mock_db_handler)
     mocker.patch.object(data_manager, 'fetch_raw_data', return_value=mock_raw_data)
-    error_data = data_manager.calculate_monthly_errors(mock_raw_data, start_date, end_date, barrel_count)
+    # 将日期对象转换为字符串格式（YYYY-MM-DD）
+    start_date_str = start_date.strftime('%Y-%m-%d')
+    end_date_str = end_date.strftime('%Y-%m-%d')
+    error_data = data_manager.calculate_monthly_errors(mock_raw_data, start_date_str, end_date_str, barrel_count)
 
     # 步骤 B: 使用 consumption_error_handler 生成报表
     report_generator = MonthlyConsumptionErrorReportGenerator()
@@ -90,13 +94,31 @@ def test_monthly_report_with_barrel_count(temp_output_dir, mock_db_handler, mock
 
     # 断言 B: 检查生成的Excel文件内容
     assert os.path.exists(output_file_path), "报表文件未生成"
-    wb = load_workbook(output_file_path)
-    ws = wb["消耗误差分析"]
+    
+    # 等待文件句柄完全释放（Windows系统可能需要一点时间）
+    max_retries = 5
+    retry_count = 0
+    wb = None
+    
+    while retry_count < max_retries:
+        try:
+            wb = load_workbook(output_file_path)
+            break
+        except PermissionError:
+            retry_count += 1
+            if retry_count < max_retries:
+                time.sleep(0.1)  # 等待100毫秒后重试
+            else:
+                raise
+    
+    try:
+        ws = wb["消耗误差分析"]
 
-    # 数据从第3行开始，"库存消耗总量(L)"是第3列(C)
-    consumption_cell_value = ws.cell(row=3, column=3).value
-    assert consumption_cell_value == pytest.approx(expected_consumption), \
-        f"Excel中的月度消耗总量应为 {expected_consumption}，但实际为 {consumption_cell_value}"
-
-    # 关键修复：关闭工作簿以释放文件句柄
-    wb.close()
+        # 数据从第3行开始，"库存消耗总量(L)"是第3列(C)
+        consumption_cell_value = ws.cell(row=3, column=3).value
+        assert consumption_cell_value == pytest.approx(expected_consumption), \
+            f"Excel中的月度消耗总量应为 {expected_consumption}，但实际为 {consumption_cell_value}"
+    finally:
+        # 确保关闭工作簿以释放文件句柄
+        if wb is not None:
+            wb.close()

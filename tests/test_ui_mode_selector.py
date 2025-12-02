@@ -42,13 +42,13 @@ class TestUiModeSelector(BaseTestCase):
         测试 show_mode_selection_dialog 函数
         """
         # 模拟返回值
-        mock_selector.show_mode_selection_dialog.return_value = "both"
+        mock_selector.show_mode_selection_dialog.return_value = "inventory"
 
         # 调用函数
         result = show_mode_selection_dialog()
 
         # 验证结果
-        self.assertEqual(result, "both")
+        self.assertEqual(result, "inventory")
         mock_selector.show_mode_selection_dialog.assert_called_once()
 
 

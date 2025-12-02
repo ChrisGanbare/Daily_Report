@@ -14,10 +14,10 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='ZR Daily Report Generator')
 
     parser.add_argument('--mode',
-                        choices=['inventory', 'statement', 'both', 'refueling', 'daily_consumption', 'monthly_consumption',
+                        choices=['inventory', 'statement', 'refueling', 'daily_consumption', 'monthly_consumption',
                                  'error_summary'],
-                        default='both',
-                        help='选择执行模式: inventory(库存报表), statement(客户对账单), both(两者都执行), refueling(加注明细), daily_consumption(每日消耗误差), monthly_consumption(每月消耗误差), error_summary(误差汇总报表)')
+                        default='inventory',
+                        help='选择执行模式: inventory(库存报表), statement(客户对账单), refueling(加注明细), daily_consumption(每日消耗误差), monthly_consumption(每月消耗误差), error_summary(误差汇总报表)')
     return parser.parse_args()
 
 
@@ -51,17 +51,26 @@ def print_usage():
     """
     print("Intelligent Oiltank Data Analysis Terminal 使用说明:")
     print("=" * 50)
-    print("生成报表前，请先填写设备信息，填写文件要求")
-    print("  1.支持文件格式：csv格式")
-    print("  2.设备信息必填项device_code，start_date，end_date")
-    print("  3.日期格式需为2025/7/1样式，或2025-7-1样式")
-    print("  4.可自己按要求填写设备信息，或在你的软件安装路径获取模板，模板路径：zr_daily_report/test_data/devices_test.csv")
-    print("")
-    print("请按照如下示例格式填写设备编码、起止日期信息、原液桶数（可选）")
-    print("  注意：生成每日消耗误差报表，起止日期范围不能大于2个月；生成每月消耗误差报表，起止日期范围不能大于12个月，不能小于2个月")
-    print("  注意：生成每日消耗误差报表或每月消耗误差报表时，列标题'barrel_count'不可为空，且值需要如实填写，不填写将按默认值1个桶计算")
-    print("设备信息填写示例:")
-    print("  device_code        start_date      end_date         barrel_count")
-    print("  MO24032700700011   2025/7/1        2025/7/31        2")
-    print("  MO24032700700020   2025-7-1        2025-7-31        (不填)")
+    print("报表生成流程:")
+    print("  1. 选择报表模式（通过图形界面或命令行参数）")
+    print("  2. 选择日期范围（通过日期选择对话框）")
+    print("  3. 选择设备（通过设备筛选对话框）")
+    print("  4. 选择输出目录")
+    print("  5. 系统自动生成报表")
+    print()
+    print("日期跨度限制:")
+    print("  - 每日消耗误差报表：最大62天（2个月）")
+    print("  - 每月消耗误差报表：最大365天（12个月）")
+    print("  - 库存报表：最大31天（1个月）")
+    print("  - 客户对账单：最大31天（1个月）")
+    print("  - 加注明细报表：最大1095天（3年）")
+    print()
+    print("设备桶数配置（仅消耗误差类型报表:")
+    print("  - 系统自动从 test_data/device_config.csv 读取设备桶数")
+    print("  - 配置文件格式：device_code,barrel_count")
+    print("  - 未配置的设备使用默认值1")
+    print("  - 配置文件示例：")
+    print("    device_code,barrel_count")
+    print("    MO24032700700011,2")
+    print("    MO24032700700020,3")
     print()

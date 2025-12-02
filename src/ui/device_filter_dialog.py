@@ -317,6 +317,12 @@ class DeviceFilterDialog(tk.Tk):
             
             # 查询选中客户的设备（只获取每个device_code对应的最新设备）
             placeholders = ','.join(['%s'] * len(self.selected_customer_ids))
+            
+            # 构建按选择顺序排序的ORDER BY子句
+            # 后选中的客户显示在前面，所以需要反转selected_customer_ids的顺序
+            reversed_customer_ids = list(reversed(self.selected_customer_ids))
+            field_placeholders = ','.join(['%s'] * len(reversed_customer_ids))
+            
             query = f"""
                 WITH LatestDevices AS (
                     SELECT id AS device_id, device_code, customer_id
@@ -334,14 +340,56 @@ class DeviceFilterDialog(tk.Tk):
                 SELECT 
                     c.customer_name,
                     ld.device_code,
-                    ld.device_id
+                    ld.device_id,
+                    ld.customer_id
                 FROM LatestDevices ld
                 INNER JOIN t_customer c ON ld.customer_id = c.id
                 WHERE c.status = 1
-                ORDER BY c.customer_name, ld.device_code
+                ORDER BY FIELD(ld.customer_id, {field_placeholders}) DESC, ld.device_code
             """
-            cursor.execute(query, self.selected_customer_ids)
-            devices = cursor.fetchall()
+            
+            try:
+                # 尝试使用FIELD函数排序
+                cursor.execute(query, self.selected_customer_ids + reversed_customer_ids)
+                devices = cursor.fetchall()
+            except Exception as sql_error:
+                # 如果FIELD函数不支持，回退到按客户名称排序，然后在Python中排序
+                print(f"警告：FIELD函数不支持，使用Python排序: {sql_error}")
+                fallback_query = f"""
+                    WITH LatestDevices AS (
+                        SELECT id AS device_id, device_code, customer_id
+                        FROM (
+                            SELECT id, device_code, customer_id, 
+                                   ROW_NUMBER() OVER (PARTITION BY device_code ORDER BY create_time DESC, id DESC) AS rn
+                            FROM t_device
+                            WHERE del_status = 1 
+                            AND device_code IS NOT NULL 
+                            AND device_code != ''
+                            AND customer_id IN ({placeholders})
+                        ) AS RankedDevices
+                        WHERE rn = 1
+                    )
+                    SELECT 
+                        c.customer_name,
+                        ld.device_code,
+                        ld.device_id,
+                        ld.customer_id
+                    FROM LatestDevices ld
+                    INNER JOIN t_customer c ON ld.customer_id = c.id
+                    WHERE c.status = 1
+                    ORDER BY c.customer_name, ld.device_code
+                """
+                cursor.execute(fallback_query, self.selected_customer_ids)
+                devices = cursor.fetchall()
+                
+                # 在Python层面按选择顺序排序（后选中的在前）
+                # 后选中的客户在reversed_customer_ids中索引更小，直接使用索引值排序
+                customer_order_map = {cid: idx for idx, cid in enumerate(reversed(self.selected_customer_ids))}
+                devices.sort(key=lambda d: (
+                    customer_order_map.get(d['customer_id'], 999),  # 索引小的排前面（后选中的在前）
+                    d['device_code']
+                ))
+            
             cursor.close()
             
             # 添加到设备列表

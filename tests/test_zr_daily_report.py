@@ -109,24 +109,6 @@ class TestZRDailyReport(unittest.TestCase):
         mock_generate_statement.assert_called_once()
 
     @patch("zr_daily_report.parse_arguments")
-    @patch("zr_daily_report.generate_both_reports")
-    def test_main_function_with_both_mode(self, mock_generate_both, mock_parse_args):
-        """测试主程序在同时生成两种报表模式下的行为"""
-        from zr_daily_report import main
-
-        # 模拟命令行参数
-        mock_args = MagicMock()
-        mock_args.mode = "both"
-        mock_parse_args.return_value = mock_args
-
-        # 模拟sys.argv包含参数
-        with patch("sys.argv", ["zr_daily_report.py", "--mode", "both"]):
-            main()
-
-        # 验证调用了综合报表生成函数
-        mock_generate_both.assert_called_once()
-
-    @patch("zr_daily_report.parse_arguments")
     @patch("zr_daily_report.generate_refueling_details")
     def test_main_function_with_refueling_mode(self, mock_generate_refueling, mock_parse_args):
         """测试主程序在加注明细模式下的行为"""

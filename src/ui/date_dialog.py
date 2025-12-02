@@ -16,23 +16,56 @@ class DateRangeDialog(simpledialog.Dialog):
             max_days: 最大日期跨度（天数），None 表示不限制
         """
         self.max_days = max_days
+        # 设置窗口大小，与模式选择对话框保持一致（400x200）
+        self.dialog_width = 400
+        self.dialog_height = 200
         super().__init__(parent, title)
     
     def body(self, master):
-        tk.Label(master, text="开始日期 (YYYY-MM-DD):").grid(row=0)
-        tk.Label(master, text="结束日期 (YYYY-MM-DD):").grid(row=1)
+        # 设置窗口大小和居中
+        self._center_window()
+        
+        tk.Label(master, text="开始日期 (YYYY-MM-DD):").grid(row=0, padx=10, pady=5)
+        tk.Label(master, text="结束日期 (YYYY-MM-DD):").grid(row=1, padx=10, pady=5)
 
-        self.start_date_entry = tk.Entry(master)
-        self.end_date_entry = tk.Entry(master)
+        self.start_date_entry = tk.Entry(master, width=20)
+        self.end_date_entry = tk.Entry(master, width=20)
 
         # 设置默认值为今天
         today_str = datetime.now().strftime('%Y-%m-%d')
         self.start_date_entry.insert(0, today_str)
         self.end_date_entry.insert(0, today_str)
 
-        self.start_date_entry.grid(row=0, column=1)
-        self.end_date_entry.grid(row=1, column=1)
+        self.start_date_entry.grid(row=0, column=1, padx=10, pady=5)
+        self.end_date_entry.grid(row=1, column=1, padx=10, pady=5)
         return self.start_date_entry # initial focus
+    
+    def _center_window(self):
+        """将窗口居中显示在屏幕中央"""
+        # 更新窗口任务以获取准确的窗口信息
+        self.update_idletasks()
+        # 获取屏幕尺寸
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        # 计算窗口位置
+        x = (screen_width // 2) - (self.dialog_width // 2)
+        y = (screen_height // 2) - (self.dialog_height // 2)
+        # 设置窗口几何位置
+        self.geometry(f"{self.dialog_width}x{self.dialog_height}+{x}+{y}")
+    
+    def buttonbox(self):
+        """创建按钮框，修改按钮文本为确定和取消"""
+        box = tk.Frame(self)
+        
+        ok_button = tk.Button(box, text="确定", width=10, command=self.ok, default=tk.ACTIVE)
+        ok_button.pack(side=tk.LEFT, padx=5, pady=5)
+        cancel_button = tk.Button(box, text="取消", width=10, command=self.cancel)
+        cancel_button.pack(side=tk.LEFT, padx=5, pady=5)
+        
+        self.bind("<Return>", self.ok)
+        self.bind("<Escape>", self.cancel)
+        
+        box.pack()
 
     def validate(self):
         start_str = self.start_date_entry.get()

@@ -23,7 +23,6 @@ from src.ui.mode_selector import show_mode_selection_dialog
 from src.core.report_controller import (
     generate_inventory_reports,
     generate_customer_statement,
-    generate_both_reports,
     generate_refueling_details,
     generate_daily_consumption_error_reports, 
     generate_error_summary_report,
@@ -58,9 +57,6 @@ def main():
             generate_inventory_reports()
         elif mode == 'statement':
             generate_customer_statement()
-        elif mode == 'both':
-            # 使用优化的综合报表生成功能
-            generate_both_reports()
         elif mode == 'refueling':
             # 生成加注明细报表
             generate_refueling_details()

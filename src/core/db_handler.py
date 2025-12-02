@@ -288,6 +288,47 @@ class DatabaseHandler:
             print(f"详细错误信息:\n{traceback.format_exc()}")
             return "未知客户"
 
+    def get_devices_by_ids(self, device_ids):
+        """
+        根据设备ID列表批量获取设备信息（包括设备编码、客户名称、客户ID等）
+        
+        Args:
+            device_ids (list): 设备ID列表
+            
+        Returns:
+            list: 设备信息列表，每个元素包含 id, device_code, customer_name, customer_id
+        """
+        if not device_ids:
+            return []
+        
+        cursor = None
+        try:
+            # 确保连接有效
+            self._ensure_connection()
+            
+            cursor = self.connection.cursor(dictionary=True)
+            device_ids_str = ','.join(map(str, device_ids))
+            device_query = f"""
+                SELECT d.id, d.device_code, c.customer_name, c.id AS customer_id
+                FROM t_device d
+                LEFT JOIN t_customer c ON d.customer_id = c.id
+                WHERE d.id IN ({device_ids_str}) AND d.del_status = 1
+            """
+            cursor.execute(device_query)
+            results = cursor.fetchall()
+            return results
+        except Exception as e:
+            print(f"批量查询设备信息时发生错误: {e}")
+            print(f"详细错误信息:\n{traceback.format_exc()}")
+            return []
+        finally:
+            if cursor:
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
+                cursor.close()
+
     def clear_query_cache(self):
         """
         清除查询缓存
